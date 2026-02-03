@@ -1,45 +1,74 @@
 package com.eval.gameeval.config;
 
+import com.eval.gameeval.interceptor.RestAccessDeniedHandler;
+import com.eval.gameeval.interceptor.RestAuthenticationEntryPoint;
+import com.eval.gameeval.interceptor.TokenAuthenticationFilter;
+import com.eval.gameeval.util.RedisUtil;
+import jakarta.annotation.Resource;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.io.IOException;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
+
+    @Resource
+    private TokenAuthenticationFilter tokenAuthenticationFilter;
+
+    @Resource
+    private RestAuthenticationEntryPoint authenticationEntryPoint;
+
+    @Resource
+    private RestAccessDeniedHandler accessDeniedHandler;
+
     @Bean
-    public PasswordEncoder passwordEncoder(){
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
-                // 禁用CSRF（前后端分离必须）
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // 配置授权规则
                 .authorizeHttpRequests(auth -> auth
-                        // 放行不需要认证的接口
                         .requestMatchers(
                                 "/user/login",
                                 "/user/logout"
-//                                "/user/register"
                         ).permitAll()
-
-                        // 其他所有接口都需要认证
                         .anyRequest().authenticated()
                 )
 
-                // 禁用表单登录（使用Token认证）
-                .formLogin(AbstractHttpConfigurer::disable)
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
 
-                // 禁用HTTP Basic认证
-                .httpBasic(AbstractHttpConfigurer::disable);
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+
+                .addFilterBefore(
+                        tokenAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }
 }
+
