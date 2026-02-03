@@ -2,6 +2,7 @@ package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.UserVO;
@@ -21,4 +22,8 @@ public interface IUserService {
      * @return 创建成功的用户列表
      */
     ResponseVO<List<UserVO>> createUsers(String token, @Valid UserCreateDTO request);
+
+    ResponseVO<Void> updateUser(String token, Long userId, @Valid UserUpdateDTO request);
+
+    ResponseVO<Void> deleteUser(String token, Long userId);
 }
