@@ -30,7 +30,6 @@ spring:
 
 # MyBatis Plus配置
 mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: com.eval.gameeval.models.entity
   configuration:
     map-underscore-to-camel-case: true
@@ -46,5 +45,5 @@ mybatis-plus:
 
 # 项目配置
 server:
-  port: 8080
+  port: 11451
 
