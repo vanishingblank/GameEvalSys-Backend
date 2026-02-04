@@ -2,9 +2,11 @@ package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import jakarta.validation.Valid;
 
@@ -24,4 +26,12 @@ public interface IUserService {
     ResponseVO<Void> updateUser(String token, Long userId, @Valid UserUpdateDTO request);
 
     ResponseVO<Void> deleteUser(String token, Long userId);
+
+    /**
+     * 分页查询用户列表
+     * @param token 认证Token
+     * @param query 查询参数
+     * @return 分页用户列表
+     */
+    ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query);
 }

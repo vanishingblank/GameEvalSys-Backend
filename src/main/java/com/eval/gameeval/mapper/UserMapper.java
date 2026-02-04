@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.*;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 @Repository
@@ -50,4 +51,46 @@ public interface UserMapper extends BaseMapper<User> {
     int disableById(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
 
 
+    /**
+     * 分页查询用户（带角色筛选）
+     */
+    @Select("<script>" +
+            "SELECT " +
+            "id, username, password, name, role, " +
+            "is_enabled AS isEnabled, " +
+            "create_time AS createTime, " +
+            "update_time AS updateTime " +
+            "FROM sys_user " +
+            "WHERE is_enabled = 1 " +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND role = #{role} " +
+            "</if>" +
+            "ORDER BY create_time DESC " +
+            "LIMIT #{offset}, #{limit}" +
+            "</script>")
+    List<User> selectPage(
+            @Param("offset") int offset,
+            @Param("limit") int limit,
+            @Param("role") String role
+    );
+
+    /**
+     * 统计用户总数（带角色筛选）
+     */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM sys_user " +
+            "WHERE is_enabled = 1 " +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND role = #{role} " +
+            "</if>" +
+            "</script>")
+    Long countTotal(@Param("role") String role);
+
+    @Select("SELECT " +
+            "id, username, password, name, role, " +
+            "is_enabled AS isEnabled, " +
+            "create_time AS createTime, " +
+            "update_time AS updateTime " +
+            "FROM sys_user WHERE is_enabled = 1 ORDER BY create_time DESC")
+    List<User> selectAllEnabled();
 }

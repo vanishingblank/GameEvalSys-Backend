@@ -1,8 +1,10 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.TokenUtil;
@@ -63,10 +65,17 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    private String extractToken(String authorization) {
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            return authorization.substring(7); // "Bearer "长度为7
-        }
-        return authorization;
+
+    /**
+     * 获取用户列表（分页）
+     */
+    @GetMapping
+    public ResponseEntity<ResponseVO<UserPageVO>> getUserList(
+            @RequestHeader("Authorization") String authorization,
+            UserQueryDTO query) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<UserPageVO> response = userService.getUserList(token, query);
+        return ResponseEntity.ok(response);
     }
 }

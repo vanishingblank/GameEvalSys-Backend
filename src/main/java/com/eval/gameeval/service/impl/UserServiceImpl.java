@@ -3,9 +3,11 @@ package com.eval.gameeval.service.impl;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -250,6 +253,66 @@ public class UserServiceImpl implements IUserService {
         } catch (Exception e) {
             log.error("删除用户异常: userId={}", userId, e);
             return ResponseVO.error("删除失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query) {
+        try {
+            // 1. 验证Token并获取当前用户
+            Long currentUserId = redisUtil.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 权限校验：只有管理员可以查看用户列表
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以查看用户列表");
+            }
+
+            // 3. 处理分页参数
+            int page = query.getPage() != null ? query.getPage() : 1;
+            int size = query.getSize() != null ? query.getSize() : 10;
+
+            // 计算偏移量（offset = (page - 1) * size）
+            int offset = (page - 1) * size;
+            int limit = size;
+
+            // 4. 查询用户列表
+            List<User> userList = userMapper.selectPage(offset, limit, query.getRole());
+
+            // 5. 查询总记录数
+            Long total = userMapper.countTotal(query.getRole());
+
+            // 6. 转换为VO列表
+            List<UserPageVO.UserVO> userVOList = userList.stream()
+                    .map(user -> {
+                        UserPageVO.UserVO userVO = new UserPageVO.UserVO();
+                        BeanUtils.copyProperties(user, userVO);
+                        return userVO;
+                    })
+                    .collect(Collectors.toList());
+
+            // 7. 构建分页响应
+            UserPageVO pageVO = new UserPageVO();
+            pageVO.setList(userVOList);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
+
+            log.info("查询用户列表成功: operator={}, page={}, size={}, role={}",
+                    currentUserId, page, size, query.getRole());
+
+            return ResponseVO.success("查询成功", pageVO);
+
+        } catch (Exception e) {
+            log.error("查询用户列表异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
