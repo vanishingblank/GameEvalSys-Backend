@@ -11,9 +11,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 
 public interface IUserService {
-    ResponseVO<LoginResponseVO> login(@Valid LoginRequestDTO loginRequest);
 
-    ResponseVO<Void> logout(String token);
 
     /**
      * 批量创建用户
