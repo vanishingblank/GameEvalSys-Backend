@@ -182,10 +182,10 @@ public class UserServiceImpl implements IUserService {
             int rows = userMapper.updateById(updateUser);
 
             if (rows > 0) {
-                // 7. 如果禁用用户，记录日志（Token清理可后续扩展）
+                // 7. 如果禁用用户，记录日志
                 if (request.getIsEnabled() != null && !request.getIsEnabled()) {
                     log.info("用户被禁用: userId={}, operator={}", userId, currentUserId);
-                    // TODO: 清理该用户所有Token（遍历Redis）
+                    redisUtil.deleteToken(token);
                 }
                 log.info("编辑用户成功: userId={}, operator={}", userId, currentUserId);
                 return ResponseVO.<Void>success("编辑成功",null);
@@ -236,12 +236,12 @@ public class UserServiceImpl implements IUserService {
                 return ResponseVO.forbidden("无权删除其他管理员");
             }
 
-            // 5. 执行逻辑删除（调用Mapper自定义disable方法）
+            // 5. 执行逻辑删除
             int rows = userMapper.disableById(userId, LocalDateTime.now());
 
             if (rows > 0) {
                 log.info("逻辑删除用户成功: userId={}, operator={}", userId, currentUserId);
-                // TODO: 清理该用户所有Token（遍历Redis）
+                redisUtil.deleteToken(token);
                 return ResponseVO.<Void>success("删除成功",null);
             } else {
                 return ResponseVO.error("删除失败：用户可能已被删除");
