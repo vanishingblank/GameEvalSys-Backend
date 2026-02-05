@@ -3,9 +3,11 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
+import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.service.IProjectService;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
@@ -22,6 +24,9 @@ import java.util.List;
 public class ProjectController {
     @Resource
     private IProjectService projectService;
+
+    @Resource
+    private IGroupService groupService;
 
     /**
      * 创建项目
@@ -101,5 +106,14 @@ public class ProjectController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/{projectId}/groups")
+    public ResponseEntity<ResponseVO<List<GroupVO>>> getProjectGroups(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long projectId) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<List<GroupVO>> response = groupService.getProjectGroups(token, projectId);
+        return ResponseEntity.ok(response);
+    }
 
 }

@@ -26,6 +26,12 @@ public interface ProjectGroupMapper {
             "</script>")
     int insertBatch(@Param("groups") List<ProjectGroup> groups);
 
+    // ========== 插入 ==========
+    @Insert("INSERT INTO project_group(project_id, name, create_time, update_time) " +
+            "VALUES(#{projectId}, #{name}, #{createTime}, #{updateTime})")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    void insert(ProjectGroup group);
+
     // ========== 删除 ==========
     @Delete("DELETE FROM project_group WHERE project_id = #{projectId}")
     int deleteByProjectId(@Param("projectId") Long projectId);
