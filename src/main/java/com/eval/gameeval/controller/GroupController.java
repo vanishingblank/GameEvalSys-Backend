@@ -1,5 +1,6 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -26,6 +27,7 @@ public class GroupController {
      * 创建小组
      */
     @PostMapping
+    @LogRecord(value = "创建小组", module = "Group")
     public ResponseEntity<ResponseVO<GroupVO>> createGroup(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody GroupCreateDTO request) {

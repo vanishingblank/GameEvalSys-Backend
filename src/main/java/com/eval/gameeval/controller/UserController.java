@@ -1,5 +1,6 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
@@ -28,6 +29,7 @@ public class UserController {
      * 批量创建用户
      */
     @PostMapping
+    @LogRecord(value = "创建用户", module = "User")
     public ResponseEntity<ResponseVO<List<UserVO>>> createUsers(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody UserCreateDTO request) {
@@ -42,6 +44,7 @@ public class UserController {
      * 编辑用户
      */
     @PutMapping("/{userId}")
+    @LogRecord(value = "编辑用户", module = "User")
     public ResponseEntity<ResponseVO<Void>> updateUser(
             @RequestHeader("Authorization") String authorization,
             @PathVariable Long userId,
@@ -56,6 +59,7 @@ public class UserController {
      * 删除用户
      */
     @DeleteMapping("/{userId}")
+    @LogRecord(value = "删除用户", module = "User")
     public ResponseEntity<ResponseVO<Void>> deleteUser(
             @RequestHeader("Authorization") String authorization,
             @PathVariable Long userId) {

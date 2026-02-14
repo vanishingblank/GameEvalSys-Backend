@@ -1,5 +1,6 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
@@ -32,6 +33,7 @@ public class ProjectController {
      * 创建项目
      */
     @PostMapping
+    @LogRecord(value = "创建项目", module = "Project")
     public ResponseEntity<ResponseVO<ProjectVO>> createProject(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody ProjectCreateDTO request) {
@@ -45,6 +47,7 @@ public class ProjectController {
      * 编辑项目
      */
     @PutMapping("/{projectId}")
+    @LogRecord(value = "编辑项目", module = "Project")
     public ResponseEntity<ResponseVO<Void>> updateProject(
             @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
@@ -59,6 +62,7 @@ public class ProjectController {
      * 结束项目
      */
     @PostMapping("/{projectId}/end")
+    @LogRecord(value = "结束项目", module = "Project")
     public ResponseEntity<ResponseVO<Void>> endProject(
             @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId) {

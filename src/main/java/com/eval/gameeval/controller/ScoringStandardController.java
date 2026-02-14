@@ -1,9 +1,11 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.service.IScoringStandardService;
+import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +25,12 @@ public class ScoringStandardController {
      * 创建打分标准
      */
     @PostMapping
+    @LogRecord(value = "创建打分标准", module = "ScoringStandard")
     public ResponseEntity<ResponseVO<ScoringStandardVO>> createStandard(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody ScoringStandardCreateDTO request) {
 
-        String token = extractToken(authorization);
+        String token = TokenUtil.extractToken(authorization);
         ResponseVO<ScoringStandardVO> response = scoringStandardService.createStandard(token, request);
         return ResponseEntity.ok(response);
     }
@@ -39,7 +42,7 @@ public class ScoringStandardController {
     public ResponseEntity<ResponseVO<List<ScoringStandardVO>>> getStandardList(
             @RequestHeader("Authorization") String authorization) {
 
-        String token = extractToken(authorization);
+        String token = TokenUtil.extractToken(authorization);
         ResponseVO<List<ScoringStandardVO>> response = scoringStandardService.getStandardList(token);
         return ResponseEntity.ok(response);
     }
@@ -52,15 +55,10 @@ public class ScoringStandardController {
             @RequestHeader("Authorization") String authorization,
             @PathVariable Long standardId) {
 
-        String token = extractToken(authorization);
+        String token = TokenUtil.extractToken(authorization);
         ResponseVO<ScoringStandardVO> response = scoringStandardService.getStandardDetail(token, standardId);
         return ResponseEntity.ok(response);
     }
 
-    private String extractToken(String authorization) {
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            return authorization.substring(7);
-        }
-        return authorization;
-    }
+
 }

@@ -49,7 +49,7 @@ public class AuthServiceImpl implements IAuthService{
 
             // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
-            responseVO.setAccessToken(token);
+            responseVO.setToken(token);
             responseVO.setExpireTime(LocalDateTime.now().plusHours(2));
 
             LoginResponseVO.UserInfoVO userInfoVO = new LoginResponseVO.UserInfoVO();

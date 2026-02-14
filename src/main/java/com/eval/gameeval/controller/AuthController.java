@@ -1,5 +1,6 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.LoginRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -22,6 +23,7 @@ public class AuthController {
     private IAuthService authService;
 
     @PostMapping("/login")
+    @LogRecord(value = "用户登录", module = "Auth")
     public ResponseEntity<ResponseVO<LoginResponseVO>> login(
             @Valid @RequestBody LoginRequestDTO loginRequest){
         ResponseVO<LoginResponseVO> response = authService.login(loginRequest);
@@ -29,6 +31,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @LogRecord(value = "用户登出", module = "Auth")
     public ResponseEntity<ResponseVO<Void>> logout(
             @RequestHeader("Authorization") String authorization){
         String token = TokenUtil.extractToken(authorization);
