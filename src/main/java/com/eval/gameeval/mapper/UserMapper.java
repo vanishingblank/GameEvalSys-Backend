@@ -27,6 +27,7 @@ public interface UserMapper extends BaseMapper<User> {
 
     @Insert("INSERT INTO sys_user(username, password, name, role, is_enabled, create_time, update_time) " +
             "VALUES(#{username}, #{password}, #{name}, #{role}, #{isEnabled}, #{createTime}, #{updateTime})")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
     int insertUser(User user);
 
 

@@ -14,7 +14,7 @@ public class UserVO implements Serializable {
     private String username;
     private String name;
     private String role;
-    private Boolean enabled;
+    private Boolean isEnabled;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

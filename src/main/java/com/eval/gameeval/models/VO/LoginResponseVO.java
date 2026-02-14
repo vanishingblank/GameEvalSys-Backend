@@ -19,10 +19,10 @@ public class LoginResponseVO implements Serializable {
      * 访问令牌（Access Token）
      * 有效期：4小时
      */
-    private String accessToken;
+    private String Token;
 
 
-    private String refreshToken;
+
 
     /**
      * Token过期时间（毫秒）
