@@ -10,7 +10,8 @@ import com.eval.gameeval.models.entity.ScoringIndicator;
 import com.eval.gameeval.models.entity.ScoringStandard;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IScoringStandardService;
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.StandardCacheUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -35,14 +36,17 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
+
+    @Resource
+    private StandardCacheUtil standardCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ResponseVO<ScoringStandardVO> createStandard(String token, ScoringStandardCreateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -104,6 +108,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
             responseVO.setIndicators(indicatorVOs);
 
+            // 8.清除缓存
+            standardCacheUtil.clearStandardCache();
             log.info("创建打分标准成功: standardId={}, creatorId={}", standard.getId(), currentUserId);
 
             return ResponseVO.success("创建成功", responseVO);
@@ -118,15 +124,27 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     public ResponseVO<List<ScoringStandardVO>> getStandardList(String token) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
 
-            // 2. 查询所有打分标准
+            // 2. 先尝试从Redis获取缓存
+            Object cache = standardCacheUtil.getStandardListCache();
+            if (cache != null) {
+                // 缓存命中：直接返回（类型转换）
+                @SuppressWarnings("unchecked")
+                List<ScoringStandardVO> cachedList = (List<ScoringStandardVO>) cache;
+                log.info("【缓存命中】获取打分标准列表: count={}", cachedList.size());
+                return ResponseVO.success("查询成功", cachedList);
+            }
+
+
+            // 3. 缓存未命中：查询数据库
+            log.info("【缓存未命中】查询数据库获取打分标准列表");
             List<ScoringStandard> standards = standardMapper.selectAll();
 
-            // 3. 转换为VO列表
+            // 4. 转换为VO列表
             List<ScoringStandardVO> standardVOs = new ArrayList<>();
 
             for (ScoringStandard standard : standards) {
@@ -148,6 +166,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
                 standardVOs.add(vo);
             }
 
+            // 5. 写入缓存
+            standardCacheUtil.cacheStandardList(standardVOs);
             log.info("查询打分标准列表成功: count={}", standardVOs.size());
 
             return ResponseVO.success("查询成功", standardVOs);
@@ -162,21 +182,48 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     public ResponseVO<ScoringStandardVO> getStandardDetail(String token, Long standardId) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
 
-            // 2. 查询标准详情
-            ScoringStandard standard = standardMapper.selectById(standardId);
-            if (standard == null) {
+            // 2. 缓存穿透防护 - 先检查空值缓存
+            // 防止恶意查询不存在的ID导致数据库被击穿
+            if (standardCacheUtil.isNullCached(standardId)) {
+                log.warn("【缓存穿透防护】查询空值缓存命中: standardId={}", standardId);
                 return ResponseVO.notFound("打分标准不存在");
             }
 
-            // 3. 查询指标列表
+            // 3. 尝试从Redis获取详情缓存
+            Object cache = standardCacheUtil.getStandardDetailCache(standardId);
+            if (cache != null) {
+                // 缓存命中
+                ScoringStandardVO cachedVO = (ScoringStandardVO) cache;
+                log.info("【缓存命中】获取打分标准详情: standardId={}", standardId);
+                return ResponseVO.success("查询成功", cachedVO);
+            }
+
+            // 4. 缓存未命中：查询数据库
+            log.info("【缓存未命中】查询数据库获取打分标准详情: standardId={}", standardId);
+            ScoringStandard standard = standardMapper.selectById(standardId);
+
+            // 5. 缓存穿透防护 - 数据库也查不到，写入空值缓存
+            if (standard == null) {
+                // 写入空值缓存（短时间有效，防止频繁查询）
+                standardCacheUtil.cacheNull(standardId);
+                log.warn("【缓存穿透防护】写入空值缓存: standardId={}", standardId);
+                return ResponseVO.notFound("打分标准不存在");
+            }
+            //  查询标准详情
+            // ScoringStandard standard = standardMapper.selectById(standardId);
+//            if (standard == null) {
+//                return ResponseVO.notFound("打分标准不存在");
+//            }
+
+            // 6. 查询指标列表
             List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(standardId);
 
-            // 4. 构建响应
+            // 7. 构建响应
             ScoringStandardVO responseVO = new ScoringStandardVO();
             responseVO.setId(standard.getId());
             responseVO.setCreateTime(standard.getCreateTime());
@@ -191,6 +238,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
             responseVO.setIndicators(indicatorVOs);
 
+            // 8. 将详情写入缓存
+            standardCacheUtil.cacheStandardDetail(standardId, responseVO);
             log.info("查询打分标准详情成功: standardId={}", standardId);
 
             return ResponseVO.success("查询成功", responseVO);

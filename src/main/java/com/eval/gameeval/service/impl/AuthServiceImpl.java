@@ -6,7 +6,7 @@ import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IAuthService;
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ public class AuthServiceImpl implements IAuthService{
     @Resource
     private UserMapper userMapper;
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
     @Resource
     private TokenUtil tokenUtil;
     @Resource
@@ -45,7 +45,7 @@ public class AuthServiceImpl implements IAuthService{
             String token = tokenUtil.generateToken();
 
             // 4. 保存Token到Redis
-            redisUtil.saveToken(token, user.getId());
+            redisToken.saveToken(token, user.getId());
 
             // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
@@ -73,10 +73,10 @@ public class AuthServiceImpl implements IAuthService{
             }
 
             // 1. 从Token中获取用户ID
-            Long userId = redisUtil.getUserIdByToken(token);
+            Long userId = redisToken.getUserIdByToken(token);
 
             // 2. 删除Redis中的Token
-            redisUtil.deleteToken(token);
+            redisToken.deleteToken(token);
 
             log.info("用户退出成功: userId={}", userId);
 

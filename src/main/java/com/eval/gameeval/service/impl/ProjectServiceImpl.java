@@ -9,7 +9,7 @@ import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectService;
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -40,14 +40,14 @@ public class ProjectServiceImpl implements IProjectService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ResponseVO<ProjectVO> createProject(String token, ProjectCreateDTO request) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -140,7 +140,7 @@ public class ProjectServiceImpl implements IProjectService {
     public ResponseVO<Void> updateProject(String token, Long projectId, ProjectUpdateDTO request) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -219,7 +219,7 @@ public class ProjectServiceImpl implements IProjectService {
     public ResponseVO<Void> endProject(String token, Long projectId) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -257,7 +257,7 @@ public class ProjectServiceImpl implements IProjectService {
     public ResponseVO<ProjectPageVO> getProjectList(String token, ProjectQueryDTO query) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -311,7 +311,7 @@ public class ProjectServiceImpl implements IProjectService {
     public ResponseVO<ProjectVO> getProjectDetail(String token, Long projectId) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -351,7 +351,7 @@ public class ProjectServiceImpl implements IProjectService {
         Long currentUserId = null;
         try {
             // 1. 验证Token
-            currentUserId = redisUtil.getUserIdByToken(token);
+            currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

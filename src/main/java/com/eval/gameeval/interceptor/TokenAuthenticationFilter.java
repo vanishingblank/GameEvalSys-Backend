@@ -1,6 +1,6 @@
 package com.eval.gameeval.interceptor;
 
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,7 +21,7 @@ import java.util.List;
 public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
 
     @Override
     protected void doFilterInternal(
@@ -77,8 +77,8 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
     private void processAuthentication(String authorization) {
         String token = authorization.substring(7);
 
-        if (redisUtil.validateToken(token)) {
-            Long userId = redisUtil.getUserIdByToken(token);
+        if (redisToken.validateToken(token)) {
+            Long userId = redisToken.getUserIdByToken(token);
             if (userId != null) {
                 setAuthentication(userId);
             } else {

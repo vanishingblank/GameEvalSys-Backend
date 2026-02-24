@@ -1,18 +1,15 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
-import com.eval.gameeval.models.DTO.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
-import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
-import com.eval.gameeval.util.RedisUtil;
-import com.eval.gameeval.util.TokenUtil;
+import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -31,7 +28,7 @@ public class UserServiceImpl implements IUserService {
     @Resource
     private UserMapper userMapper;
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
     @Resource
     private PasswordEncoder passwordEncoder;
 
@@ -40,7 +37,7 @@ public class UserServiceImpl implements IUserService {
     public ResponseVO<List<UserVO>> createUsers(String token, UserCreateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -119,7 +116,7 @@ public class UserServiceImpl implements IUserService {
     public ResponseVO<Void> updateUser(String token, Long userId, UserUpdateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -188,7 +185,7 @@ public class UserServiceImpl implements IUserService {
                 // 7. 如果禁用用户，记录日志
                 if (request.getIsEnabled() != null && !request.getIsEnabled()) {
                     log.info("用户被禁用: userId={}, operator={}", userId, currentUserId);
-                    redisUtil.deleteToken(token);
+                    redisToken.deleteToken(token);
                 }
                 log.info("编辑用户成功: userId={}, operator={}", userId, currentUserId);
                 return ResponseVO.<Void>success("编辑成功",null);
@@ -207,7 +204,7 @@ public class UserServiceImpl implements IUserService {
     public ResponseVO<Void> deleteUser(String token, Long userId) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -244,7 +241,7 @@ public class UserServiceImpl implements IUserService {
 
             if (rows > 0) {
                 log.info("逻辑删除用户成功: userId={}, operator={}", userId, currentUserId);
-                redisUtil.deleteToken(token);
+                redisToken.deleteToken(token);
                 return ResponseVO.<Void>success("删除成功",null);
             } else {
                 return ResponseVO.error("删除失败：用户可能已被删除");
@@ -260,7 +257,7 @@ public class UserServiceImpl implements IUserService {
     public ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }

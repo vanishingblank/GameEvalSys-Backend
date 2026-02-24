@@ -1,5 +1,6 @@
 package com.eval.gameeval.util;
 
+
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -7,12 +8,17 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class RedisUtil {
+public class RedisToken {
     @Resource
     private RedisTemplate<String,Object>redisTemplate;
 
+
     private static final String TOKEN_PREFIX = "auth:token:";
+
     private static final Long TOKEN_EXPIRE = 14400L;
+
+
+
     /**
      * 保存Token
      */
@@ -43,6 +49,8 @@ public class RedisUtil {
      */
     public boolean validateToken(String token) {
         String key = TOKEN_PREFIX + token;
-        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+        return redisTemplate.hasKey(key);
     }
+
+
 }

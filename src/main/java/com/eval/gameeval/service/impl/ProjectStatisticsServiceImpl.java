@@ -1,7 +1,6 @@
 package com.eval.gameeval.service.impl;
 
 import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.io.IoUtil;
 import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
 import com.eval.gameeval.mapper.*;
@@ -9,11 +8,10 @@ import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -43,13 +41,13 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
 
     @Override
     public ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -117,7 +115,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     public void exportProjectData(String token, Long projectId, String format, HttpServletResponse response) throws IOException {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 throw new RuntimeException("Token无效");
             }

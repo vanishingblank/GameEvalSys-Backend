@@ -10,7 +10,7 @@ import com.eval.gameeval.models.entity.Project;
 import com.eval.gameeval.models.entity.ProjectGroup;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IGroupService;
-import com.eval.gameeval.util.RedisUtil;
+import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -34,14 +34,14 @@ public class GroupServiceImpl implements IGroupService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisUtil redisUtil;
+    private RedisToken redisToken;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ResponseVO<GroupVO> createGroup(String token, GroupCreateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -95,7 +95,7 @@ public class GroupServiceImpl implements IGroupService {
     public ResponseVO<List<GroupVO>> getProjectGroups(String token, Long projectId) {
         try {
             // 1. 验证Token
-            Long currentUserId = redisUtil.getUserIdByToken(token);
+            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
