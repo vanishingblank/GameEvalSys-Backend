@@ -9,6 +9,8 @@ import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectService;
+import com.eval.gameeval.util.ProjectCacheUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +43,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Resource
     private RedisToken redisToken;
+
+    @Resource
+    private ProjectCacheUtil projectCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -120,6 +125,8 @@ public class ProjectServiceImpl implements IProjectService {
             }
 
             // 7. 构建响应
+            projectCacheUtil.clearAllProjectListCache(); // 实际需遍历删除所有列表缓存键
+            log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
             ProjectVO responseVO = new ProjectVO();
             BeanUtils.copyProperties(project, responseVO);
             responseVO.setGroupIds(request.getGroupIds());
@@ -204,6 +211,9 @@ public class ProjectServiceImpl implements IProjectService {
                 }
             }
 
+            projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
+            projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
+            projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
             log.info("编辑项目成功: projectId={}, operator={}", projectId, currentUserId);
 
             return ResponseVO.<Void>success("编辑成功",null);
@@ -243,6 +253,8 @@ public class ProjectServiceImpl implements IProjectService {
             // 4. 结束项目
             projectMapper.endProject(projectId, LocalDateTime.now());
 
+            projectCacheUtil.clearProjectDetailCache(projectId);
+            projectCacheUtil.clearAllProjectListCache();
             log.info("结束项目成功: projectId={}, operator={}", projectId, currentUserId);
 
             return ResponseVO.<Void>success("项目已结束",null);
@@ -267,11 +279,28 @@ public class ProjectServiceImpl implements IProjectService {
             int size = query.getSize() != null ? query.getSize() : 10;
             int offset = (page - 1) * size;
 
-            // 3. 查询项目列表
+            // 3. 构建分页缓存键
+            String cacheKey = RedisKeyUtil.buildProjectListKey(
+                    query.getStatus(),
+                    query.getIsEnabled(),
+                    page,
+                    size
+            );
+
+            // 4. 尝试从缓存获取
+            Object cache = projectCacheUtil.getProjectListCache(cacheKey);
+            if (cache != null) {
+                @SuppressWarnings("unchecked")
+                ProjectPageVO cachedPage = (ProjectPageVO) cache;
+                log.info("【缓存命中】获取项目列表: key={}, total={}", cacheKey, cachedPage.getTotal());
+                return ResponseVO.success("查询成功", cachedPage);
+            }
+            // 5. 查询项目列表
+            log.info("【缓存未命中】查询数据库: key={}", cacheKey);
             List<Project> projects = projectMapper.selectPage(offset, size, query.getStatus(), query.getIsEnabled());
             Long total = projectMapper.countTotal(query.getStatus(), query.getIsEnabled());
 
-            // 4. 转换为VO
+            // 6. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
             for (Project project : projects) {
                 ProjectVO vo = new ProjectVO();
@@ -290,13 +319,14 @@ public class ProjectServiceImpl implements IProjectService {
                 projectVOs.add(vo);
             }
 
-            // 5. 构建分页响应
+            // 7. 构建分页响应
             ProjectPageVO pageVO = new ProjectPageVO();
             pageVO.setList(projectVOs);
             pageVO.setTotal(total);
             pageVO.setPage(page);
             pageVO.setSize(size);
 
+            projectCacheUtil.cacheProjectList(cacheKey, pageVO);
             log.info("查询项目列表成功: count={}", projectVOs.size());
 
             return ResponseVO.success("查询成功", pageVO);
@@ -316,13 +346,30 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
-            // 2. 查询项目
-            Project project = projectMapper.selectById(projectId);
-            if (project == null) {
+            // 2. 缓存穿透防护 - 检查空值缓存
+            if (projectCacheUtil.isProjectNullCached(projectId)) {
+                log.warn("【缓存穿透防护】空值缓存命中: projectId={}", projectId);
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 构建响应
+            // 3. 尝试从缓存获取详情
+            Object cache = projectCacheUtil.getProjectDetailCache(projectId);
+            if (cache != null) {
+                ProjectVO cachedVO = (ProjectVO) cache;
+                log.info("【缓存命中】获取项目详情: projectId={}", projectId);
+                return ResponseVO.success("查询成功", cachedVO);
+            }
+
+            // 4. 缓存未命中：查询数据库
+            log.info("【缓存未命中】查询数据库: projectId={}", projectId);
+            Project project = projectMapper.selectById(projectId);
+            if (project == null) {
+                projectCacheUtil.cacheProjectNull(projectId);
+                log.warn("【缓存穿透防护】写入空值缓存: projectId={}", projectId);
+                return ResponseVO.notFound("项目不存在");
+            }
+
+            // 5. 构建响应
             ProjectVO responseVO = new ProjectVO();
             BeanUtils.copyProperties(project, responseVO);
 
@@ -336,6 +383,7 @@ public class ProjectServiceImpl implements IProjectService {
             List<Long> scorerIds = scorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
             responseVO.setScorerIds(scorerIds);
 
+            projectCacheUtil.cacheProjectDetail(projectId, responseVO);
             log.info("查询项目详情成功: projectId={}", projectId);
 
             return ResponseVO.success("查询成功", responseVO);
@@ -355,11 +403,23 @@ public class ProjectServiceImpl implements IProjectService {
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
+            // 2. 按用户ID构建缓存键
+            String cacheKey = RedisKeyUtil.buildAuthorizedProjectsKey(currentUserId);
 
-            // 2. 查询当前用户有权限的项目（作为打分用户）
+            // 3. 尝试从缓存获取
+            Object cache = projectCacheUtil.getAuthorizedProjectsCache(currentUserId);
+            if (cache != null) {
+                @SuppressWarnings("unchecked")
+                List<ProjectVO> cachedList = (List<ProjectVO>) cache;
+                log.info("【缓存命中】获取授权项目: userId={}, count={}", currentUserId, cachedList.size());
+                return ResponseVO.success("查询成功", cachedList);
+            }
+
+            // 4. 缓存未命中：查询数据库
+            log.info("【缓存未命中】查询数据库: userId={}", currentUserId);
             List<Project> projects = projectMapper.selectByScorerId(currentUserId);
 
-            // 3. 转换为VO
+            // 5. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
             for (Project project : projects) {
                 ProjectVO vo = new ProjectVO();
@@ -378,6 +438,7 @@ public class ProjectServiceImpl implements IProjectService {
                 projectVOs.add(vo);
             }
 
+            projectCacheUtil.cacheAuthorizedProjects(currentUserId, projectVOs);
             log.info("查询授权项目列表成功: userId={}, count={}", currentUserId, projectVOs.size());
 
             return ResponseVO.success("查询成功", projectVOs);

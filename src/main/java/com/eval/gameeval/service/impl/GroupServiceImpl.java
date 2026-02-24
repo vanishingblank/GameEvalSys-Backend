@@ -10,6 +10,7 @@ import com.eval.gameeval.models.entity.Project;
 import com.eval.gameeval.models.entity.ProjectGroup;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IGroupService;
+import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Resource
     private RedisToken redisToken;
+
+    @Resource
+    private ProjectCacheUtil projectCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -75,6 +79,7 @@ public class GroupServiceImpl implements IGroupService {
             group.setUpdateTime(LocalDateTime.now());
 
             groupMapper.insert(group);
+            projectCacheUtil.clearProjectGroupsCache(request.getProjectId());
 
             // 6. 构建响应
             GroupVO responseVO = new GroupVO();
@@ -106,10 +111,20 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 查询项目关联的小组列表
+            // 3. 尝试从缓存获取小组列表
+            Object cache = projectCacheUtil.getProjectGroupsCache(projectId);
+            if (cache != null) {
+                @SuppressWarnings("unchecked")
+                List<GroupVO> cachedList = (List<GroupVO>) cache;
+                log.info("【缓存命中】获取项目小组: projectId={}, count={}", projectId, cachedList.size());
+                return ResponseVO.success("查询成功", cachedList);
+            }
+
+            // 4. 缓存未命中：查询数据库
+            log.info("【缓存未命中】查询数据库: projectId={}", projectId);
             List<ProjectGroup> groups = groupMapper.selectByProjectId(projectId);
 
-            // 4. 转换为VO列表
+            // 5. 转换为VO列表
             List<GroupVO> groupVOs = groups.stream()
                     .map(group -> {
                         GroupVO vo = new GroupVO();
@@ -118,6 +133,7 @@ public class GroupServiceImpl implements IGroupService {
                     })
                     .collect(Collectors.toList());
 
+            projectCacheUtil.cacheProjectGroups(projectId, groupVOs);
             log.info("查询项目小组列表成功: projectId={}, count={}", projectId, groupVOs.size());
 
             return ResponseVO.success("查询成功", groupVOs);
