@@ -22,10 +22,10 @@ public class ProjectVO implements Serializable {
     private String description;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate startDate;
+    private LocalDateTime startDate;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate endDate;
+    private LocalDateTime endDate;
 
     private String status;
     private Boolean isEnabled;
