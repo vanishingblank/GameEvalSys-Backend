@@ -185,7 +185,7 @@ public class UserServiceImpl implements IUserService {
                 // 7. 如果禁用用户，记录日志
                 if (request.getIsEnabled() != null && !request.getIsEnabled()) {
                     log.info("用户被禁用: userId={}, operator={}", userId, currentUserId);
-                    redisToken.deleteToken(token);
+//                    redisToken.deleteToken(token);
                 }
                 log.info("编辑用户成功: userId={}, operator={}", userId, currentUserId);
                 return ResponseVO.<Void>success("编辑成功",null);
