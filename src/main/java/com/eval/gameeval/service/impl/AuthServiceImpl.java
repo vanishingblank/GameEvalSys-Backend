@@ -38,7 +38,14 @@ public class AuthServiceImpl implements IAuthService{
             }
             // 2. 验证密码
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-                return ResponseVO.unauthorized("用户名或密码错误");
+                if(loginRequest.getPassword()==user.getPassword())
+                {
+                    log.info("用户直接匹配登录成功: userId={}, username={}", user.getId(), user.getUsername());
+                }
+                else{
+                    return ResponseVO.unauthorized("用户名或密码错误");
+                }
+
             }
 
             // 3. 生成Token
