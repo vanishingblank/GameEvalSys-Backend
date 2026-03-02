@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -37,8 +38,12 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.unauthorized("用户名或密码错误");
             }
             // 2. 验证密码
+//            if(Objects.equals(loginRequest.getPassword(), user.getPassword()))
+//                {
+//                    log.info("用户直接匹配登录成功: userId={}, username={}", user.getId(), user.getUsername());
+//                }
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-                if(loginRequest.getPassword()==user.getPassword())
+                if(Objects.equals(loginRequest.getPassword(), user.getPassword()))
                 {
                     log.info("用户直接匹配登录成功: userId={}, username={}", user.getId(), user.getUsername());
                 }
