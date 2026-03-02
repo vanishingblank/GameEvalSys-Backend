@@ -82,4 +82,5 @@ public class UserController {
         ResponseVO<UserPageVO> response = userService.getUserList(token, query);
         return ResponseEntity.ok(response);
     }
+
 }
