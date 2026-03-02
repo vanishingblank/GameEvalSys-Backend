@@ -2,6 +2,7 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ProjectCreateDTO;
+import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
 import com.eval.gameeval.models.VO.GroupVO;
@@ -117,6 +118,20 @@ public class ProjectController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<List<GroupVO>> response = groupService.getProjectGroups(token, projectId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 通过评审组创建项目
+     */
+    @PostMapping("/with-group")
+    @LogRecord(value = "创建项目with评审组", module = "Project")
+    public ResponseEntity<ResponseVO<ProjectVO>> createProjectWithGroup(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody ProjectCreateWithGroupDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<ProjectVO> response = projectService.createProjectWithGroup(token, request);
         return ResponseEntity.ok(response);
     }
 

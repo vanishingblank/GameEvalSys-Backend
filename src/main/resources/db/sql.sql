@@ -108,3 +108,26 @@ CREATE TABLE `scoring_record_detail` (
                                          CONSTRAINT `fk_detail_indicator` FOREIGN KEY (`indicator_id`) REFERENCES `scoring_indicator` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分记录明细表';
 
+-- 评审组主表
+CREATE TABLE `reviewer_group` (
+                                  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '评审组ID',
+                                  `name` varchar(100) NOT NULL COMMENT '评审组名称',
+                                  `description` varchar(500) DEFAULT '' COMMENT '评审组描述',
+                                  `creator_id` bigint NOT NULL COMMENT '创建人ID',
+                                  `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
+                                  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                  PRIMARY KEY (`id`),
+                                  KEY `idx_creator_id` (`creator_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评审组主表';
+
+-- 评审组成员关联表
+CREATE TABLE `reviewer_group_member` (
+                                         `id` bigint NOT NULL AUTO_INCREMENT COMMENT '关联ID',
+                                         `group_id` bigint NOT NULL COMMENT '评审组ID',
+                                         `user_id` bigint NOT NULL COMMENT '用户ID',
+                                         `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+                                         PRIMARY KEY (`id`),
+                                         UNIQUE KEY `uk_group_user` (`group_id`, `user_id`),
+                                         KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评审组成员关联表';
