@@ -1,10 +1,13 @@
 package com.eval.gameeval.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.eval.gameeval.mapper.UserMapper;
+import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.UserDetailVO;
 import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import com.eval.gameeval.models.entity.User;
@@ -309,6 +312,47 @@ public class UserServiceImpl implements IUserService {
 
         } catch (Exception e) {
             log.error("查询用户列表异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<List<UserDetailVO>> batchQueryUsers(String token, UserBatchQueryDTO request) {
+        try {
+            // 1. 验证Token
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            // 2. 查询用户详细信息（批量）
+            List<Long> userIds = request.getIds();
+
+            // 3. 构建查询条件
+            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(User::getId, userIds);
+
+            if (!request.getIncludeDisabled()) {
+                wrapper.eq(User::getIsEnabled, true);
+            }
+
+            List<User> users = userMapper.selectList(wrapper);
+
+            // 4. 转换为VO
+            List<UserDetailVO> userVOs = users.stream()
+                    .map(user -> {
+                        UserDetailVO vo = new UserDetailVO();
+                        BeanUtils.copyProperties(user, vo);
+                        return vo;
+                    })
+                    .collect(Collectors.toList());
+
+            log.info("批量查询用户成功: count={}, operator={}", userVOs.size(), currentUserId);
+
+            return ResponseVO.success("查询成功", userVOs);
+
+        } catch (Exception e) {
+            log.error("批量查询用户异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }

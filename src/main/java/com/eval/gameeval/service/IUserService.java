@@ -1,13 +1,7 @@
 package com.eval.gameeval.service;
 
-import com.eval.gameeval.models.DTO.LoginRequestDTO;
-import com.eval.gameeval.models.DTO.UserCreateDTO;
-import com.eval.gameeval.models.DTO.UserQueryDTO;
-import com.eval.gameeval.models.DTO.UserUpdateDTO;
-import com.eval.gameeval.models.VO.LoginResponseVO;
-import com.eval.gameeval.models.VO.ResponseVO;
-import com.eval.gameeval.models.VO.UserPageVO;
-import com.eval.gameeval.models.VO.UserVO;
+import com.eval.gameeval.models.DTO.*;
+import com.eval.gameeval.models.VO.*;
 import jakarta.validation.Valid;
 
 import java.util.List;
@@ -34,4 +28,11 @@ public interface IUserService {
      * @return 分页用户列表
      */
     ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query);
+    /**
+     * 批量查询用户详细信息
+     * @param token 认证Token
+     * @param request 批量查询请求
+     * @return 用户详细信息列表
+     */
+    ResponseVO<List<UserDetailVO>> batchQueryUsers(String token, UserBatchQueryDTO request);
 }
