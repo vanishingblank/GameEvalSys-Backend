@@ -1,10 +1,12 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
+import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.UserDetailVO;
 import com.eval.gameeval.models.VO.UserPageVO;
 import com.eval.gameeval.models.VO.UserVO;
 import com.eval.gameeval.service.IUserService;
@@ -82,5 +84,20 @@ public class UserController {
         ResponseVO<UserPageVO> response = userService.getUserList(token, query);
         return ResponseEntity.ok(response);
     }
+    /**
+     * 批量查询用户详细信息
 
+     * @param authorization 认证Token
+     * @param request 批量查询请求
+     * @return 用户详细信息列表
+     */
+    @PostMapping("/batch-query")
+    public ResponseEntity<ResponseVO<List<UserDetailVO>>> batchQueryUsers(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody UserBatchQueryDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<List<UserDetailVO>> response = userService.batchQueryUsers(token, request);
+        return ResponseEntity.ok(response);
+    }
 }
