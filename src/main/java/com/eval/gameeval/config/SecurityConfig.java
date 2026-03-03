@@ -1,5 +1,6 @@
 package com.eval.gameeval.config;
 
+import com.eval.gameeval.interceptor.NotFoundFilter;
 import com.eval.gameeval.interceptor.RestAccessDeniedHandler;
 import com.eval.gameeval.interceptor.RestAuthenticationEntryPoint;
 import com.eval.gameeval.interceptor.TokenAuthenticationFilter;
@@ -17,6 +18,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Resource
+    private NotFoundFilter notFoundFilter;
+
+    @Resource
     private TokenAuthenticationFilter tokenAuthenticationFilter;
 
     @Resource
@@ -24,6 +28,7 @@ public class SecurityConfig {
 
     @Resource
     private RestAccessDeniedHandler accessDeniedHandler;
+
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -52,6 +57,10 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
 
+                .addFilterBefore(
+                        notFoundFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
                 .addFilterBefore(
                         tokenAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
