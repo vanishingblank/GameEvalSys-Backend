@@ -40,7 +40,10 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
             }
 
             filterChain.doFilter(request, response);
-        } catch (Exception e) {
+        }
+
+        //filterChain.doFilter(request, response);
+        catch (Exception e) {
             log.error("Token authentication failed", e);
             SecurityContextHolder.clearContext();
             filterChain.doFilter(request, response);
