@@ -4,6 +4,7 @@ import com.eval.gameeval.mapper.ReviewerGroupMapper;
 import com.eval.gameeval.mapper.ReviewerGroupMemberMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.ReviewerGroupCreateDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.models.entity.ReviewerGroup;
@@ -105,7 +106,7 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     }
 
     @Override
-    public ResponseVO<List<ReviewerGroupVO>> getReviewerGroupList(String token) {
+    public ResponseVO<List<ReviewerGroupVO>> getReviewerGroupList(String token, ReviewerGroupQueryDTO query) {
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -114,7 +115,8 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
             }
 
             // 2. 查询所有启用的评审组
-            List<ReviewerGroup> groups = groupMapper.selectAllEnabled();
+            String keyWords = query != null ? query.getKeyWords() :null;
+            List<ReviewerGroup> groups = groupMapper.selectAllEnabledWithKeywords(keyWords);
 
             // 3. 转换为VO
             List<ReviewerGroupVO> groupVOs = new ArrayList<>();
