@@ -284,10 +284,10 @@ public class UserServiceImpl implements IUserService {
             int limit = size;
 
             // 4. 查询用户列表
-            List<User> userList = userMapper.selectPage(offset, limit, query.getRole());
+            List<User> userList = userMapper.selectPage(offset, limit, query.getRole(), query.getKeyWords());
 
             // 5. 查询总记录数
-            Long total = userMapper.countTotal(query.getRole());
+            Long total = userMapper.countTotal(query.getRole(), query.getKeyWords());
 
             // 6. 转换为VO列表
             List<UserPageVO.UserVO> userVOList = userList.stream()

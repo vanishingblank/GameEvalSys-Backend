@@ -29,4 +29,9 @@ public class UserQueryDTO implements Serializable {
      * 角色
      */
     private String role;
+
+    /**
+     * 关键词
+     */
+    private String keyWords;
 }
