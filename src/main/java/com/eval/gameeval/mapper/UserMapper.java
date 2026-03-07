@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 @Repository
@@ -76,6 +77,38 @@ public interface UserMapper extends BaseMapper<User> {
             @Param("role") String role,
             @Param("keyWords") String keyWords
     );
+
+    @Select("<script>" +
+            "SELECT " +
+            "  u.id, " +
+            "  u.username, " +
+            "  u.password, " +
+            "  u.name, " +
+            "  u.role, " +
+            "  u.is_enabled AS isEnabled, " +
+            "  u.create_time AS createTime, " +
+            "  u.update_time AS updateTime, " +
+            "  GROUP_CONCAT(rgm.group_id) AS reviewerGroupIds " +
+            "FROM sys_user u " +
+            "LEFT JOIN reviewer_group_member rgm ON u.id = rgm.user_id " +
+            "WHERE u.is_enabled = 1 " +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND u.role = #{role} " +
+            "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (u.username LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR u.name LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "GROUP BY u.id " +
+            "ORDER BY u.create_time DESC " +
+            "LIMIT #{offset}, #{limit}" +
+            "</script>")
+            List<Map<String, Object>> selectPageWithGroups(
+                                                     @Param("offset") int offset,
+                                                     @Param("limit") int limit,
+                                                     @Param("role") String role,
+                                                     @Param("keyWords") String keyWords
+            );
 
     /**
      * 统计用户总数（带角色筛选）

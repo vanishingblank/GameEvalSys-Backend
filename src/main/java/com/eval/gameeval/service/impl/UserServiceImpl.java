@@ -23,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -330,23 +332,47 @@ public class UserServiceImpl implements IUserService {
             int limit = size;
 
             // 4. 查询用户列表
-            List<User> userList = userMapper.selectPage(offset, limit, query.getRole(), query.getKeyWords());
+            List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
+                    offset,
+                    size,
+                    query.getRole(),
+                    query.getKeyWords()
+            );
 
             // 5. 查询总记录数
             Long total = userMapper.countTotal(query.getRole(), query.getKeyWords());
 
             // 6. 转换为VO列表
-            List<UserPageVO.UserVO> userVOList = userList.stream()
-                    .map(user -> {
-                        UserPageVO.UserVO userVO = new UserPageVO.UserVO();
-                        BeanUtils.copyProperties(user, userVO);
-                        return userVO;
-                    })
-                    .collect(Collectors.toList());
+            List<UserPageVO.UserVO> userVOs = new ArrayList<>();
+            for (Map<String, Object> userMap : userList) {
+                UserPageVO.UserVO vo = new UserPageVO.UserVO();
+
+                // 基本字段
+                vo.setId(((Number) userMap.get("id")).longValue());
+                vo.setUsername((String) userMap.get("username"));
+                vo.setName((String) userMap.get("name"));
+                vo.setRole((String) userMap.get("role"));
+                vo.setIsEnabled((Boolean) userMap.get("isEnabled"));
+                vo.setCreateTime((LocalDateTime) userMap.get("createTime"));
+
+                String groupIdsStr = (String) userMap.get("reviewerGroupIds");
+                if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
+                    // 将逗号分隔的字符串转换为List<Long>
+                    List<Long> groupIds = Arrays.stream(groupIdsStr.split(","))
+                            .map(Long::parseLong)
+                            .collect(Collectors.toList());
+                    vo.setReviewerGroupIds(groupIds);
+                } else {
+                    // 用户不属于任何评审组
+                    vo.setReviewerGroupIds(new ArrayList<>());
+                }
+
+                userVOs.add(vo);
+            }
 
             // 7. 构建分页响应
             UserPageVO pageVO = new UserPageVO();
-            pageVO.setList(userVOList);
+            pageVO.setList(userVOs);
             pageVO.setTotal(total);
             pageVO.setPage(page);
             pageVO.setSize(size);
