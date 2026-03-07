@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 
@@ -18,7 +19,11 @@ public class UserCreateDTO implements Serializable {
 
     @Data
     @Accessors(chain = true)
-    public static class UserDTO {
+    public static class UserDTO implements Serializable{
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         @NotNull(message = "用户名不能为空")
         private String username;
 
@@ -32,5 +37,7 @@ public class UserCreateDTO implements Serializable {
         private String role;
 
         private Boolean isEnabled = true;
+
+        private Long reviewerGroupId;
     }
 }
