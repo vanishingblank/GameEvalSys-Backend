@@ -1,15 +1,16 @@
 package com.eval.gameeval.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.eval.gameeval.mapper.ReviewerGroupMapper;
+import com.eval.gameeval.mapper.ReviewerGroupMemberMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
-import com.eval.gameeval.models.VO.ResponseVO;
-import com.eval.gameeval.models.VO.UserDetailVO;
-import com.eval.gameeval.models.VO.UserPageVO;
-import com.eval.gameeval.models.VO.UserVO;
+import com.eval.gameeval.models.VO.*;
+import com.eval.gameeval.models.entity.ReviewerGroup;
+import com.eval.gameeval.models.entity.ReviewerGroupMember;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.RedisToken;
@@ -31,13 +32,17 @@ public class UserServiceImpl implements IUserService {
     @Resource
     private UserMapper userMapper;
     @Resource
+    private ReviewerGroupMapper reviewerGroupMapper;
+    @Resource
+    private ReviewerGroupMemberMapper groupMemberMapper;
+    @Resource
     private RedisToken redisToken;
     @Resource
     private PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<List<UserVO>> createUsers(String token, UserCreateDTO request) {
+    public ResponseVO<List<UserWithGroupVO>> createUsers(String token, UserCreateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -56,7 +61,7 @@ public class UserServiceImpl implements IUserService {
             }
 
             // 2. 批量创建用户
-            List<UserVO> createdUsers = new ArrayList<>();
+            List<UserWithGroupVO> createdUsers = new ArrayList<>();
             List<String> errors = new ArrayList<>();
 
             for (UserCreateDTO.UserDTO userDTO : request.getUsers()) {
@@ -66,6 +71,22 @@ public class UserServiceImpl implements IUserService {
                     if (count != null && count > 0) {
                         errors.add("用户名 " + userDTO.getUsername() + " 已存在");
                         continue;
+                    }
+
+                    // 验证评审组（如果指定了）
+                    ReviewerGroup reviewerGroup = null;
+                    if (userDTO.getReviewerGroupId() != null) {
+                        reviewerGroup = reviewerGroupMapper.selectById(userDTO.getReviewerGroupId());
+                        if (reviewerGroup == null) {
+                            errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组ID "
+                                    + userDTO.getReviewerGroupId() + " 不存在");
+                            continue;
+                        }
+                        if (!Boolean.TRUE.equals(reviewerGroup.getIsEnabled())) {
+                            errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组 \""
+                                    + reviewerGroup.getName() + "\" 已禁用");
+                            continue;
+                        }
                     }
 
                     // 创建用户
@@ -81,8 +102,33 @@ public class UserServiceImpl implements IUserService {
                     userMapper.insertUser(user);
 
                     // 转换为VO
-                    UserVO userVO = new UserVO();
+                    UserWithGroupVO userVO = new UserWithGroupVO();
                     BeanUtils.copyProperties(user, userVO);
+                    // 如果指定了评审组，加入评审组
+                    if (reviewerGroup != null) {
+                        try {
+                            // 创建评审组成员关联
+                            ReviewerGroupMember member = new ReviewerGroupMember();
+                            member.setGroupId(reviewerGroup.getId());
+                            member.setUserId(user.getId());
+                            member.setCreateTime(LocalDateTime.now());
+
+                            groupMemberMapper.insert(member);
+
+                            // 设置评审组信息到VO
+                            userVO.setReviewerGroupId(reviewerGroup.getId());
+                            userVO.setReviewerGroupName(reviewerGroup.getName());
+
+                            log.info("用户加入评审组成功: userId={}, groupId={}, groupName={}",
+                                    user.getId(), reviewerGroup.getId(), reviewerGroup.getName());
+
+                        } catch (Exception e) {
+                            log.warn("用户加入评审组失败（用户已创建）: userId={}, groupId={}, error={}",
+                                    user.getId(), reviewerGroup.getId(), e.getMessage());
+                            errors.add("用户名 " + userDTO.getUsername() + " 创建成功，但加入评审组 \""
+                                    + reviewerGroup.getName() + "\" 失败: " + e.getMessage());
+                        }
+                    }
                     createdUsers.add(userVO);
 
                     log.info("创建用户成功: username={}, role={}", user.getUsername(), user.getRole());
@@ -284,10 +330,10 @@ public class UserServiceImpl implements IUserService {
             int limit = size;
 
             // 4. 查询用户列表
-            List<User> userList = userMapper.selectPage(offset, limit, query.getRole());
+            List<User> userList = userMapper.selectPage(offset, limit, query.getRole(), query.getKeyWords());
 
             // 5. 查询总记录数
-            Long total = userMapper.countTotal(query.getRole());
+            Long total = userMapper.countTotal(query.getRole(), query.getKeyWords());
 
             // 6. 转换为VO列表
             List<UserPageVO.UserVO> userVOList = userList.stream()

@@ -56,15 +56,16 @@ public interface UserMapper extends BaseMapper<User> {
      * 分页查询用户（带角色筛选）
      */
     @Select("<script>" +
-            "SELECT " +
-            "id, username, password, name, role, " +
-            "is_enabled AS isEnabled, " +
-            "create_time AS createTime, " +
-            "update_time AS updateTime " +
+            "SELECT id, username, password, name, role, is_enabled AS isEnabled, " +
+            "       create_time AS createTime, update_time AS updateTime " +
             "FROM sys_user " +
             "WHERE is_enabled = 1 " +
             "<if test='role != null and role != \"\"'>" +
             "  AND role = #{role} " +
+            "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (username LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR name LIKE CONCAT('%', #{keyWords}, '%')) " +
             "</if>" +
             "ORDER BY create_time DESC " +
             "LIMIT #{offset}, #{limit}" +
@@ -72,7 +73,8 @@ public interface UserMapper extends BaseMapper<User> {
     List<User> selectPage(
             @Param("offset") int offset,
             @Param("limit") int limit,
-            @Param("role") String role
+            @Param("role") String role,
+            @Param("keyWords") String keyWords
     );
 
     /**
@@ -84,8 +86,15 @@ public interface UserMapper extends BaseMapper<User> {
             "<if test='role != null and role != \"\"'>" +
             "  AND role = #{role} " +
             "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (username LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR name LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
             "</script>")
-    Long countTotal(@Param("role") String role);
+    Long countTotal(
+            @Param("role") String role,
+            @Param("keyWords") String keyWords
+    );
 
     @Select("SELECT " +
             "id, username, password, name, role, " +

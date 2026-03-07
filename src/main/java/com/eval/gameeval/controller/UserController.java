@@ -5,10 +5,7 @@ import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
-import com.eval.gameeval.models.VO.ResponseVO;
-import com.eval.gameeval.models.VO.UserDetailVO;
-import com.eval.gameeval.models.VO.UserPageVO;
-import com.eval.gameeval.models.VO.UserVO;
+import com.eval.gameeval.models.VO.*;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
@@ -32,13 +29,13 @@ public class UserController {
      */
     @PostMapping
     @LogRecord(value = "创建用户", module = "User")
-    public ResponseEntity<ResponseVO<List<UserVO>>> createUsers(
+    public ResponseEntity<ResponseVO<List<UserWithGroupVO>>> createUsers(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody UserCreateDTO request) {
 
         String token = TokenUtil.extractToken(authorization);
 //        String token = "";
-        ResponseVO<List<UserVO>> response = userService.createUsers(token, request);
+        ResponseVO<List<UserWithGroupVO>> response = userService.createUsers(token, request);
         return ResponseEntity.ok(response);
     }
 

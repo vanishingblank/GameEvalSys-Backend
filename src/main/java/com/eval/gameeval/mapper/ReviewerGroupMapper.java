@@ -20,6 +20,22 @@ public interface ReviewerGroupMapper {
             "FROM reviewer_group WHERE is_enabled = 1 ORDER BY create_time DESC")
     List<ReviewerGroup> selectAllEnabled();
 
+    /**
+     * 查询所有启用的评审组（支持关键词搜索）
+     */
+    @Select("<script>" +
+            "SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
+            "       create_time AS createTime, update_time AS updateTime " +
+            "FROM reviewer_group " +
+            "WHERE is_enabled = 1 " +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "ORDER BY create_time DESC" +
+            "</script>")
+    List<ReviewerGroup> selectAllEnabledWithKeywords(@Param("keyWords") String keyWords);
+
     // ========== 插入 ==========
     @Insert("INSERT INTO reviewer_group(name, description, creator_id, is_enabled, create_time, update_time) " +
             "VALUES(#{name}, #{description}, #{creatorId}, #{isEnabled}, #{createTime}, #{updateTime})")

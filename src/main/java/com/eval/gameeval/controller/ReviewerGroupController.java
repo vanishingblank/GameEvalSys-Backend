@@ -2,6 +2,7 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ReviewerGroupCreateDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.service.IReviewerGroupService;
@@ -44,10 +45,11 @@ public class ReviewerGroupController {
      */
     @GetMapping
     public ResponseEntity<ResponseVO<List<ReviewerGroupVO>>> getReviewerGroupList(
-            @RequestHeader("Authorization") String authorization) {
-
+            @RequestHeader("Authorization") String authorization,
+            ReviewerGroupQueryDTO query
+    ) {
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<ReviewerGroupVO>> response = reviewerGroupService.getReviewerGroupList(token);
+        ResponseVO<List<ReviewerGroupVO>> response = reviewerGroupService.getReviewerGroupList(token,query);
         return ResponseEntity.ok(response);
     }
 

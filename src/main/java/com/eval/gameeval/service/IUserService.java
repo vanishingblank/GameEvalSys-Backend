@@ -15,7 +15,7 @@ public interface IUserService {
      * @param request 创建用户请求
      * @return 创建成功的用户列表
      */
-    ResponseVO<List<UserVO>> createUsers(String token, @Valid UserCreateDTO request);
+    ResponseVO<List<UserWithGroupVO>> createUsers(String token, @Valid UserCreateDTO request);
 
     ResponseVO<Void> updateUser(String token, Long userId, @Valid UserUpdateDTO request);
 
