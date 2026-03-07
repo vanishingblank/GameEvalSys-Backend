@@ -52,5 +52,7 @@ public class UserPageVO implements Serializable {
 
         @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
         private LocalDateTime createTime;
+
+        private List<Long> reviewerGroupIds;
     }
 }
