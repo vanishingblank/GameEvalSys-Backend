@@ -2,6 +2,7 @@ package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.ReviewerGroupCreateDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroupQueryDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 
@@ -26,4 +27,13 @@ public interface IReviewerGroupService {
      * 获取评审组详情
      */
     ResponseVO<ReviewerGroupVO> getReviewerGroupDetail(String token, Long groupId);
+
+    /**
+     * 编辑评审组
+     * @param token 认证Token
+     * @param groupId 评审组ID
+     * @param request 更新请求
+     * @return 更新后的评审组详情
+     */
+    ResponseVO<ReviewerGroupVO> updateReviewerGroup(String token, Long groupId, ReviewerGroupUpdateDTO request);
 }
