@@ -22,7 +22,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -329,7 +332,7 @@ public class UserServiceImpl implements IUserService {
             int limit = size;
 
             // 4. 查询用户列表
-            List<User> users = userMapper.selectPage(
+            List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
                     offset,
                     size,
                     query.getRole(),
@@ -340,48 +343,32 @@ public class UserServiceImpl implements IUserService {
             Long total = userMapper.countTotal(query.getRole(), query.getKeyWords());
 
             // 6. 转换为VO列表
-            List<ReviewerGroupInfoVO> emptyList = new ArrayList<>(); // 空列表复用
-            if (!users.isEmpty()) {
-                // 提取用户ID列表
-                List<Long> userIds = users.stream()
-                        .map(User::getId)
-                        .collect(Collectors.toList());
+            List<UserPageVO.UserVO> userVOs = new ArrayList<>();
+            for (Map<String, Object> userMap : userList) {
+                UserPageVO.UserVO vo = new UserPageVO.UserVO();
 
-                // 查询评审组信息
-                List<Map<String, Object>> groupMaps = userMapper.selectReviewerGroupsByUserIds(userIds);
+                // 基本字段
+                vo.setId(((Number) userMap.get("id")).longValue());
+                vo.setUsername((String) userMap.get("username"));
+                vo.setName((String) userMap.get("name"));
+                vo.setRole((String) userMap.get("role"));
+                vo.setIsEnabled((Boolean) userMap.get("isEnabled"));
+                vo.setCreateTime((LocalDateTime) userMap.get("createTime"));
 
-                // 按用户ID分组：userId -> List<ReviewerGroupInfoVO>
-                Map<Long, List<ReviewerGroupInfoVO>> userGroupsMap = new HashMap<>();
-                for (Map<String, Object> groupMap : groupMaps) {
-                    Long userId = ((Number) groupMap.get("userId")).longValue();
-                    Long groupId = ((Number) groupMap.get("groupId")).longValue();
-                    String groupName = (String) groupMap.get("groupName");
-
-                    ReviewerGroupInfoVO groupInfo = new ReviewerGroupInfoVO();
-                    groupInfo.setId(groupId);
-                    groupInfo.setName(groupName);
-
-                    userGroupsMap.computeIfAbsent(userId, k -> new ArrayList<>()).add(groupInfo);
+                String groupIdsStr = (String) userMap.get("reviewerGroupIds");
+                if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
+                    // 将逗号分隔的字符串转换为List<Long>
+                    List<Long> groupIds = Arrays.stream(groupIdsStr.split(","))
+                            .map(Long::parseLong)
+                            .collect(Collectors.toList());
+                    vo.setReviewerGroupIds(groupIds);
+                } else {
+                    // 用户不属于任何评审组
+                    vo.setReviewerGroupIds(new ArrayList<>());
                 }
 
-                // 将评审组信息设置到每个用户VO中
-                for (User user : users) {
-                    List<ReviewerGroupInfoVO> groups = userGroupsMap.get(user.getId());
-                    if (groups == null) {
-                        user.setReviewerGroups(emptyList); // 复用空列表节省内存
-                    } else {
-                        user.setReviewerGroups(groups);
-                    }
-                }
+                userVOs.add(vo);
             }
-            List<UserPageVO.UserVO> userVOs = users.stream()
-                    .map(user -> {
-                        UserPageVO.UserVO vo = new UserPageVO.UserVO();
-                        BeanUtils.copyProperties(user, vo);
-                        vo.setReviewerGroups(user.getReviewerGroups());
-                        return vo;
-                    })
-                    .collect(Collectors.toList());
 
             // 7. 构建分页响应
             UserPageVO pageVO = new UserPageVO();
