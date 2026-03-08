@@ -136,4 +136,20 @@ public interface UserMapper extends BaseMapper<User> {
             "update_time AS updateTime " +
             "FROM sys_user WHERE is_enabled = 1 ORDER BY create_time DESC")
     List<User> selectAllEnabled();
+
+    @Select("<script>" +
+            "SELECT " +
+            "  rgm.user_id AS userId, " +
+            "  rg.id AS groupId, " +
+            "  rg.name AS groupName " +
+            "FROM reviewer_group_member rgm " +
+            "JOIN reviewer_group rg ON rgm.group_id = rg.id " +
+            "WHERE rg.is_enabled = 1 " +
+            "  AND rgm.user_id IN " +
+            "  <foreach collection='userIds' item='id' open='(' separator=',' close=')'>" +
+            "    #{id}" +
+            "  </foreach>" +
+            "ORDER BY rgm.create_time ASC" +
+            "</script>")
+    List<Map<String, Object>> selectReviewerGroupsByUserIds(@Param("userIds") List<Long> userIds);
 }
