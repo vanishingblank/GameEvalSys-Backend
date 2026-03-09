@@ -38,6 +38,6 @@ public class UserCreateDTO implements Serializable {
 
         private Boolean isEnabled = true;
 
-        private Long reviewerGroupId;
+        private List<Long> reviewerGroupIds;
     }
 }
