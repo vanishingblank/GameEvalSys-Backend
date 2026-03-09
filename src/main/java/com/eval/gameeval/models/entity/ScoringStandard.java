@@ -14,6 +14,7 @@ public class ScoringStandard implements Serializable {
     private static final long serialVersionUID = 1L;
     private Long id;
     private Long creatorId;
+    private String name;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

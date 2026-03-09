@@ -15,6 +15,7 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -44,7 +45,7 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<List<UserWithGroupVO>> createUsers(String token, UserCreateDTO request) {
+    public ResponseVO<List<UserWithGroupVO>> createUsers(String token, @Valid UserCreateDTO request) {
         try {
             // 1. 验证Token并获取当前用户
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -76,17 +77,31 @@ public class UserServiceImpl implements IUserService {
                     }
 
                     // 验证评审组（如果指定了）
-                    ReviewerGroup reviewerGroup = null;
-                    if (userDTO.getReviewerGroupId() != null) {
-                        reviewerGroup = reviewerGroupMapper.selectById(userDTO.getReviewerGroupId());
-                        if (reviewerGroup == null) {
-                            errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组ID "
-                                    + userDTO.getReviewerGroupId() + " 不存在");
-                            continue;
+                    List<ReviewerGroup> validGroups = new ArrayList<>();
+                    if (userDTO.getReviewerGroupIds() != null && !userDTO.getReviewerGroupIds().isEmpty()) {
+                        // 去重
+                        List<Long> uniqueGroupIds = userDTO.getReviewerGroupIds().stream()
+                                .distinct()
+                                .collect(Collectors.toList());
+
+                        // 验证每个评审组
+                        for (Long groupId : uniqueGroupIds) {
+                            ReviewerGroup group = reviewerGroupMapper.selectById(groupId);
+                            if (group == null) {
+                                errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组ID "
+                                        + groupId + " 不存在");
+                                continue;
+                            }
+                            if (!Boolean.TRUE.equals(group.getIsEnabled())) {
+                                errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组 \""
+                                        + group.getName() + "\" 已禁用");
+                                continue;
+                            }
+                            validGroups.add(group);
                         }
-                        if (!Boolean.TRUE.equals(reviewerGroup.getIsEnabled())) {
-                            errors.add("用户名 " + userDTO.getUsername() + " 创建失败: 评审组 \""
-                                    + reviewerGroup.getName() + "\" 已禁用");
+
+                        // 如果有无效评审组，跳过该用户
+                        if (validGroups.size() != uniqueGroupIds.size()) {
                             continue;
                         }
                     }
@@ -107,29 +122,47 @@ public class UserServiceImpl implements IUserService {
                     UserWithGroupVO userVO = new UserWithGroupVO();
                     BeanUtils.copyProperties(user, userVO);
                     // 如果指定了评审组，加入评审组
-                    if (reviewerGroup != null) {
+                    if (!validGroups.isEmpty()) {
                         try {
-                            // 创建评审组成员关联
-                            ReviewerGroupMember member = new ReviewerGroupMember();
-                            member.setGroupId(reviewerGroup.getId());
-                            member.setUserId(user.getId());
-                            member.setCreateTime(LocalDateTime.now());
+                            // 批量创建评审组成员关联
+                            List<ReviewerGroupMember> members = new ArrayList<>();
+                            for (ReviewerGroup group : validGroups) {
+                                ReviewerGroupMember member = new ReviewerGroupMember();
+                                member.setGroupId(group.getId());
+                                member.setUserId(user.getId());
+                                member.setCreateTime(LocalDateTime.now());
+                                members.add(member);
+                            }
 
-                            groupMemberMapper.insert(member);
+                            if (!members.isEmpty()) {
+                                groupMemberMapper.insertBatch(members);
+                            }
 
-                            // 设置评审组信息到VO
-                            userVO.setReviewerGroupId(reviewerGroup.getId());
-                            userVO.setReviewerGroupName(reviewerGroup.getName());
+                            // ✅ 构建评审组信息列表
+                            List<ReviewerGroupInfoVO> groupVOs = validGroups.stream()
+                                    .map(group -> {
+                                        ReviewerGroupInfoVO vo = new ReviewerGroupInfoVO();
+                                        vo.setId(group.getId());
+                                        vo.setName(group.getName());
+                                        return vo;
+                                    })
+                                    .collect(Collectors.toList());
 
-                            log.info("用户加入评审组成功: userId={}, groupId={}, groupName={}",
-                                    user.getId(), reviewerGroup.getId(), reviewerGroup.getName());
+                            userVO.setReviewerGroups(groupVOs);
+
+                            log.info("用户加入多个评审组成功: userId={}, groupIds={}, groupNames={}",
+                                    user.getId(),
+                                    validGroups.stream().map(ReviewerGroup::getId).collect(Collectors.toList()),
+                                    validGroups.stream().map(ReviewerGroup::getName).collect(Collectors.toList()));
 
                         } catch (Exception e) {
-                            log.warn("用户加入评审组失败（用户已创建）: userId={}, groupId={}, error={}",
-                                    user.getId(), reviewerGroup.getId(), e.getMessage());
-                            errors.add("用户名 " + userDTO.getUsername() + " 创建成功，但加入评审组 \""
-                                    + reviewerGroup.getName() + "\" 失败: " + e.getMessage());
+                            log.warn("用户加入评审组失败（用户已创建）: userId={}, error={}",
+                                    user.getId(), e.getMessage());
+                            errors.add("用户名 " + userDTO.getUsername() + " 创建成功，但加入评审组失败: " + e.getMessage());
                         }
+                    } else {
+                        // 未指定评审组或评审组列表为空
+                        userVO.setReviewerGroups(new ArrayList<>());
                     }
                     createdUsers.add(userVO);
 

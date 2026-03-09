@@ -131,3 +131,7 @@ CREATE TABLE `reviewer_group_member` (
                                          UNIQUE KEY `uk_group_user` (`group_id`, `user_id`),
                                          KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评审组成员关联表';
+
+-- 为 scoring_standard 表添加 name 字段
+ALTER TABLE scoring_standard
+    ADD COLUMN name VARCHAR(100) NOT NULL COMMENT '打分标准名称' AFTER creator_id;

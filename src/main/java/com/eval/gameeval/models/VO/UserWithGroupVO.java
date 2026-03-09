@@ -7,6 +7,7 @@ import lombok.experimental.Accessors;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户+评审组信息VO
@@ -27,13 +28,5 @@ public class UserWithGroupVO implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
-    /**
-     * 评审组ID（如果分配了）
-     */
-    private Long reviewerGroupId;
-
-    /**
-     * 评审组名称（如果分配了）
-     */
-    private String reviewerGroupName;
+    private List<ReviewerGroupInfoVO> reviewerGroups;
 }

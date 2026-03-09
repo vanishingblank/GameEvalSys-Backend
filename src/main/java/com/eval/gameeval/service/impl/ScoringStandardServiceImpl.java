@@ -61,9 +61,15 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
                 return ResponseVO.forbidden("权限不足，只有管理员可以创建打分标准");
             }
 
+            ScoringStandard existingStandard = standardMapper.selectByName(request.getName());
+            if (existingStandard != null) {
+                return ResponseVO.badRequest("打分标准名称 \"" + request.getName() + "\" 已存在");
+            }
+
             // 3. 创建打分标准主表
             ScoringStandard standard = new ScoringStandard();
             standard.setCreatorId(currentUserId);
+            standard.setName(request.getName());
             standard.setCreateTime(LocalDateTime.now());
             standard.setUpdateTime(LocalDateTime.now());
 
@@ -94,6 +100,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
             // 6. 构建响应
             ScoringStandardVO responseVO = new ScoringStandardVO();
             responseVO.setId(standard.getId());
+            responseVO.setName(standard.getName());
             responseVO.setCreateTime(standard.getCreateTime());
 
             // 7. 查询刚插入的指标列表
@@ -150,6 +157,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
             for (ScoringStandard standard : standards) {
                 ScoringStandardVO vo = new ScoringStandardVO();
                 vo.setId(standard.getId());
+                vo.setName(standard.getName());
                 vo.setCreateTime(standard.getCreateTime());
 
                 // 4. 查询每个标准的指标列表
@@ -226,6 +234,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
             // 7. 构建响应
             ScoringStandardVO responseVO = new ScoringStandardVO();
             responseVO.setId(standard.getId());
+            responseVO.setName(standard.getName());
             responseVO.setCreateTime(standard.getCreateTime());
 
             List<ScoringStandardVO.IndicatorVO> indicatorVOs = indicators.stream()
