@@ -19,6 +19,8 @@ public class ScoringStandardVO implements Serializable {
      */
     private Long id;
 
+    private String name;
+
     /**
      * 指标列表
      */
