@@ -2,6 +2,8 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
+import com.eval.gameeval.models.DTO.GroupQueryDTO;
+import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.service.IGroupService;
@@ -34,6 +36,15 @@ public class GroupController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<GroupVO> response = groupService.createGroup(token, request);
+        return ResponseEntity.ok(response);
+    }
+    @GetMapping
+    public ResponseEntity<ResponseVO<GroupPageVO>> getAllGroups(
+            @RequestHeader("Authorization") String authorization,
+            GroupQueryDTO query) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<GroupPageVO> response = groupService.getAllGroups(token, query);
         return ResponseEntity.ok(response);
     }
 

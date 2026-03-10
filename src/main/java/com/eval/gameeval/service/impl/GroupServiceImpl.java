@@ -4,6 +4,8 @@ import com.eval.gameeval.mapper.ProjectGroupMapper;
 import com.eval.gameeval.mapper.ProjectMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
+import com.eval.gameeval.models.DTO.GroupQueryDTO;
+import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.Project;
@@ -19,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -140,6 +144,100 @@ public class GroupServiceImpl implements IGroupService {
 
         } catch (Exception e) {
             log.error("查询项目小组列表异常: projectId={}", projectId, e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<GroupPageVO> getAllGroups(String token, GroupQueryDTO query) {
+        try {
+            // 1. 验证Token
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 权限校验：确定可查询的项目范围
+            List<Long> allowedProjectIds = null;
+
+            boolean isAdmin = "super_admin".equals(currentUser.getRole()) || "admin".equals(currentUser.getRole());
+            if (isAdmin) {
+                // 管理员：可查询所有小组（不限制项目）
+                log.debug("管理员查询所有小组: userId={}", currentUserId);
+            } else if ("scorer".equals(currentUser.getRole()) ||
+                    "admin".equals(currentUser.getRole()) ||
+                    "super_admin".equals(currentUser.getRole())) {
+                // 打分用户：仅可查询自己有权限打分的项目中的小组
+                List<Project> projects = projectMapper.selectByScorerId(currentUserId);
+                allowedProjectIds = projects.stream()
+                        .map(Project::getId)
+                        .collect(Collectors.toList());
+
+                if (allowedProjectIds.isEmpty()) {
+                    log.warn("打分用户无权限查询任何小组: userId={}", currentUserId);
+                    GroupPageVO emptyPage = new GroupPageVO();
+                    emptyPage.setList(new ArrayList<>());
+                    emptyPage.setTotal(0L);
+                    emptyPage.setPage(query.getPage());
+                    emptyPage.setSize(query.getSize());
+                    return ResponseVO.success("查询成功", emptyPage);
+                }
+                log.debug("打分用户查询有权限的小组: userId={}, projectCount={}",
+                        currentUserId, allowedProjectIds.size());
+            } else {
+                // 普通用户：无权查询
+                return ResponseVO.forbidden("无权查询小组列表");
+            }
+
+            // 3. 处理分页参数
+            int page = query.getPage() != null ? query.getPage() : 1;
+            int size = query.getSize() != null ? query.getSize() : 10;
+            int offset = (page - 1) * size;
+
+            // 4. 查询小组列表（带项目名称）
+            List<Map<String, Object>> groupMaps = groupMapper.selectPageWithProject(
+                    offset,
+                    size,
+                    query.getKeyWords(),
+                    allowedProjectIds
+            );
+
+            Long total = groupMapper.countTotalWithProject(
+                    query.getKeyWords(),
+                    allowedProjectIds
+            );
+
+            // 5. 转换为VO
+            List<GroupPageVO.GroupVO> groupVOs = new ArrayList<>();
+            for (Map<String, Object> groupMap : groupMaps) {
+                GroupPageVO.GroupVO vo = new GroupPageVO.GroupVO();
+                vo.setId(((Number) groupMap.get("id")).longValue());
+                vo.setName((String) groupMap.get("name"));
+                vo.setProjectId(((Number) groupMap.get("projectId")).longValue());
+                vo.setCreateTime((LocalDateTime) groupMap.get("createTime"));
+                vo.setUpdateTime((LocalDateTime) groupMap.get("updateTime"));
+                groupVOs.add(vo);
+            }
+
+            // 6. 构建分页响应
+            GroupPageVO pageVO = new GroupPageVO();
+            pageVO.setList(groupVOs);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
+
+            log.info("查询小组列表成功: userId={}, total={}, page={}, size={}",
+                    currentUserId, total, page, size);
+
+            return ResponseVO.success("查询成功", pageVO);
+
+        } catch (Exception e) {
+            log.error("查询小组列表异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
