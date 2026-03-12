@@ -227,8 +227,8 @@ public class GroupServiceImpl implements IGroupService {
             }
 
             // 3. 处理分页参数
-            Integer pageNum = query.getPage() != null ? query.getPage() : 1;
-            Integer pageSize = query.getSize() != null ? query.getSize() : 10;
+            int pageNum = query.getPage() != null ? query.getPage() : 1;
+            int pageSize = query.getSize() != null ? query.getSize() : 10;
             int page = pageNum;
             int size = pageSize;
             int offset = (page - 1) * size;
