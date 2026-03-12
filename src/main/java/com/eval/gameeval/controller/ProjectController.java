@@ -5,10 +5,7 @@ import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
-import com.eval.gameeval.models.VO.GroupVO;
-import com.eval.gameeval.models.VO.ProjectPageVO;
-import com.eval.gameeval.models.VO.ProjectVO;
-import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.*;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.service.IProjectService;
 import com.eval.gameeval.util.TokenUtil;
@@ -35,12 +32,12 @@ public class ProjectController {
      */
     @PostMapping
     @LogRecord(value = "创建项目", module = "Project")
-    public ResponseEntity<ResponseVO<ProjectVO>> createProject(
+    public ResponseEntity<ResponseVO<ProjectCreateVO>> createProject(
             @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody ProjectCreateDTO request) {
 
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectVO> response = projectService.createProject(token, request);
+        ResponseVO<ProjectCreateVO> response = projectService.createProject(token, request);
         return ResponseEntity.ok(response);
     }
 
