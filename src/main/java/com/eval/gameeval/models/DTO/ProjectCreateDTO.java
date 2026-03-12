@@ -36,7 +36,7 @@ public class ProjectCreateDTO implements Serializable {
 
     @NotEmpty(message = "小组ID列表不能为空")
     @Size(min = 1, message = "至少需要一个小组")
-    private List<Long> groupIds;
+    private List<String> groupNames;
 
     @NotEmpty(message = "打分用户ID列表不能为空")
     @Size(min = 1, message = "至少需要一个打分用户")

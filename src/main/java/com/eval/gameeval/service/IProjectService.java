@@ -4,6 +4,7 @@ import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
+import com.eval.gameeval.models.VO.ProjectCreateVO;
 import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -11,7 +12,7 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import java.util.List;
 
 public interface IProjectService {
-    ResponseVO<ProjectVO> createProject(String token, ProjectCreateDTO request);
+    ResponseVO<ProjectCreateVO> createProject(String token, ProjectCreateDTO request);
 
     ResponseVO<Void> updateProject(String token, Long projectId, ProjectUpdateDTO request);
 

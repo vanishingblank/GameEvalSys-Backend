@@ -5,6 +5,7 @@ import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
+import com.eval.gameeval.models.VO.ProjectCreateVO;
 import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -56,7 +57,7 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ProjectVO> createProject(String token, ProjectCreateDTO request) {
+    public ResponseVO<ProjectCreateVO> createProject(String token, ProjectCreateDTO request) {
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -97,10 +98,10 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 5. 创建小组关联
             List<ProjectGroup> groups = new ArrayList<>();
-            for (Long groupId : request.getGroupIds()) {
+            for (String groupName : request.getGroupNames()) {
                 ProjectGroup group = new ProjectGroup();
                 group.setProjectId(project.getId());
-                group.setName("小组" + groupId); // 实际应从数据库获取小组名称
+                group.setName(groupName);
                 group.setCreateTime(LocalDateTime.now());
                 group.setUpdateTime(LocalDateTime.now());
                 groups.add(group);
@@ -134,9 +135,9 @@ public class ProjectServiceImpl implements IProjectService {
             // 7. 构建响应
             projectCacheUtil.clearAllProjectListCache(); // 实际需遍历删除所有列表缓存键
             log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
-            ProjectVO responseVO = new ProjectVO();
+            ProjectCreateVO responseVO = new ProjectCreateVO();
             BeanUtils.copyProperties(project, responseVO);
-            responseVO.setGroupIds(request.getGroupIds());
+            responseVO.setGroupNames(request.getGroupNames());
             responseVO.setScorerIds(request.getScorerIds());
 
             log.info("创建项目成功: projectId={}, creatorId={}", project.getId(), currentUserId);
