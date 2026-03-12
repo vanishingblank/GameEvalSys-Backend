@@ -12,9 +12,29 @@ import java.time.LocalDateTime;
 public class ProjectGroup implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
+
+    /**
+     * 关联ID
+     */
     private Long id;
+
+    /**
+     * 项目ID
+     */
     private Long projectId;
-    private String name;
+
+    /**
+     * 小组信息ID（关联 project_group_info）
+     */
+    private Long groupInfoId;
+
+    /**
+     * 创建时间
+     */
     private LocalDateTime createTime;
+
+    /**
+     * 更新时间
+     */
     private LocalDateTime updateTime;
 }

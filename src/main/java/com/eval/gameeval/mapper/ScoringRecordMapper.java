@@ -36,13 +36,13 @@ public interface ScoringRecordMapper {
      * 查询小组平均分
      */
     @Select("SELECT " +
-            "  pg.id AS groupId, " +
-            "  pg.name AS groupName, " +
+            "  pgi.id AS groupId, " +
+            "  pgi.name AS groupName, " +
             "  AVG(sr.total_score) AS averageScore " +
             "FROM scoring_record sr " +
-            "JOIN project_group pg ON sr.group_id = pg.id " +
+            "JOIN project_group_info pgi ON sr.group_id = pgi.id " +
             "WHERE sr.project_id = #{projectId} " +
-            "GROUP BY pg.id, pg.name " +
+            "GROUP BY pgi.id, pgi.name " +
             "ORDER BY averageScore DESC")
     List<Map<String, Object>> selectGroupAverage(@Param("projectId") Long projectId);
 

@@ -35,6 +35,9 @@ public class ProjectServiceImpl implements IProjectService {
     private ProjectGroupMapper groupMapper;
 
     @Resource
+    private ProjectGroupInfoMapper groupInfoMapper;
+
+    @Resource
     private ProjectScorerMapper scorerMapper;
 
     @Resource
@@ -96,12 +99,22 @@ public class ProjectServiceImpl implements IProjectService {
 
             projectMapper.insert(project);
 
-            // 5. 创建小组关联
+            // 5. 创建小组关联（先创建小组信息，再创建关联）
             List<ProjectGroup> groups = new ArrayList<>();
             for (String groupName : request.getGroupNames()) {
+                // 创建小组信息
+                ProjectGroupInfo groupInfo = new ProjectGroupInfo();
+                groupInfo.setName(groupName);
+                groupInfo.setDescription("");
+                groupInfo.setIsEnabled(1);
+                groupInfo.setCreateTime(LocalDateTime.now());
+                groupInfo.setUpdateTime(LocalDateTime.now());
+                groupInfoMapper.insert(groupInfo);
+                
+                // 创建项目与小组的关联
                 ProjectGroup group = new ProjectGroup();
                 group.setProjectId(project.getId());
-                group.setName(groupName);
+                group.setGroupInfoId(groupInfo.getId());
                 group.setCreateTime(LocalDateTime.now());
                 group.setUpdateTime(LocalDateTime.now());
                 groups.add(group);
@@ -191,10 +204,16 @@ public class ProjectServiceImpl implements IProjectService {
             if (request.getGroupIds() != null) {
                 groupMapper.deleteByProjectId(projectId);
                 List<ProjectGroup> groups = new ArrayList<>();
-                for (Long groupId : request.getGroupIds()) {
+                for (Long groupInfoId : request.getGroupIds()) {
+                    // 验证小组信息是否存在
+                    ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
+                    if (groupInfo == null) {
+                        return ResponseVO.badRequest("小组ID " + groupInfoId + " 不存在");
+                    }
+                    
                     ProjectGroup group = new ProjectGroup();
                     group.setProjectId(projectId);
-                    group.setName("小组" + groupId);
+                    group.setGroupInfoId(groupInfoId);
                     group.setCreateTime(LocalDateTime.now());
                     group.setUpdateTime(LocalDateTime.now());
                     groups.add(group);
@@ -510,15 +529,21 @@ public class ProjectServiceImpl implements IProjectService {
 
             projectMapper.insert(project);
 
-            // 7. 创建小组关联
+            // 7. 创建小组关联（验证并关联project_group_info中的小组）
             List<ProjectGroup> groups = new ArrayList<>();
-            for (Long groupId : request.getGroupIds()) {
-                ProjectGroup group = new ProjectGroup();
-                group.setProjectId(project.getId());
-                group.setName("小组" + groupId);
-                group.setCreateTime(LocalDateTime.now());
-                group.setUpdateTime(LocalDateTime.now());
-                groups.add(group);
+            for (Long groupInfoId : request.getGroupIds()) {
+                // 验证小组是否存在
+                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
+                if (groupInfo == null) {
+                    return ResponseVO.badRequest("小组不存在: " + groupInfoId);
+                }
+
+                ProjectGroup relation = new ProjectGroup();
+                relation.setProjectId(project.getId());
+                relation.setGroupInfoId(groupInfoId);
+                relation.setCreateTime(LocalDateTime.now());
+                relation.setUpdateTime(LocalDateTime.now());
+                groups.add(relation);
             }
             if (!groups.isEmpty()) {
                 groupMapper.insertBatch(groups);

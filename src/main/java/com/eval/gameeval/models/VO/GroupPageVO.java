@@ -34,9 +34,30 @@ public class GroupPageVO implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
 
+        /**
+         * 小组ID（来自project_group_info）
+         */
         private Long id;
+
+        /**
+         * 小组名称
+         */
         private String name;
+
+        /**
+         * 小组描述
+         */
+        private String description;
+
+        /**
+         * 项目ID
+         */
         private Long projectId;
+
+        /**
+         * 是否启用
+         */
+        private Integer isEnabled;
 
         @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
         private LocalDateTime createTime;

@@ -37,6 +37,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     private ProjectGroupMapper groupMapper;
 
     @Autowired
+    private ProjectGroupInfoMapper groupInfoMapper;
+
+    @Autowired
     private ProjectScorerMapper scorerMapper;
 
     @Autowired
@@ -74,20 +77,28 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 return ResponseVO.badRequest("项目未开始或已结束，无法打分");
             }
 
-            // 4. 验证小组是否存在
-            ProjectGroup group = groupMapper.selectById(request.getGroupId());
-            if (group == null || !group.getProjectId().equals(request.getProjectId())) {
-                return ResponseVO.badRequest("小组不存在或不属于该项目");
+            // 4. 验证小组是否存在（project_group_info）
+            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(request.getGroupId());
+            if (groupInfo == null) {
+                return ResponseVO.badRequest("小组不存在");
             }
 
-            // 5. 验证当前用户是否有权限打分（是否是该项目的打分用户）
+            // 5. 验证该小组是否在该项目中关联
+            List<ProjectGroup> projectGroups = groupMapper.selectByProjectId(request.getProjectId());
+            boolean groupExistsInProject = projectGroups.stream()
+                    .anyMatch(pg -> pg.getGroupInfoId().equals(request.getGroupId()));
+            if (!groupExistsInProject) {
+                return ResponseVO.badRequest("小组不属于该项目");
+            }
+
+            // 6. 验证当前用户是否有权限打分（是否是该项目的打分用户）
             boolean isScorer = scorerMapper.selectByProjectId(request.getProjectId()).stream()
                     .anyMatch(scorer -> scorer.getUserId().equals(currentUserId));
             if (!isScorer) {
                 return ResponseVO.forbidden("您没有权限为该项目打分");
             }
 
-            // 6. 验证指标是否属于该项目的打分标准
+            // 7. 验证指标是否属于该项目的打分标准
             List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(project.getStandardId());
             List<Long> validIndicatorIds = indicators.stream()
                     .map(ScoringIndicator::getId)
@@ -131,7 +142,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 details.add(detail);
             }
 
-            // 7. 检查是否已存在打分记录（修改）
+            // 8. 检查是否已存在打分记录（修改）
             ScoringRecord existingRecord = recordMapper.selectByUniqueKey(
                     request.getProjectId(),
                     request.getGroupId(),
@@ -160,7 +171,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 recordMapper.insert(record);
             }
 
-            // 8. 保存明细
+            // 9. 保存明细
             for (ScoringRecordDetail detail : details) {
                 detail.setRecordId(record.getId());
             }
@@ -168,7 +179,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 detailMapper.insertBatch(details);
             }
 
-            // 9. 构建响应
+            // 10. 构建响应
             ScoringRecordVO responseVO = new ScoringRecordVO();
             BeanUtils.copyProperties(record, responseVO);
             responseVO.setScores(details.stream()

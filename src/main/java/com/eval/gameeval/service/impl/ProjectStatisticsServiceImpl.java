@@ -35,6 +35,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ProjectGroupMapper groupMapper;
 
     @Resource
+    private ProjectGroupInfoMapper groupInfoMapper;
+
+    @Resource
     private ProjectMapper projectMapper;
 
     @Resource
@@ -156,9 +159,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 // 项目名称
                 row.add(project.getName());
 
-                // 小组名称
-                ProjectGroup group = groupMapper.selectById(record.getGroupId());
-                row.add(group != null ? group.getName() : "未知");
+                // 小组名称（从project_group_info获取）
+                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(record.getGroupId());
+                row.add(groupInfo != null ? groupInfo.getName() : "未知");
 
                 // 打分用户
                 User user = userMapper.selectById(record.getUserId());
