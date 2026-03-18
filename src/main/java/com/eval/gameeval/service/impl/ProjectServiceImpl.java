@@ -201,7 +201,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectMapper.updateById(updateProject);
 
             // 5. 更新关联数据（先删除再插入）
-            if (request.getGroupIds() != null || !request.getGroupIds().isEmpty()) {
+            if (request.getGroupIds() != null ) {
                 groupMapper.deleteByProjectId(projectId);
                 List<ProjectGroup> groups = new ArrayList<>();
                 for (Long groupInfoId : request.getGroupIds()) {
@@ -223,7 +223,7 @@ public class ProjectServiceImpl implements IProjectService {
                 }
             }
 
-            if (request.getScorerIds() != null || !request.getScorerIds().isEmpty()) {
+            if (request.getScorerIds() != null ) {
                 scorerMapper.deleteByProjectId(projectId);
                 List<ProjectScorer> scorers = new ArrayList<>();
                 for (Long scorerId : request.getScorerIds()) {
