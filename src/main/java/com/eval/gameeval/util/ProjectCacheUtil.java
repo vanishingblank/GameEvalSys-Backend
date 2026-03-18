@@ -37,7 +37,7 @@ public class ProjectCacheUtil {
             // 1. 使用 SCAN 命令遍历匹配的 key（非阻塞）
             Cursor<String> cursor = redisTemplate.scan(
                     ScanOptions.scanOptions()
-                            .match("*"+RedisKeyUtil.PROJECT_LIST_KEY_PREFIX + "*")  // 匹配 project:list:*
+                            .match("*"+"project" + "*")  // 匹配 project:list:*
                             .count(100)  // 每次扫描100个，避免单次压力过大
                             .build()
             );
