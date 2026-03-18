@@ -55,8 +55,8 @@ public final class RedisKeyUtil {
      */
     public static String buildProjectListKey(String status, Boolean isEnabled, int page, int size) {
         StringBuilder key = new StringBuilder(PROJECT_LIST_KEY_PREFIX);
-        key.append(status != null ? status : "all").append(":");
-        key.append(isEnabled != null ? isEnabled : "all").append(":");
+        key.append(status != null ? status : "allStatus").append(":");
+        key.append(isEnabled != null ? isEnabled : "allOnlyEnabled").append(":");
         key.append(page).append(":").append(size);
         return key.toString();
     }

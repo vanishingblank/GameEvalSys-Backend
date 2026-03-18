@@ -2,10 +2,10 @@ spring:
   # 数据源配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    #Linux/wsl
+    #linux with docker
     url: jdbc:mysql://localhost:3314/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
-    #windows
-#    url: jdbc:mysql://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
+    #windows with local mysql
+    #url: jdbc:mysql://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
     hikari:

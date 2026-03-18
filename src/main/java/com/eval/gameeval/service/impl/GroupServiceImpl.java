@@ -3,6 +3,7 @@ package com.eval.gameeval.service.impl;
 import com.eval.gameeval.mapper.ProjectGroupInfoMapper;
 import com.eval.gameeval.mapper.ProjectGroupMapper;
 import com.eval.gameeval.mapper.ProjectMapper;
+import com.eval.gameeval.mapper.ProjectScorerMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.GroupQueryDTO;
@@ -12,6 +13,7 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.Project;
 import com.eval.gameeval.models.entity.ProjectGroup;
 import com.eval.gameeval.models.entity.ProjectGroupInfo;
+import com.eval.gameeval.models.entity.ProjectScorer;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.util.ProjectCacheUtil;
@@ -39,6 +41,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Resource
     private ProjectMapper projectMapper;
+
+    @Resource
+    private ProjectScorerMapper projectScorerMapper;
 
     @Resource
     private UserMapper userMapper;
@@ -102,6 +107,12 @@ public class GroupServiceImpl implements IGroupService {
 
             groupMapper.insert(relation);
             projectCacheUtil.clearProjectGroupsCache(request.getProjectId());
+            
+            // 清除所有相关用户的授权项目缓存
+            List<ProjectScorer> projectScorers = projectScorerMapper.selectByProjectId(request.getProjectId());
+            for (ProjectScorer scorer : projectScorers) {
+                projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
+            }
 
             // 7. 构建响应
             GroupVO responseVO = new GroupVO();

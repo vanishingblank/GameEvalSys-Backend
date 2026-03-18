@@ -201,7 +201,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectMapper.updateById(updateProject);
 
             // 5. 更新关联数据（先删除再插入）
-            if (request.getGroupIds() != null) {
+            if (request.getGroupIds() != null || !request.getGroupIds().isEmpty()) {
                 groupMapper.deleteByProjectId(projectId);
                 List<ProjectGroup> groups = new ArrayList<>();
                 for (Long groupInfoId : request.getGroupIds()) {
@@ -223,7 +223,7 @@ public class ProjectServiceImpl implements IProjectService {
                 }
             }
 
-            if (request.getScorerIds() != null) {
+            if (request.getScorerIds() != null || !request.getScorerIds().isEmpty()) {
                 scorerMapper.deleteByProjectId(projectId);
                 List<ProjectScorer> scorers = new ArrayList<>();
                 for (Long scorerId : request.getScorerIds()) {
@@ -241,6 +241,14 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
+            
+            // 清除所有相关用户的授权项目缓存，确保他们获取最新数据
+            List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
+            for (ProjectScorer scorer : projectScorers) {
+                projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
+                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorer.getUserId(), projectId);
+            }
+            
             log.info("编辑项目成功: projectId={}, operator={}", projectId, currentUserId);
 
             return ResponseVO.<Void>success("编辑成功",null);
@@ -282,6 +290,13 @@ public class ProjectServiceImpl implements IProjectService {
 
             projectCacheUtil.clearProjectDetailCache(projectId);
             projectCacheUtil.clearAllProjectListCache();
+            
+            // 清除所有相关用户的授权项目缓存
+            List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
+            for (ProjectScorer scorer : projectScorers) {
+                projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
+            }
+            
             log.info("结束项目成功: projectId={}, operator={}", projectId, currentUserId);
 
             return ResponseVO.<Void>success("项目已结束",null);
@@ -335,7 +350,7 @@ public class ProjectServiceImpl implements IProjectService {
 
                 // 查询关联的小组
                 List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
-                List<Long> groupIds = groups.stream().map(ProjectGroup::getId).collect(Collectors.toList());
+                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
                 vo.setGroupIds(groupIds);
 
                 // 查询关联的打分用户
@@ -402,7 +417,7 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 查询关联的小组
             List<ProjectGroup> groups = groupMapper.selectByProjectId(projectId);
-            List<Long> groupIds = groups.stream().map(ProjectGroup::getId).collect(Collectors.toList());
+            List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
             responseVO.setGroupIds(groupIds);
 
             // 查询关联的打分用户
@@ -454,7 +469,7 @@ public class ProjectServiceImpl implements IProjectService {
 
                 // 查询关联的小组
                 List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
-                List<Long> groupIds = groups.stream().map(ProjectGroup::getId).collect(Collectors.toList());
+                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
                 vo.setGroupIds(groupIds);
 
                 // 查询关联的打分用户
