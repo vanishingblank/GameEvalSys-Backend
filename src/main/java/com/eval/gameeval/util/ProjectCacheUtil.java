@@ -111,16 +111,32 @@ public class ProjectCacheUtil {
     // ========== 项目小组缓存 ==========
     public void cacheProjectGroups(Long projectId, Object value) {
         String key = RedisKeyUtil.buildProjectGroupsKey(projectId);
-        redisBaseUtil.set(key, value, RedisKeyUtil.PROJECT_GROUPS_TTL);
+        boolean result = redisBaseUtil.set(key, value, RedisKeyUtil.PROJECT_GROUPS_TTL);
+        if (result) {
+            log.info("【项目小组缓存】设置成功: key={}, ttl={}s", key, RedisKeyUtil.PROJECT_GROUPS_TTL);
+        } else {
+            log.error("【项目小组缓存】设置失败: key={}, projectId={}", key, projectId);
+        }
     }
 
     public Object getProjectGroupsCache(Long projectId) {
         String key = RedisKeyUtil.buildProjectGroupsKey(projectId);
-        return redisBaseUtil.get(key);
+        Object value = redisBaseUtil.get(key);
+        if (value != null) {
+            log.debug("【项目小组缓存】命中: key={}", key);
+        } else {
+            log.debug("【项目小组缓存】未命中: key={}", key);
+        }
+        return value;
     }
 
     public void clearProjectGroupsCache(Long projectId) {
         String key = RedisKeyUtil.buildProjectGroupsKey(projectId);
-        redisBaseUtil.delete(key);
+        boolean result = redisBaseUtil.delete(key);
+        if (result) {
+            log.info("【项目小组缓存】清除成功: key={}", key);
+        } else {
+            log.debug("【项目小组缓存】清除(key不存在或失败): key={}", key);
+        }
     }
 }

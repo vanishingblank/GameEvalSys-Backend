@@ -20,9 +20,15 @@ public class RedisBaseUtil {
      */
     public boolean set(String key, Object value, long expireSeconds) {
         try {
+            if (key == null || value == null) {
+                System.err.println("【Redis错误】key或value为null: key=" + key + ", value=" + value);
+                return false;
+            }
             redisTemplate.opsForValue().set(key, value, expireSeconds, TimeUnit.SECONDS);
+            System.out.println("【Redis设置成功】key=" + key + ", expireSeconds=" + expireSeconds);
             return true;
         } catch (Exception e) {
+            System.err.println("【Redis设置失败】key=" + key + ", 异常信息: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -33,8 +39,19 @@ public class RedisBaseUtil {
      */
     public Object get(String key) {
         try {
-            return redisTemplate.opsForValue().get(key);
+            if (key == null) {
+                System.err.println("【Redis错误】获取时key为null");
+                return null;
+            }
+            Object value = redisTemplate.opsForValue().get(key);
+            if (value != null) {
+                System.out.println("【Redis获取成功】key=" + key + ", value类型=" + value.getClass().getSimpleName());
+            } else {
+                System.out.println("【Redis获取】key=" + key + " 不存在");
+            }
+            return value;
         } catch (Exception e) {
+            System.err.println("【Redis获取失败】key=" + key + ", 异常信息: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
@@ -45,8 +62,15 @@ public class RedisBaseUtil {
      */
     public boolean delete(String key) {
         try {
-            return redisTemplate.delete(key);
+            if (key == null) {
+                System.err.println("【Redis错误】删除时key为null");
+                return false;
+            }
+            Boolean result = redisTemplate.delete(key);
+            System.out.println("【Redis删除】key=" + key + ", 结果=" + (result != null && result ? "成功" : "未找到"));
+            return result != null && result;
         } catch (Exception e) {
+            System.err.println("【Redis删除失败】key=" + key + ", 异常信息: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -57,8 +81,15 @@ public class RedisBaseUtil {
      */
     public boolean hasKey(String key) {
         try {
-            return redisTemplate.hasKey(key);
+            if (key == null) {
+                System.err.println("【Redis错误】检查时key为null");
+                return false;
+            }
+            Boolean exists = redisTemplate.hasKey(key);
+            System.out.println("【Redis检查】key=" + key + ", 存在=" + (exists != null && exists));
+            return exists != null && exists;
         } catch (Exception e) {
+            System.err.println("【Redis检查失败】key=" + key + ", 异常信息: " + e.getMessage());
             e.printStackTrace();
             return false;
         }

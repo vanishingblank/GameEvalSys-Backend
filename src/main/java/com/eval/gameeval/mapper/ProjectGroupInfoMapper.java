@@ -63,4 +63,32 @@ public interface ProjectGroupInfoMapper {
      */
     @Update("UPDATE project_group_info SET is_enabled = 0, update_time = #{updateTime} WHERE id = #{id}")
     int disable(@Param("id") Long id, @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
+     * 查询所有小组（分页，可选搜索关键词）
+     */
+    @Select("<script>" +
+            "SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
+            "FROM project_group_info WHERE is_enabled = 1 " +
+            "<if test='keyWords != null and keyWords != \"\"'> " +
+            "AND name LIKE CONCAT('%', #{keyWords}, '%') " +
+            "</if> " +
+            "ORDER BY create_time DESC LIMIT #{offset}, #{limit}" +
+            "</script>")
+    List<ProjectGroupInfo> selectPageWithSearch(
+            @Param("offset") int offset,
+            @Param("limit") int limit,
+            @Param("keyWords") String keyWords
+    );
+
+    /**
+     * 统计小组总数（可选搜索关键词）
+     */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM project_group_info WHERE is_enabled = 1 " +
+            "<if test='keyWords != null and keyWords != \"\"'> " +
+            "AND name LIKE CONCAT('%', #{keyWords}, '%') " +
+            "</if>" +
+            "</script>")
+    Long countWithSearch(@Param("keyWords") String keyWords);
 }

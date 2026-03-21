@@ -1,7 +1,9 @@
 package com.eval.gameeval.service;
 
+import com.eval.gameeval.models.DTO.GroupAddToProjectDTO;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.GroupQueryDTO;
+import com.eval.gameeval.models.DTO.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -12,12 +14,28 @@ import java.util.List;
 public interface IGroupService {
 
     /**
-     * 创建小组
+     * 创建小组（仅包含基本信息，不关联项目）
      * @param token 认证Token
      * @param request 创建请求
      * @return 小组详情
      */
     ResponseVO<GroupVO> createGroup(String token, GroupCreateDTO request);
+
+    /**
+     * 将小组加入项目
+     * @param token 认证Token
+     * @param request 请求参数（包含groupId和projectId）
+     * @return 小组详情
+     */
+    ResponseVO<GroupVO> addGroupToProject(String token, GroupAddToProjectDTO request);
+
+    /**
+     * 编辑小组信息
+     * @param token 认证Token
+     * @param request 编辑请求
+     * @return 编辑后的小组详情
+     */
+    ResponseVO<GroupVO> updateGroup(String token, GroupUpdateDTO request);
 
     /**
      * 获取项目关联的小组列表
