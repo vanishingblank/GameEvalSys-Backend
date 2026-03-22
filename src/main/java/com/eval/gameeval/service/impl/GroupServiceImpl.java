@@ -5,8 +5,10 @@ import com.eval.gameeval.mapper.ProjectGroupMapper;
 import com.eval.gameeval.mapper.ProjectMapper;
 import com.eval.gameeval.mapper.ProjectScorerMapper;
 import com.eval.gameeval.mapper.UserMapper;
+import com.eval.gameeval.models.DTO.GroupAddToProjectDTO;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.GroupQueryDTO;
+import com.eval.gameeval.models.DTO.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -20,7 +22,6 @@ import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,47 +75,123 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.forbidden("权限不足，只有管理员可以创建小组");
             }
 
-            // 3. 验证项目是否存在
-            Project project = projectMapper.selectById(request.getProjectId());
-            if (project == null) {
-                return ResponseVO.badRequest("项目不存在");
-            }
-
-            // 4. 验证项目是否已结束
-            if ("ended".equals(project.getStatus())) {
-                return ResponseVO.badRequest("项目已结束，无法创建小组");
-            }
-
             LocalDateTime now = LocalDateTime.now();
 
-            // 5. 先创建小组信息主记录（project_group_info）
+            // 3. 创建小组信息主记录（project_group_info）
             ProjectGroupInfo groupInfo = new ProjectGroupInfo();
             groupInfo.setName(request.getName());
             groupInfo.setDescription(request.getDescription());
-            groupInfo.setIsEnabled(1);
+            groupInfo.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : 1);
             groupInfo.setCreateTime(now);
             groupInfo.setUpdateTime(now);
 
             groupInfoMapper.insert(groupInfo);
             log.debug("创建小组信息记录: groupInfoId={}, name={}", groupInfo.getId(), request.getName());
 
-            // 6. 再创建项目-小组关联记录（project_group）
+            // 4. 构建响应
+            GroupVO responseVO = new GroupVO();
+            responseVO.setId(groupInfo.getId());
+            responseVO.setName(groupInfo.getName());
+            responseVO.setDescription(groupInfo.getDescription());
+            responseVO.setIsEnabled(groupInfo.getIsEnabled());
+            responseVO.setCreateTime(groupInfo.getCreateTime());
+            responseVO.setUpdateTime(groupInfo.getUpdateTime());
+
+            log.info("创建小组成功: groupInfoId={}, name={}, creatorId={}",
+                    groupInfo.getId(), request.getName(), currentUserId);
+
+            return ResponseVO.success("创建成功", responseVO);
+
+        } catch (Exception e) {
+            log.error("创建小组异常", e);
+            return ResponseVO.error("创建失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseVO<GroupVO> addGroupToProject(String token, GroupAddToProjectDTO request) {
+        try {
+            // 1. 验证Token并获取当前用户
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 权限校验：只有管理员可以关联小组到项目
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以关联小组到项目");
+            }
+
+            // 3. 验证小组是否存在
+            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(request.getGroupId());
+            if (groupInfo == null) {
+                return ResponseVO.badRequest("小组不存在");
+            }
+
+            // 4. 验证项目是否存在
+            Project project = projectMapper.selectById(request.getProjectId());
+            if (project == null) {
+                return ResponseVO.badRequest("项目不存在");
+            }
+
+            // 5. 验证项目是否已结束
+            if ("ended".equals(project.getStatus())) {
+                return ResponseVO.badRequest("项目已结束，无法关联小组");
+            }
+
+            // 6. 验证小组是否已经关联到该项目
+            ProjectGroup existingRelation = groupMapper.selectByGroupIdAndProjectId(
+                    request.getGroupId(), request.getProjectId());
+            if (existingRelation != null) {
+                return ResponseVO.badRequest("小组已经关联到该项目");
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+
+            // 7. 创建项目-小组关联记录（project_group）
             ProjectGroup relation = new ProjectGroup();
             relation.setProjectId(request.getProjectId());
-            relation.setGroupInfoId(groupInfo.getId());
+            relation.setGroupInfoId(request.getGroupId());
             relation.setCreateTime(now);
             relation.setUpdateTime(now);
 
             groupMapper.insert(relation);
-            projectCacheUtil.clearProjectGroupsCache(request.getProjectId());
-            
-            // 清除所有相关用户的授权项目缓存
+
+            // 8. 重新加载并更新项目级别的缓存（getProjectGroups使用）
+            List<ProjectGroup> updatedRelations = groupMapper.selectByProjectId(request.getProjectId());
+            List<GroupVO> updatedGroupVOs = new ArrayList<>();
+            for (ProjectGroup rel : updatedRelations) {
+                ProjectGroupInfo info = groupInfoMapper.selectById(rel.getGroupInfoId());
+                if (info != null) {
+                    GroupVO vo = new GroupVO();
+                    vo.setId(info.getId());
+                    vo.setName(info.getName());
+                    vo.setDescription(info.getDescription());
+                    vo.setProjectId(request.getProjectId());
+                    vo.setRelationId(rel.getId());
+                    vo.setIsEnabled(info.getIsEnabled());
+                    vo.setCreateTime(info.getCreateTime());
+                    vo.setUpdateTime(info.getUpdateTime());
+                    updatedGroupVOs.add(vo);
+                }
+            }
+            // 只更新项目级别的小组缓存（用于getProjectGroups）
+            projectCacheUtil.cacheProjectGroups(request.getProjectId(), updatedGroupVOs);
+            log.debug("已更新项目小组缓存: projectId={}, count={}", request.getProjectId(), updatedGroupVOs.size());
+
+            // 9. 清除所有相关用户的授权项目缓存
             List<ProjectScorer> projectScorers = projectScorerMapper.selectByProjectId(request.getProjectId());
             for (ProjectScorer scorer : projectScorers) {
                 projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
             }
 
-            // 7. 构建响应
+            // 10. 构建响应
             GroupVO responseVO = new GroupVO();
             responseVO.setId(groupInfo.getId());
             responseVO.setName(groupInfo.getName());
@@ -125,14 +202,104 @@ public class GroupServiceImpl implements IGroupService {
             responseVO.setCreateTime(groupInfo.getCreateTime());
             responseVO.setUpdateTime(groupInfo.getUpdateTime());
 
-            log.info("创建小组成功: groupInfoId={}, relationId={}, projectId={}, creatorId={}",
-                    groupInfo.getId(), relation.getId(), request.getProjectId(), currentUserId);
+            log.info("将小组关联到项目成功: groupId={}, projectId={}, relationId={}, operatorId={}",
+                    request.getGroupId(), request.getProjectId(), relation.getId(), currentUserId);
 
-            return ResponseVO.success("创建成功", responseVO);
+            return ResponseVO.success("关联成功", responseVO);
 
         } catch (Exception e) {
-            log.error("创建小组异常", e);
-            return ResponseVO.error("创建失败: " + e.getMessage());
+            log.error("关联小组到项目异常", e);
+            return ResponseVO.error("关联失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseVO<GroupVO> updateGroup(String token, GroupUpdateDTO request) {
+        try {
+            // 1. 验证Token并获取当前用户
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 权限校验：只有管理员可以编辑小组
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以编辑小组");
+            }
+
+            // 3. 验证小组是否存在
+            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(request.getId());
+            if (groupInfo == null) {
+                return ResponseVO.notFound("小组不存在");
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+
+            // 4. 更新小组信息
+            groupInfo.setName(request.getName());
+            groupInfo.setDescription(request.getDescription());
+            if (request.getIsEnabled() != null) {
+                groupInfo.setIsEnabled(request.getIsEnabled());
+            }
+            groupInfo.setUpdateTime(now);
+
+            groupInfoMapper.update(groupInfo);
+            log.debug("更新小组信息: groupId={}, name={}", request.getId(), request.getName());
+
+            // 5. 更新所有关联项目的缓存
+            List<ProjectGroup> relations = groupMapper.selectByGroupId(request.getId());
+            for (ProjectGroup rel : relations) {
+                // 重新查询该项目的所有小组
+                List<ProjectGroup> projectRelations = groupMapper.selectByProjectId(rel.getProjectId());
+                List<GroupVO> projectGroupVOs = new ArrayList<>();
+                for (ProjectGroup projectRel : projectRelations) {
+                    ProjectGroupInfo info = groupInfoMapper.selectById(projectRel.getGroupInfoId());
+                    if (info != null) {
+                        GroupVO vo = new GroupVO();
+                        vo.setId(info.getId());
+                        vo.setName(info.getName());
+                        vo.setDescription(info.getDescription());
+                        vo.setProjectId(rel.getProjectId());
+                        vo.setRelationId(projectRel.getId());
+                        vo.setIsEnabled(info.getIsEnabled());
+                        vo.setCreateTime(info.getCreateTime());
+                        vo.setUpdateTime(info.getUpdateTime());
+                        projectGroupVOs.add(vo);
+                    }
+                }
+                projectCacheUtil.cacheProjectGroups(rel.getProjectId(), projectGroupVOs);
+                log.debug("已更新项目小组缓存: projectId={}", rel.getProjectId());
+
+                // 清除该项目下所有打分人员的缓存
+                List<ProjectScorer> scorers = projectScorerMapper.selectByProjectId(rel.getProjectId());
+                for (ProjectScorer scorer : scorers) {
+                    projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
+                }
+            }
+
+            // 6. 构建响应
+            GroupVO responseVO = new GroupVO();
+            responseVO.setId(groupInfo.getId());
+            responseVO.setName(groupInfo.getName());
+            responseVO.setDescription(groupInfo.getDescription());
+            responseVO.setIsEnabled(groupInfo.getIsEnabled());
+            responseVO.setCreateTime(groupInfo.getCreateTime());
+            responseVO.setUpdateTime(groupInfo.getUpdateTime());
+
+            log.info("编辑小组成功: groupId={}, name={}, operatorId={}",
+                    request.getId(), request.getName(), currentUserId);
+
+            return ResponseVO.success("编辑成功", responseVO);
+
+        } catch (Exception e) {
+            log.error("编辑小组异常", e);
+            return ResponseVO.error("编辑失败: " + e.getMessage());
         }
     }
 
@@ -207,77 +374,42 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.unauthorized("用户不存在");
             }
 
-            // 2. 权限校验：确定可查询的项目范围
-            List<Long> allowedProjectIds = null;
-
-            boolean isAdmin = "super_admin".equals(currentUser.getRole()) || "admin".equals(currentUser.getRole());
-            if (isAdmin) {
-                // 管理员：可查询所有小组（不限制项目）
-                log.debug("管理员查询所有小组: userId={}", currentUserId);
-            } else if ("scorer".equals(currentUser.getRole())) {
-                // 打分用户：仅可查询自己有权限打分的项目中的小组
-                List<Project> projects = projectMapper.selectByScorerId(currentUserId);
-                allowedProjectIds = projects.stream()
-                        .map(Project::getId)
-                        .collect(Collectors.toList());
-
-                if (allowedProjectIds.isEmpty()) {
-                    log.warn("打分用户无权限查询任何小组: userId={}", currentUserId);
-                    GroupPageVO emptyPage = new GroupPageVO();
-                    emptyPage.setList(new ArrayList<>());
-                    emptyPage.setTotal(0L);
-                    emptyPage.setPage(query.getPage());
-                    emptyPage.setSize(query.getSize());
-                    return ResponseVO.success("查询成功", emptyPage);
-                }
-                log.debug("打分用户查询有权限的小组: userId={}, projectCount={}",
-                        currentUserId, allowedProjectIds.size());
-            } else {
-                // 普通用户：无权查询
+            // 2. 权限校验：小组信息管理面板
+            String role = currentUser.getRole();
+            boolean isAdmin = "super_admin".equals(role) || "admin".equals(role);
+            
+            if (!isAdmin && !"scorer".equals(role)) {
+                // 普通用户：无权查询小组列表
                 return ResponseVO.forbidden("无权查询小组列表");
             }
+
+            log.debug("用户查询小组信息: userId={}, role={}", currentUserId, role);
 
             // 3. 处理分页参数
             int pageNum = query.getPage() != null ? query.getPage() : 1;
             int pageSize = query.getSize() != null ? query.getSize() : 10;
-            int page = pageNum;
-            int size = pageSize;
-            int offset = (page - 1) * size;
+            int offset = (pageNum - 1) * pageSize;
 
-            // 4. 查询小组列表（带小组信息）
-            List<Map<String, Object>> groupMaps = groupMapper.selectPageWithProject(
+            // 4. 查询所有小组信息（从project_group_info表，不限制项目）
+            List<ProjectGroupInfo> groupInfoList = groupInfoMapper.selectPageWithSearch(
                     offset,
-                    size,
-                    query.getKeyWords(),
-                    allowedProjectIds
+                    pageSize,
+                    query.getKeyWords()
             );
 
-            Long total = groupMapper.countTotalWithProject(
-                    query.getKeyWords(),
-                    allowedProjectIds
-            );
+            Long total = groupInfoMapper.countWithSearch(query.getKeyWords());
 
             // 5. 转换为VO
             List<GroupPageVO.GroupVO> groupVOs = new ArrayList<>();
-            for (Map<String, Object> groupMap : groupMaps) {
+            for (ProjectGroupInfo groupInfo : groupInfoList) {
                 GroupPageVO.GroupVO vo = new GroupPageVO.GroupVO();
-                vo.setId(((Number) groupMap.get("groupInfoId")).longValue());
-                vo.setName((String) groupMap.get("name"));
-                vo.setDescription((String) groupMap.get("description"));
-                vo.setProjectId(((Number) groupMap.get("projectId")).longValue());
-                
-                // 处理isEnabled字段：可能是Boolean或Integer
-                Object isEnabledValue = groupMap.get("isEnabled");
-                Integer isEnabledInt = null;
-                if (isEnabledValue instanceof Boolean) {
-                    isEnabledInt = (Boolean) isEnabledValue ? 1 : 0;
-                } else if (isEnabledValue instanceof Number) {
-                    isEnabledInt = ((Number) isEnabledValue).intValue();
-                }
-                vo.setIsEnabled(isEnabledInt);
-                
-                vo.setCreateTime((LocalDateTime) groupMap.get("createTime"));
-                vo.setUpdateTime((LocalDateTime) groupMap.get("updateTime"));
+                vo.setId(groupInfo.getId());
+                vo.setName(groupInfo.getName());
+                vo.setDescription(groupInfo.getDescription());
+                vo.setIsEnabled(groupInfo.getIsEnabled());
+                vo.setCreateTime(groupInfo.getCreateTime());
+                vo.setUpdateTime(groupInfo.getUpdateTime());
+                // 注：不再包含projectId，因为这是全局的小组信息面板
                 groupVOs.add(vo);
             }
 
@@ -285,11 +417,11 @@ public class GroupServiceImpl implements IGroupService {
             GroupPageVO pageVO = new GroupPageVO();
             pageVO.setList(groupVOs);
             pageVO.setTotal(total);
-            pageVO.setPage(page);
-            pageVO.setSize(size);
+            pageVO.setPage(pageNum);
+            pageVO.setSize(pageSize);
 
             log.info("查询小组列表成功: userId={}, total={}, page={}, size={}",
-                    currentUserId, total, page, size);
+                    currentUserId, total, pageNum, pageSize);
 
             return ResponseVO.success("查询成功", pageVO);
 

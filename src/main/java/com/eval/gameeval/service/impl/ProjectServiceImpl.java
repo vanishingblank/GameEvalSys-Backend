@@ -88,9 +88,25 @@ public class ProjectServiceImpl implements IProjectService {
             Project project = new Project();
             project.setName(request.getName());
             project.setDescription(request.getDescription() != null ? request.getDescription() : "");
-            project.setStartDate(request.getStartDate().atStartOfDay());
-            project.setEndDate(request.getEndDate().atStartOfDay());
-            project.setStatus("not_started");
+
+            LocalDateTime startDateTime = request.getStartDate().atStartOfDay();
+            LocalDateTime endDateTime = request.getEndDate().atStartOfDay();
+            log.info("项目开始时间"+startDateTime+"end"+endDateTime);
+            project.setStartDate(startDateTime);
+            project.setEndDate(endDateTime);
+
+// 根据当前时间与项目时间范围的关系设置状态
+            LocalDateTime now = LocalDateTime.now();
+            String status;
+            if (now.isBefore(startDateTime)) {
+                status = "not_started";      // 未开始
+            } else if (now.isAfter(endDateTime)) {
+                status = "ended";            // 已结束
+            } else {
+                status = "ongoing";      // 进行中
+            }
+            project.setStatus(status);
+            log.info("项目状态 "+status);
             project.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : true);
             project.setStandardId(request.getStandardId());
             project.setCreatorId(currentUserId);
@@ -201,7 +217,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectMapper.updateById(updateProject);
 
             // 5. 更新关联数据（先删除再插入）
-            if (request.getGroupIds() != null || !request.getGroupIds().isEmpty()) {
+            if (request.getGroupIds() != null ) {
                 groupMapper.deleteByProjectId(projectId);
                 List<ProjectGroup> groups = new ArrayList<>();
                 for (Long groupInfoId : request.getGroupIds()) {
@@ -223,7 +239,7 @@ public class ProjectServiceImpl implements IProjectService {
                 }
             }
 
-            if (request.getScorerIds() != null || !request.getScorerIds().isEmpty()) {
+            if (request.getScorerIds() != null ) {
                 scorerMapper.deleteByProjectId(projectId);
                 List<ProjectScorer> scorers = new ArrayList<>();
                 for (Long scorerId : request.getScorerIds()) {
@@ -533,9 +549,25 @@ public class ProjectServiceImpl implements IProjectService {
             Project project = new Project();
             project.setName(request.getName());
             project.setDescription(request.getDescription() != null ? request.getDescription() : "");
-            project.setStartDate(request.getStartDate().atStartOfDay());
-            project.setEndDate(request.getEndDate().atStartOfDay());
-            project.setStatus("not_started");
+
+            LocalDateTime startDateTime = request.getStartDate().atStartOfDay();
+            LocalDateTime endDateTime = request.getEndDate().atStartOfDay();
+            log.info("项目开始时间"+startDateTime+"end"+endDateTime);
+            project.setStartDate(startDateTime);
+            project.setEndDate(endDateTime);
+
+            // 根据当前时间与项目时间范围的关系设置状态
+            LocalDateTime now = LocalDateTime.now();
+            String status;
+            if (now.isBefore(startDateTime)) {
+                status = "not_started";      // 未开始
+            } else if (now.isAfter(endDateTime)) {
+                status = "ended";            // 已结束
+            } else {
+                status = "ongoing";      // 进行中
+            }
+            project.setStatus(status);
+            log.info("项目状态 "+status);
             project.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : true);
             project.setStandardId(request.getStandardId());
             project.setCreatorId(currentUserId);

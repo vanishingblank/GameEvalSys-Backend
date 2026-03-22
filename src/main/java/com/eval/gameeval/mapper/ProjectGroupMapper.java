@@ -30,8 +30,22 @@ public interface ProjectGroupMapper {
      * 根据小组ID查询所有关联的项目
      */
     @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, create_time AS createTime, update_time AS updateTime " +
+            "FROM project_group WHERE group_info_id = #{groupId}")
+    List<ProjectGroup> selectByGroupId(@Param("groupId") Long groupId);
+
+    /**
+     * 根据小组ID查询所有关联的项目（别名方法）
+     */
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, create_time AS createTime, update_time AS updateTime " +
             "FROM project_group WHERE group_info_id = #{groupInfoId}")
     List<ProjectGroup> selectByGroupInfoId(@Param("groupInfoId") Long groupInfoId);
+
+    /**
+     * 查询指定小组和项目的关联关系
+     */
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, create_time AS createTime, update_time AS updateTime " +
+            "FROM project_group WHERE group_info_id = #{groupId} AND project_id = #{projectId}")
+    ProjectGroup selectByGroupIdAndProjectId(@Param("groupId") Long groupId, @Param("projectId") Long projectId);
 
     /**
      * 查询项目中的小组列表（关联小组信息表），支持搜索和权限过滤

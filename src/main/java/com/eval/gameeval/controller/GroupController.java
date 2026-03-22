@@ -1,8 +1,10 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
+import com.eval.gameeval.models.DTO.GroupAddToProjectDTO;
 import com.eval.gameeval.models.DTO.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.GroupQueryDTO;
+import com.eval.gameeval.models.DTO.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -26,7 +28,7 @@ public class GroupController {
     private IGroupService groupService;
 
     /**
-     * 创建小组
+     * 创建小组（仅包含基本信息，不关联项目）
      */
     @PostMapping
     @LogRecord(value = "创建小组", module = "Group")
@@ -38,6 +40,41 @@ public class GroupController {
         ResponseVO<GroupVO> response = groupService.createGroup(token, request);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * 将小组加入项目
+     */
+    @PostMapping("/{groupId}/add-to-project")
+    @LogRecord(value = "将小组加入项目", module = "Group")
+    public ResponseEntity<ResponseVO<GroupVO>> addGroupToProject(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody GroupAddToProjectDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<GroupVO> response = groupService.addGroupToProject(token, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 编辑小组信息
+     */
+    @PutMapping("/{groupId}")
+    @LogRecord(value = "编辑小组", module = "Group")
+    public ResponseEntity<ResponseVO<GroupVO>> updateGroup(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GroupUpdateDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        // 确保groupId一致
+        request.setId(groupId);
+        ResponseVO<GroupVO> response = groupService.updateGroup(token, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 查询所有小组（分页）
+     */
     @GetMapping
     public ResponseEntity<ResponseVO<GroupPageVO>> getAllGroups(
             @RequestHeader("Authorization") String authorization,
@@ -47,6 +84,4 @@ public class GroupController {
         ResponseVO<GroupPageVO> response = groupService.getAllGroups(token, query);
         return ResponseEntity.ok(response);
     }
-
-
 }
