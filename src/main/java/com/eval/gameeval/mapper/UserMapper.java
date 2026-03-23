@@ -91,7 +91,15 @@ public interface UserMapper extends BaseMapper<User> {
             "  GROUP_CONCAT(rgm.group_id) AS reviewerGroupIds " +
             "FROM sys_user u " +
             "LEFT JOIN reviewer_group_member rgm ON u.id = rgm.user_id " +
-            "WHERE u.is_enabled = 1 " +
+            "WHERE 1 = 1 " +
+            "<choose>" +
+            "  <when test='isEnabled != null'>" +
+            "    AND u.is_enabled = #{isEnabled} " +
+            "  </when>" +
+            "  <otherwise>" +
+            "    AND u.is_enabled = 1 " +
+            "  </otherwise>" +
+            "</choose>" +
             "<if test='role != null and role != \"\"'>" +
             "  AND u.role = #{role} " +
             "</if>" +
@@ -107,7 +115,8 @@ public interface UserMapper extends BaseMapper<User> {
                                                      @Param("offset") int offset,
                                                      @Param("limit") int limit,
                                                      @Param("role") String role,
-                                                     @Param("keyWords") String keyWords
+                                                     @Param("keyWords") String keyWords,
+                                                     @Param("isEnabled") Boolean isEnabled
             );
 
     /**
@@ -115,7 +124,15 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Select("<script>" +
             "SELECT COUNT(*) FROM sys_user " +
-            "WHERE is_enabled = 1 " +
+            "WHERE 1 = 1 " +
+            "<choose>" +
+            "  <when test='isEnabled != null'>" +
+            "    AND is_enabled = #{isEnabled} " +
+            "  </when>" +
+            "  <otherwise>" +
+            "    AND is_enabled = 1 " +
+            "  </otherwise>" +
+            "</choose>" +
             "<if test='role != null and role != \"\"'>" +
             "  AND role = #{role} " +
             "</if>" +
@@ -126,7 +143,8 @@ public interface UserMapper extends BaseMapper<User> {
             "</script>")
     Long countTotal(
             @Param("role") String role,
-            @Param("keyWords") String keyWords
+            @Param("keyWords") String keyWords,
+            @Param("isEnabled") Boolean isEnabled
     );
 
     @Select("SELECT " +

@@ -34,4 +34,9 @@ public class UserQueryDTO implements Serializable {
      * 关键词
      */
     private String keyWords;
+
+    /**
+     * 是否启用
+     */
+    private Boolean isEnabled;
 }

@@ -369,11 +369,16 @@ public class UserServiceImpl implements IUserService {
                     offset,
                     size,
                     query.getRole(),
-                    query.getKeyWords()
+                    query.getKeyWords(),
+                    query.getIsEnabled()
             );
 
             // 5. 查询总记录数
-            Long total = userMapper.countTotal(query.getRole(), query.getKeyWords());
+            Long total = userMapper.countTotal(
+                    query.getRole(),
+                    query.getKeyWords(),
+                    query.getIsEnabled()
+            );
 
             // 6. 转换为VO列表
             List<UserPageVO.UserVO> userVOs = new ArrayList<>();
@@ -410,8 +415,8 @@ public class UserServiceImpl implements IUserService {
             pageVO.setPage(page);
             pageVO.setSize(size);
 
-            log.info("查询用户列表成功: operator={}, page={}, size={}, role={}",
-                    currentUserId, page, size, query.getRole());
+            log.info("查询用户列表成功: operator={}, page={}, size={}, role={}, isEnabled={}",
+                    currentUserId, page, size, query.getRole(), query.getIsEnabled());
 
             return ResponseVO.success("查询成功", pageVO);
 
