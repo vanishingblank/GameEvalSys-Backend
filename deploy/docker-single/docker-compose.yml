@@ -1,0 +1,109 @@
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: gameeval-mariadb
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ../shared/mariadb/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - gameeval-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: gameeval-redis
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["sh", "-c", "redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
+      - ../shared/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - gameeval-net
+
+  redis-init:
+    image: redis:7.2-alpine
+    container_name: gameeval-redis-init
+    restart: "no"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      APP_REDIS_USER: ${APP_REDIS_USER}
+      APP_REDIS_USER_PASSWORD: ${APP_REDIS_USER_PASSWORD}
+    volumes:
+      - ../shared/redis/redis-init.sh:/bootstrap/redis-init.sh:ro
+    command: ["sh", "/bootstrap/redis-init.sh"]
+    networks:
+      - gameeval-net
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker-single/backend/Dockerfile
+    image: gameeval-backend:latest
+    container_name: gameeval-backend
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-init:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ}
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_CONFIG_ADDITIONAL_LOCATION: /app/config/
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE: ${REDIS_DATABASE}
+      APP_ADMIN_INIT_ENABLED: ${APP_ADMIN_INIT_ENABLED}
+      APP_ADMIN_INIT_USERNAME: ${APP_ADMIN_INIT_USERNAME}
+      APP_ADMIN_INIT_PASSWORD: ${APP_ADMIN_INIT_PASSWORD}
+      APP_ADMIN_INIT_PASSWORD_HASH: ${APP_ADMIN_INIT_PASSWORD_HASH}
+      APP_ADMIN_INIT_NAME: ${APP_ADMIN_INIT_NAME}
+      APP_ADMIN_INIT_ROLE: ${APP_ADMIN_INIT_ROLE}
+      APP_ADMIN_INIT_IS_ENABLED: ${APP_ADMIN_INIT_IS_ENABLED}
+    volumes:
+      - ./backend/application-docker.yml:/app/config/application-docker.yml:ro
+    ports:
+      - "${BACKEND_PORT}:8080"
+    networks:
+      - gameeval-net
+
+volumes:
+  mariadb_data:
+  redis_data:
+
+networks:
+  gameeval-net:
+    driver: bridge
