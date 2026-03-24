@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ../../..
+      dockerfile: deploy/lxc-multi-ct/ct-backend/backend/Dockerfile
+    image: gameeval-backend:latest
+    container_name: gameeval-backend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      SPRING_PROFILES_ACTIVE: lxc
+      SPRING_CONFIG_ADDITIONAL_LOCATION: /app/config/
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE: ${REDIS_DATABASE}
+      APP_ADMIN_INIT_ENABLED: ${APP_ADMIN_INIT_ENABLED}
+      APP_ADMIN_INIT_USERNAME: ${APP_ADMIN_INIT_USERNAME}
+      APP_ADMIN_INIT_PASSWORD: ${APP_ADMIN_INIT_PASSWORD}
+      APP_ADMIN_INIT_PASSWORD_HASH: ${APP_ADMIN_INIT_PASSWORD_HASH}
+      APP_ADMIN_INIT_NAME: ${APP_ADMIN_INIT_NAME}
+      APP_ADMIN_INIT_ROLE: ${APP_ADMIN_INIT_ROLE}
+      APP_ADMIN_INIT_IS_ENABLED: ${APP_ADMIN_INIT_IS_ENABLED}
+    volumes:
+      - ./application-lxc.yml:/app/config/application-lxc.yml:ro
+    ports:
+      - "${BACKEND_PORT}:8080"
