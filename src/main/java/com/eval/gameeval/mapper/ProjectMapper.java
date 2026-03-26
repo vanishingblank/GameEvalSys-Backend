@@ -59,6 +59,24 @@ public interface ProjectMapper {
             "ORDER BY create_time DESC")
     List<Project> selectByScorerId(@Param("userId") Long userId);
 
+    @Select("SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
+            "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
+            "create_time AS createTime, update_time AS updateTime " +
+            "FROM project " +
+            "WHERE id IN (" +
+            "  SELECT DISTINCT project_id FROM project_scorer WHERE user_id = #{userId}" +
+            ") " +
+            "ORDER BY create_time DESC " +
+            "LIMIT #{offset}, #{limit}")
+    List<Project> selectPageByScorerId(
+            @Param("userId") Long userId,
+            @Param("offset") int offset,
+            @Param("limit") int limit
+    );
+
+    @Select("SELECT COUNT(DISTINCT project_id) FROM project_scorer WHERE user_id = #{userId}")
+    Long countByScorerId(@Param("userId") Long userId);
+
     // ========== 插入 ==========
     @Insert("INSERT INTO project(name, description, start_date, end_date, status, is_enabled, " +
             "standard_id, creator_id, create_time, update_time) " +

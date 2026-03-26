@@ -100,11 +100,12 @@ public class ProjectController {
      * 获取当前用户授权的项目列表
      */
     @GetMapping("/authorized")
-    public ResponseEntity<ResponseVO<List<ProjectVO>>> getAuthorizedProjects(
-            @RequestHeader("Authorization") String authorization) {
+    public ResponseEntity<ResponseVO<ProjectPageVO>> getAuthorizedProjects(
+            @RequestHeader("Authorization") String authorization,
+            ProjectQueryDTO query) {
 
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<ProjectVO>> response = projectService.getAuthorizedProjects(token);
+        ResponseVO<ProjectPageVO> response = projectService.getAuthorizedProjects(token, query);
         return ResponseEntity.ok(response);
     }
 

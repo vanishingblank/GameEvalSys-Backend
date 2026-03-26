@@ -453,7 +453,7 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     @Override
-    public ResponseVO<List<ProjectVO>> getAuthorizedProjects(String token) {
+    public ResponseVO<ProjectPageVO> getAuthorizedProjects(String token, ProjectQueryDTO query) {
         Long currentUserId = null;
         try {
             // 1. 验证Token
@@ -461,21 +461,30 @@ public class ProjectServiceImpl implements IProjectService {
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
-            // 2. 按用户ID构建缓存键
-            String cacheKey = RedisKeyUtil.buildAuthorizedProjectsKey(currentUserId);
+
+            ProjectQueryDTO safeQuery = query != null ? query : new ProjectQueryDTO();
+            int page = safeQuery.getPage() != null ? safeQuery.getPage() : 1;
+            int size = safeQuery.getSize() != null ? safeQuery.getSize() : 10;
+            page = Math.max(page, 1);
+            size = Math.max(size, 1);
+            int offset = (page - 1) * size;
+
+            // 2. 按用户ID + 分页参数构建缓存键
+            String cacheKey = RedisKeyUtil.buildAuthorizedProjectsKey(currentUserId, page, size);
 
             // 3. 尝试从缓存获取
-            Object cache = projectCacheUtil.getAuthorizedProjectsCache(currentUserId);
+            Object cache = projectCacheUtil.getAuthorizedProjectsCache(cacheKey);
             if (cache != null) {
-                @SuppressWarnings("unchecked")
-                List<ProjectVO> cachedList = (List<ProjectVO>) cache;
-                log.info("【缓存命中】获取授权项目: userId={}, count={}", currentUserId, cachedList.size());
-                return ResponseVO.success("查询成功", cachedList);
+                ProjectPageVO cachedPage = (ProjectPageVO) cache;
+                log.info("【缓存命中】获取授权项目: userId={}, page={}, size={}, total={}",
+                        currentUserId, page, size, cachedPage.getTotal());
+                return ResponseVO.success("查询成功", cachedPage);
             }
 
             // 4. 缓存未命中：查询数据库
-            log.info("【缓存未命中】查询数据库: userId={}", currentUserId);
-            List<Project> projects = projectMapper.selectByScorerId(currentUserId);
+            log.info("【缓存未命中】查询数据库: userId={}, page={}, size={}", currentUserId, page, size);
+            List<Project> projects = projectMapper.selectPageByScorerId(currentUserId, offset, size);
+            Long total = projectMapper.countByScorerId(currentUserId);
 
             // 5. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
@@ -496,10 +505,17 @@ public class ProjectServiceImpl implements IProjectService {
                 projectVOs.add(vo);
             }
 
-            projectCacheUtil.cacheAuthorizedProjects(currentUserId, projectVOs);
-            log.info("查询授权项目列表成功: userId={}, count={}", currentUserId, projectVOs.size());
+            ProjectPageVO pageVO = new ProjectPageVO();
+            pageVO.setList(projectVOs);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
 
-            return ResponseVO.success("查询成功", projectVOs);
+            projectCacheUtil.cacheAuthorizedProjects(cacheKey, pageVO);
+            log.info("查询授权项目列表成功: userId={}, page={}, size={}, count={}, total={}",
+                    currentUserId, page, size, projectVOs.size(), total);
+
+            return ResponseVO.success("查询成功", pageVO);
 
         } catch (Exception e) {
             log.error("查询授权项目列表异常: userId={}", currentUserId, e);
