@@ -83,6 +83,22 @@ public final class RedisKeyUtil {
     }
 
     /**
+     * 构建用户授权项目分页缓存键
+     * 格式: project:authorized:{userId}:{page}:{size}
+     */
+    public static String buildAuthorizedProjectsKey(Long userId, int page, int size) {
+        return PROJECT_AUTHORIZED_KEY_PREFIX + userId + ":" + page + ":" + size;
+    }
+
+    /**
+     * 构建用户授权项目分页缓存前缀
+     * 格式: project:authorized:{userId}:
+     */
+    public static String buildAuthorizedProjectsPrefix(Long userId) {
+        return PROJECT_AUTHORIZED_KEY_PREFIX + userId + ":";
+    }
+
+    /**
      * 构建项目小组列表缓存键
      */
     public static String buildProjectGroupsKey(Long projectId) {

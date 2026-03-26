@@ -9,8 +9,6 @@ import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 
-import java.util.List;
-
 public interface IProjectService {
     ResponseVO<ProjectCreateVO> createProject(String token, ProjectCreateDTO request);
 
@@ -22,7 +20,7 @@ public interface IProjectService {
 
     ResponseVO<ProjectVO> getProjectDetail(String token, Long projectId);
 
-    ResponseVO<List<ProjectVO>> getAuthorizedProjects(String token);
+    ResponseVO<ProjectPageVO> getAuthorizedProjects(String token, ProjectQueryDTO query);
 
     /**
      * 通过评审组创建项目

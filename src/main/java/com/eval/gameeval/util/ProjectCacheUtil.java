@@ -93,19 +93,41 @@ public class ProjectCacheUtil {
     }
 
     // ========== 授权项目缓存 ==========
-    public void cacheAuthorizedProjects(Long userId, Object value) {
-        String key = RedisKeyUtil.buildAuthorizedProjectsKey(userId);
+    public void cacheAuthorizedProjects(String key, Object value) {
         redisBaseUtil.set(key, value, RedisKeyUtil.PROJECT_AUTHORIZED_TTL);
     }
 
-    public Object getAuthorizedProjectsCache(Long userId) {
-        String key = RedisKeyUtil.buildAuthorizedProjectsKey(userId);
+    public Object getAuthorizedProjectsCache(String key) {
         return redisBaseUtil.get(key);
     }
 
     public void clearAuthorizedProjectsCache(Long userId) {
-        String key = RedisKeyUtil.buildAuthorizedProjectsKey(userId);
-        redisBaseUtil.delete(key);
+        try {
+            String oldKey = RedisKeyUtil.buildAuthorizedProjectsKey(userId);
+            redisBaseUtil.delete(oldKey);
+
+            Cursor<String> cursor = redisTemplate.scan(
+                    ScanOptions.scanOptions()
+                            .match("*" + RedisKeyUtil.buildAuthorizedProjectsPrefix(userId) + "*")
+                            .count(100)
+                            .build()
+            );
+
+            List<String> keysToDelete = new ArrayList<>();
+            while (cursor.hasNext()) {
+                keysToDelete.add(cursor.next());
+            }
+            cursor.close();
+
+            if (!keysToDelete.isEmpty()) {
+                Long deletedCount = redisTemplate.delete(keysToDelete);
+                log.info("【缓存清除】清除授权项目分页缓存成功: userId={}, count={}", userId, deletedCount);
+            } else {
+                log.debug("【缓存清除】无授权项目分页缓存需要清除: userId={}", userId);
+            }
+        } catch (Exception e) {
+            log.error("【缓存清除】清除授权项目缓存异常: userId={}", userId, e);
+        }
     }
 
     // ========== 项目小组缓存 ==========
