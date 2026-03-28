@@ -23,11 +23,13 @@ public final class RedisKeyUtil {
     public static final String PROJECT_DETAIL_KEY_PREFIX = "project:detail:";
     public static final String PROJECT_AUTHORIZED_KEY_PREFIX = "project:authorized:";
     public static final String PROJECT_GROUPS_KEY_PREFIX = "project:groups:";
+    public static final String SCORING_RECORD_PAGE_KEY_PREFIX = "scoring:record:page:";
 
     public static final long PROJECT_LIST_TTL = 300;      // 5分钟（分页数据变化频繁）
     public static final long PROJECT_DETAIL_TTL = 3600;   // 60分钟
     public static final long PROJECT_AUTHORIZED_TTL = 600; // 10分钟（用户权限可能变化）
     public static final long PROJECT_GROUPS_TTL = 1800;   // 30分钟
+    public static final long SCORING_RECORD_PAGE_TTL = 300; // 5分钟
 
     // ========== 私有构造函数（工具类不可实例化）==========
     private RedisKeyUtil() {
@@ -103,5 +105,21 @@ public final class RedisKeyUtil {
      */
     public static String buildProjectGroupsKey(Long projectId) {
         return PROJECT_GROUPS_KEY_PREFIX + projectId;
+    }
+
+    /**
+     * 构建用户项目打分页缓存键
+     * 格式: scoring:record:page:{projectId}:{userId}:{page}:{size}
+     */
+    public static String buildScoringRecordPageKey(Long projectId, Long userId, int page, int size) {
+        return SCORING_RECORD_PAGE_KEY_PREFIX + projectId + ":" + userId + ":" + page + ":" + size;
+    }
+
+    /**
+     * 构建用户项目打分页缓存前缀
+     * 格式: scoring:record:page:{projectId}:{userId}:
+     */
+    public static String buildScoringRecordPagePrefix(Long projectId, Long userId) {
+        return SCORING_RECORD_PAGE_KEY_PREFIX + projectId + ":" + userId + ":";
     }
 }

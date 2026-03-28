@@ -27,6 +27,17 @@ public interface ScoringRecordDetailMapper {
             "FROM scoring_record_detail WHERE record_id = #{recordId} ORDER BY indicator_id ASC")
     List<ScoringRecordDetail> selectByRecordId(@Param("recordId") Long recordId);
 
+    @Select("<script>" +
+            "SELECT id, record_id AS recordId, indicator_id AS indicatorId, score " +
+            "FROM scoring_record_detail " +
+            "WHERE record_id IN " +
+            "<foreach collection='recordIds' item='recordId' open='(' separator=',' close=')'>" +
+            "  #{recordId}" +
+            "</foreach>" +
+            "ORDER BY record_id ASC, indicator_id ASC" +
+            "</script>")
+    List<ScoringRecordDetail> selectByRecordIds(@Param("recordIds") List<Long> recordIds);
+
     // ========== 插入 ==========
     /**
      * 插入单个明细

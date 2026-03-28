@@ -2,12 +2,16 @@ package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.*;
 import com.eval.gameeval.models.DTO.ScoringRecordCreateDTO;
+import com.eval.gameeval.models.DTO.ScoringRecordPageQueryDTO;
 import com.eval.gameeval.models.DTO.ScoringRecordQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringRecordPageVO;
 import com.eval.gameeval.models.VO.ScoringRecordVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IScoringRecordService;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.ScoringRecordCacheUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -50,6 +56,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
     @Autowired
     private RedisToken redisToken;
+
+    @Autowired
+    private ScoringRecordCacheUtil scoringRecordCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -195,6 +204,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             log.info("{}打分成功: recordId={}, projectId={}, groupId={}, userId={}",
                     action, record.getId(), request.getProjectId(), request.getGroupId(), currentUserId);
 
+            scoringRecordCacheUtil.clearUserProjectRecordsCache(request.getProjectId(), currentUserId);
             return ResponseVO.success(action + "成功", responseVO);
 
         } catch (Exception e) {
@@ -247,5 +257,93 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             log.error("查询打分记录异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public ResponseVO<ScoringRecordPageVO> getUserProjectRecords(String token, Long projectId, ScoringRecordPageQueryDTO query) {
+        try {
+            // 1. 验证Token
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            // 2. 校验项目
+            Project project = projectMapper.selectById(projectId);
+            if (project == null) {
+                return ResponseVO.notFound("项目不存在");
+            }
+
+            // 3. 校验当前用户是否为该项目打分用户
+            boolean isScorer = scorerMapper.selectByProjectId(projectId).stream()
+                    .anyMatch(scorer -> scorer.getUserId().equals(currentUserId));
+            if (!isScorer) {
+                return ResponseVO.forbidden("您没有权限查看该项目打分记录");
+            }
+
+            // 4. 分页参数
+            int page = query != null && query.getPage() != null ? query.getPage() : 1;
+            int size = query != null && query.getSize() != null ? query.getSize() : 10;
+            page = Math.max(page, 1);
+            size = Math.max(size, 1);
+            int offset = (page - 1) * size;
+
+            // 5. 读取缓存
+            String cacheKey = RedisKeyUtil.buildScoringRecordPageKey(projectId, currentUserId, page, size);
+            Object cache = scoringRecordCacheUtil.getUserProjectRecordsCache(cacheKey);
+            if (cache != null) {
+                ScoringRecordPageVO cachedPage = (ScoringRecordPageVO) cache;
+                log.info("【缓存命中】获取用户项目打分页记录: projectId={}, userId={}, page={}, size={}, total={}",
+                        projectId, currentUserId, page, size, cachedPage.getTotal());
+                return ResponseVO.success("获取成功", cachedPage);
+            }
+
+            // 6. 查询记录与总数
+            List<ScoringRecord> records = recordMapper.selectPageByProjectAndUser(projectId, currentUserId, offset, size);
+            Long total = recordMapper.countByProjectAndUser(projectId, currentUserId);
+
+            // 7. 批量查询明细并构建VO
+            List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
+            List<ScoringRecordDetail> allDetails = recordIds.isEmpty()
+                    ? Collections.emptyList()
+                    : detailMapper.selectByRecordIds(recordIds);
+
+            Map<Long, List<ScoringRecordDetail>> detailMap = allDetails.stream()
+                    .collect(Collectors.groupingBy(ScoringRecordDetail::getRecordId));
+
+            List<ScoringRecordVO> recordVOList = records.stream()
+                    .map(record -> buildScoringRecordVO(record, detailMap.getOrDefault(record.getId(), Collections.emptyList())))
+                    .collect(Collectors.toList());
+
+            ScoringRecordPageVO pageVO = new ScoringRecordPageVO();
+            pageVO.setList(recordVOList);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
+
+            // 8. 写入缓存
+            scoringRecordCacheUtil.cacheUserProjectRecords(cacheKey, pageVO);
+
+            log.info("获取用户项目打分页记录成功: projectId={}, userId={}, page={}, size={}, count={}, total={}",
+                    projectId, currentUserId, page, size, recordVOList.size(), total);
+            return ResponseVO.success("获取成功", pageVO);
+        } catch (Exception e) {
+            log.error("获取用户项目打分页记录异常: projectId={}", projectId, e);
+            return ResponseVO.error("获取失败: " + e.getMessage());
+        }
+    }
+
+    private ScoringRecordVO buildScoringRecordVO(ScoringRecord record, List<ScoringRecordDetail> details) {
+        ScoringRecordVO responseVO = new ScoringRecordVO();
+        BeanUtils.copyProperties(record, responseVO);
+        responseVO.setScores(details.stream()
+                .map(detail -> {
+                    ScoringRecordVO.ScoreVO scoreVO = new ScoringRecordVO.ScoreVO();
+                    scoreVO.setIndicatorId(detail.getIndicatorId());
+                    scoreVO.setScore(detail.getScore());
+                    return scoreVO;
+                })
+                .collect(Collectors.toList()));
+        return responseVO;
     }
 }

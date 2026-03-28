@@ -23,7 +23,7 @@ public class ScoringRecordCreateDTO implements Serializable {
     @NotNull(message = "项目ID不能为空")
     private Long projectId;
 
-    @NotNull(message = "小组ID不能为空")
+    @NotNull(message = "小组信息ID不能为空")
     private Long groupId;
 
     @Valid
