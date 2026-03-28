@@ -11,26 +11,42 @@ import java.util.Map;
 public interface ScoringRecordMapper {
 
     // ========== 查询 ==========
-    @Select("SELECT id, project_id AS projectId, group_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE id = #{id}")
     ScoringRecord selectById(@Param("id") Long id);
 
-    @Select("SELECT id, project_id AS projectId, group_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE project_id = #{projectId} ORDER BY create_time DESC")
     List<ScoringRecord> selectByProjectId(@Param("projectId") Long projectId);
 
-    @Select("SELECT id, project_id AS projectId, group_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record " +
-            "WHERE project_id = #{projectId} AND group_id = #{groupId} AND user_id = #{userId} " +
+            "WHERE project_id = #{projectId} AND group_info_id = #{groupId} AND user_id = #{userId} " +
             "LIMIT 1")
     ScoringRecord selectByUniqueKey(
             @Param("projectId") Long projectId,
             @Param("groupId") Long groupId,
             @Param("userId") Long userId
     );
+
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
+            "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
+            "FROM scoring_record " +
+            "WHERE project_id = #{projectId} AND user_id = #{userId} " +
+            "ORDER BY update_time DESC " +
+            "LIMIT #{offset}, #{limit}")
+    List<ScoringRecord> selectPageByProjectAndUser(
+            @Param("projectId") Long projectId,
+            @Param("userId") Long userId,
+            @Param("offset") int offset,
+            @Param("limit") int limit
+    );
+
+    @Select("SELECT COUNT(*) FROM scoring_record WHERE project_id = #{projectId} AND user_id = #{userId}")
+    Long countByProjectAndUser(@Param("projectId") Long projectId, @Param("userId") Long userId);
 
     /**
      * 查询小组平均分
@@ -40,7 +56,7 @@ public interface ScoringRecordMapper {
             "  pgi.name AS groupName, " +
             "  AVG(sr.total_score) AS averageScore " +
             "FROM scoring_record sr " +
-            "JOIN project_group_info pgi ON sr.group_id = pgi.id " +
+            "JOIN project_group_info pgi ON sr.group_info_id = pgi.id " +
             "WHERE sr.project_id = #{projectId} " +
             "GROUP BY pgi.id, pgi.name " +
             "ORDER BY averageScore DESC")
@@ -84,7 +100,7 @@ public interface ScoringRecordMapper {
     List<Map<String, Object>> selectScorerDistribution(@Param("projectId") Long projectId);
 
     // ========== 插入 ==========
-    @Insert("INSERT INTO scoring_record(project_id, group_id, user_id, total_score, create_time, update_time) " +
+    @Insert("INSERT INTO scoring_record(project_id, group_info_id, user_id, total_score, create_time, update_time) " +
             "VALUES(#{projectId}, #{groupId}, #{userId}, #{totalScore}, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScoringRecord record);

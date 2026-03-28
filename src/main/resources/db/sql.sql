@@ -108,17 +108,19 @@ CREATE TABLE `project_scorer` (
 CREATE TABLE `scoring_record` (
                                   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '记录ID',
                                   `project_id` bigint NOT NULL COMMENT '项目ID',
-                                  `group_id` bigint NOT NULL COMMENT '被打分组ID',
+                                  `group_info_id` bigint NOT NULL COMMENT '被打分小组信息ID',
                                   `user_id` bigint NOT NULL COMMENT '打分用户ID',
                                   `total_score` decimal(10,2) NOT NULL COMMENT '总分',
                                   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '打分时间',
                                   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                   PRIMARY KEY (`id`),
-                                  UNIQUE KEY `uk_project_group_user` (`project_id`,`group_id`,`user_id`),
-                                  KEY `idx_group_id` (`group_id`),
+                                  UNIQUE KEY `uk_project_group_user` (`project_id`,`group_info_id`,`user_id`),
+                                  KEY `idx_group_info_id` (`group_info_id`),
+                                  KEY `idx_project_group_info` (`project_id`,`group_info_id`),
                                   KEY `idx_user_id` (`user_id`),
                                   CONSTRAINT `fk_record_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
-                                  CONSTRAINT `fk_record_group` FOREIGN KEY (`group_id`) REFERENCES `project_group` (`id`) ON DELETE CASCADE,
+                                  CONSTRAINT `fk_record_project_group_info` FOREIGN KEY (`project_id`, `group_info_id`)
+                                      REFERENCES `project_group` (`project_id`, `group_info_id`) ON DELETE CASCADE,
                                   CONSTRAINT `fk_record_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分记录主表';
 

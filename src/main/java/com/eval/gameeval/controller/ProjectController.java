@@ -5,9 +5,11 @@ import com.eval.gameeval.models.DTO.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
+import com.eval.gameeval.models.DTO.ScoringRecordPageQueryDTO;
 import com.eval.gameeval.models.VO.*;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.service.IProjectService;
+import com.eval.gameeval.service.IScoringRecordService;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -26,6 +28,9 @@ public class ProjectController {
 
     @Resource
     private IGroupService groupService;
+
+    @Resource
+    private IScoringRecordService scoringRecordService;
 
     /**
      * 创建项目
@@ -116,6 +121,20 @@ public class ProjectController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<List<GroupVO>> response = groupService.getProjectGroups(token, projectId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 获取当前用户在项目内所有小组的打分记录（分页）
+     */
+    @GetMapping("/{projectId}/records")
+    public ResponseEntity<ResponseVO<ScoringRecordPageVO>> getUserProjectRecords(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long projectId,
+            @Valid ScoringRecordPageQueryDTO query) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<ScoringRecordPageVO> response = scoringRecordService.getUserProjectRecords(token, projectId, query);
         return ResponseEntity.ok(response);
     }
 

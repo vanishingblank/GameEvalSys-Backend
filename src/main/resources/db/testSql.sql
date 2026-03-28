@@ -108,17 +108,19 @@ CREATE TABLE `project_scorer` (
 CREATE TABLE `scoring_record` (
                                   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '记录ID',
                                   `project_id` bigint NOT NULL COMMENT '项目ID',
-                                  `group_id` bigint NOT NULL COMMENT '被打分组ID',
+                                  `group_info_id` bigint NOT NULL COMMENT '被打分小组信息ID',
                                   `user_id` bigint NOT NULL COMMENT '打分用户ID',
                                   `total_score` decimal(10,2) NOT NULL COMMENT '总分',
                                   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '打分时间',
                                   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                   PRIMARY KEY (`id`),
-                                  UNIQUE KEY `uk_project_group_user` (`project_id`,`group_id`,`user_id`),
-                                  KEY `idx_group_id` (`group_id`),
+                                  UNIQUE KEY `uk_project_group_user` (`project_id`,`group_info_id`,`user_id`),
+                                  KEY `idx_group_info_id` (`group_info_id`),
+                                  KEY `idx_project_group_info` (`project_id`,`group_info_id`),
                                   KEY `idx_user_id` (`user_id`),
                                   CONSTRAINT `fk_record_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
-                                  CONSTRAINT `fk_record_group` FOREIGN KEY (`group_id`) REFERENCES `project_group` (`id`) ON DELETE CASCADE,
+                                  CONSTRAINT `fk_record_project_group_info` FOREIGN KEY (`project_id`, `group_info_id`)
+                                      REFERENCES `project_group` (`project_id`, `group_info_id`) ON DELETE CASCADE,
                                   CONSTRAINT `fk_record_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分记录主表';
 
@@ -222,27 +224,35 @@ SELECT `project_id`, `id` FROM temp_project_group_backup;
 -- 1. 先删除旧的外键约束
 ALTER TABLE `scoring_record` DROP FOREIGN KEY `fk_record_group`;
 
--- 2. 修改 scoring_record 的 group_id 关联到新的 project_group 表
---    （关键：原 group_id 是旧 project_group 的 ID，现在要关联新 project_group 的 ID）
---    先创建临时映射表：旧小组ID → 新关联表ID
-CREATE TEMPORARY TABLE temp_group_mapping AS
-SELECT
-    t.old_group_id,
-    pg.id AS new_relation_id
-FROM (
-         SELECT id AS old_group_id, project_id FROM temp_project_group_backup
-     ) t
-         JOIN project_group pg ON t.project_id = pg.project_id AND pg.group_info_id = t.old_group_id;
-
--- 3. 更新 scoring_record 的 group_id 为新的关联表ID
+-- 2. 先按旧关系ID修正 project_id，避免历史脏数据导致复合外键失败
 UPDATE scoring_record sr
-    JOIN temp_group_mapping tm ON sr.group_id = tm.old_group_id
-    SET sr.group_id = tm.new_relation_id;
+    JOIN project_group pg ON sr.group_id = pg.id
+SET sr.project_id = pg.project_id;
 
--- 4. 重新添加外键约束（关联到新的 project_group 表）
+-- 3. 将 scoring_record.group_id 更名为 group_info_id
 ALTER TABLE `scoring_record`
-    ADD CONSTRAINT `fk_record_group`
-        FOREIGN KEY (`group_id`) REFERENCES `project_group` (`id`) ON DELETE CASCADE;
+    CHANGE COLUMN `group_id` `group_info_id` bigint NOT NULL COMMENT '被打分小组信息ID';
+
+-- 4. 重建唯一索引与普通索引
+ALTER TABLE `scoring_record` DROP INDEX `uk_project_group_user`;
+ALTER TABLE `scoring_record` DROP INDEX `idx_group_id`;
+ALTER TABLE `scoring_record`
+    ADD UNIQUE KEY `uk_project_group_user` (`project_id`,`group_info_id`,`user_id`),
+    ADD KEY `idx_group_info_id` (`group_info_id`),
+    ADD KEY `idx_project_group_info` (`project_id`,`group_info_id`);
+
+-- 5. 约束前校验，必须为0
+SELECT COUNT(*) AS orphan_pair_count
+FROM scoring_record sr
+         LEFT JOIN project_group pg
+                   ON sr.project_id = pg.project_id
+                       AND sr.group_info_id = pg.group_info_id
+WHERE pg.id IS NULL;
+
+-- 6. 新增复合外键，强约束打分记录必须属于 project_group 关系
+ALTER TABLE `scoring_record`
+    ADD CONSTRAINT `fk_record_project_group_info`
+        FOREIGN KEY (`project_id`, `group_info_id`) REFERENCES `project_group` (`project_id`, `group_info_id`) ON DELETE CASCADE;
 
 -- ==========================================
 -- 第六步：恢复外键检查并清理临时表
@@ -251,7 +261,6 @@ ALTER TABLE `scoring_record`
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- 删除临时表（确认数据无误后执行）
-DROP TEMPORARY TABLE IF EXISTS temp_group_mapping;
 -- 如需保留备份，可删除以下两行
 DROP TABLE IF EXISTS temp_scoring_record_backup;
 DROP TABLE IF EXISTS temp_project_group_backup;
