@@ -93,6 +93,7 @@ services:
       APP_ADMIN_INIT_NAME: ${APP_ADMIN_INIT_NAME}
       APP_ADMIN_INIT_ROLE: ${APP_ADMIN_INIT_ROLE}
       APP_ADMIN_INIT_IS_ENABLED: ${APP_ADMIN_INIT_IS_ENABLED}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS}
     volumes:
       - ./backend/application-docker.yml:/app/config/application-docker.yml:ro
     ports:
