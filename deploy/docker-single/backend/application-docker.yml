@@ -29,3 +29,17 @@ spring:
 
 server:
   port: 8080
+
+app:
+  admin:
+    init:
+      # 首次部署初始化账号：仅在 sys_user 为空时尝试创建
+      enabled: ${APP_ADMIN_INIT_ENABLED:true}
+      username: ${APP_ADMIN_INIT_USERNAME:}
+      # 与 password-hash 二选一；推荐在生产环境使用 password-hash
+      #      password: ${APP_ADMIN_INIT_PASSWORD:}
+      password-hash: ${APP_ADMIN_INIT_PASSWORD_HASH:}
+      name: ${APP_ADMIN_INIT_NAME:System Admin}
+      role: ${APP_ADMIN_INIT_ROLE:super_admin}
+      is-enabled: ${APP_ADMIN_INIT_IS_ENABLED:true}
+
