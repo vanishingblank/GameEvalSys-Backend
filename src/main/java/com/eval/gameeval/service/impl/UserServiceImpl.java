@@ -22,9 +22,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -390,8 +393,8 @@ public class UserServiceImpl implements IUserService {
                 vo.setUsername((String) userMap.get("username"));
                 vo.setName((String) userMap.get("name"));
                 vo.setRole((String) userMap.get("role"));
-                vo.setIsEnabled((Boolean) userMap.get("isEnabled"));
-                vo.setCreateTime((LocalDateTime) userMap.get("createTime"));
+                vo.setIsEnabled(toBoolean(userMap.get("isEnabled")));
+                vo.setCreateTime(toLocalDateTime(userMap.get("createTime")));
 
                 String groupIdsStr = (String) userMap.get("reviewerGroupIds");
                 if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
@@ -475,5 +478,72 @@ public class UserServiceImpl implements IUserService {
                 "admin".equals(role) ||
                 "scorer".equals(role) ||
                 "normal".equals(role);
+    }
+
+    /**
+     * 兼容JDBC返回的时间类型（常见为Timestamp）
+     */
+    private LocalDateTime toLocalDateTime(Object timeValue) {
+        if (timeValue == null) {
+            return null;
+        }
+        if (timeValue instanceof LocalDateTime) {
+            return (LocalDateTime) timeValue;
+        }
+        if (timeValue instanceof Timestamp) {
+            return ((Timestamp) timeValue).toLocalDateTime();
+        }
+        if (timeValue instanceof Date) {
+            return LocalDateTime.ofInstant(((Date) timeValue).toInstant(), ZoneId.systemDefault());
+        }
+        if (timeValue instanceof String) {
+            String text = ((String) timeValue).trim();
+            if (text.isEmpty()) {
+                return null;
+            }
+            try {
+                return LocalDateTime.parse(text);
+            } catch (Exception ignore) {
+                try {
+                    return Timestamp.valueOf(text).toLocalDateTime();
+                } catch (Exception e) {
+                    log.warn("createTime字符串转换失败: {}", text, e);
+                    return null;
+                }
+            }
+        }
+
+        log.warn("不支持的createTime类型: type={}, value={}",
+                timeValue.getClass().getName(), timeValue);
+        return null;
+    }
+
+    /**
+     * 兼容JDBC返回的布尔类型（Boolean/Number/String）
+     */
+    private Boolean toBoolean(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue() != 0;
+        }
+        if (value instanceof String) {
+            String text = ((String) value).trim();
+            if ("1".equals(text)) {
+                return true;
+            }
+            if ("0".equals(text)) {
+                return false;
+            }
+            return Boolean.parseBoolean(text);
+        }
+
+        log.warn("不支持的isEnabled类型: type={}, value={}",
+                value.getClass().getName(), value);
+        return null;
     }
 }
