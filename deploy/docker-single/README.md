@@ -10,12 +10,30 @@
 
 1. 复制env 模板:
    - `cp .env.example .env`
-2. Update secrets in `.env`.
-3. Choose one first-admin password mode:
-   - plaintext: set `APP_ADMIN_INIT_PASSWORD`
-   - bcrypt hash (recommended): set `APP_ADMIN_INIT_PASSWORD_HASH`
-4. Start services:
-   - `docker compose --env-file .env up -d --build`
+2. 设置redis、mariaDb、平台初始管理员密码等参数在： `.env`.
+3. 选择一个平台初始管理员的初始密码加密模式:
+   - 明文方式: 取消 `APP_ADMIN_INIT_PASSWORD` 的注释并且赋值
+   - 哈希加密方式 (推荐): 取消 `APP_ADMIN_INIT_PASSWORD_HASH`的注释并且赋值
+
+***4. 启动服务:***
+   - 在`deploy/docker-single` 路径下运行： 
+   ``` bash
+   docker compose --env-file .env up -d --build
+   ```
+
+## 代码更改后docker镜像操作
+- 修改了src 或 pom.xml
+- 需要：重新 build
+~~~ shell
+docker compose -f deploy/docker-single/docker-compose.yml up -d --build backend
+~~~
+
+## 若只更改spring boot配置文件
+- 不需要 build
+~~~shell
+docker compose -f deploy/docker-single/docker-compose.yml restart backend
+~~~
+
 
 ## Notes
 
