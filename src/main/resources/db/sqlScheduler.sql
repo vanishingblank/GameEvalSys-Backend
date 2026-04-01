@@ -31,3 +31,29 @@ BEGIN
     -- INSERT INTO event_log (event_name, execute_time, affected_rows)
     -- VALUES ('update_project_status', NOW(), ROW_COUNT());
 END;
+
+-- madiaDB
+DELIMITER $$
+
+CREATE EVENT update_project_status
+ON SCHEDULE EVERY 1 DAY
+STARTS DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+ON COMPLETION PRESERVE  
+ENABLE  
+COMMENT '每天定时更新项目状态'
+DO
+BEGIN
+    UPDATE project
+    SET status = CASE
+        WHEN CURDATE() < start_date THEN 'not_started'
+        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
+        WHEN CURDATE() > end_date THEN 'ended'
+    END
+    WHERE status != CASE
+        WHEN CURDATE() < start_date THEN 'not_started'
+        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
+        WHEN CURDATE() > end_date THEN 'ended'
+    END;
+END$$
+
+DELIMITER ;
