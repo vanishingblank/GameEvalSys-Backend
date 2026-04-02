@@ -80,12 +80,17 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             if (project == null) {
                 return ResponseVO.badRequest("项目不存在");
             }
-
             // 3. 验证项目状态（必须是进行中）
             if (!"ongoing".equals(project.getStatus())) {
                 return ResponseVO.badRequest("项目未开始或已结束，无法打分");
             }
-
+            LocalDateTime now = LocalDateTime.now();
+            if (now.isBefore(project.getStartDate())) {
+                return ResponseVO.badRequest("项目尚未开始，无法打分");
+            }
+            if (now.isAfter(project.getEndDate())) {
+                return ResponseVO.badRequest("项目已结束，无法打分");
+            }
             // 4. 验证小组是否存在（project_group_info）
             ProjectGroupInfo groupInfo = groupInfoMapper.selectById(request.getGroupId());
             if (groupInfo == null) {
