@@ -1,4 +1,4 @@
---在 MySQL 中创建一个事件，定期（如每小时或每天）执行 UPDATE 语句，将 status 同步为正确的值。
+--创建一个事件，定期（如每小时或每天）执行 UPDATE 语句，将 status 同步为正确的值。
 
 -- 1.启用事件调度器
 SET GLOBAL event_scheduler = ON;
@@ -6,7 +6,7 @@ SET GLOBAL event_scheduler = ON;
 -- 2.先删除旧的事件（如果存在）
 DROP EVENT IF EXISTS update_project_status;
 
--- 3. 创建新事件
+--  创建新事件（MySql版）
 CREATE EVENT update_project_status
 ON SCHEDULE EVERY 1 DAY
 STARTS CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 01:00:00')  -- 明天凌晨1点开始
@@ -32,7 +32,7 @@ BEGIN
     -- VALUES ('update_project_status', NOW(), ROW_COUNT());
 END;
 
--- madiaDB
+-- madiaDB版
 DELIMITER $$
 
 CREATE EVENT update_project_status
