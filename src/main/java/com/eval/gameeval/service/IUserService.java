@@ -19,6 +19,8 @@ public interface IUserService {
 
     ResponseVO<Void> updateUser(String token, Long userId, @Valid UserUpdateDTO request);
 
+    ResponseVO<Void> updateSelfPassword(String token, @Valid UserPasswordUpdateDTO request);
+
     ResponseVO<Void> deleteUser(String token, Long userId);
 
     /**

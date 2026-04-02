@@ -42,11 +42,17 @@ public interface UserMapper extends BaseMapper<User> {
 
     @Update("UPDATE sys_user " +
             "SET name = #{name}, " +
+            "    password = #{password}, " +
             "    role = #{role}, " +
             "    is_enabled = #{isEnabled}, " +
             "    update_time = #{updateTime} " +
             "WHERE id = #{id}")
     int updateById(User user);
+
+    @Update("UPDATE sys_user SET password = #{password}, update_time = #{updateTime} WHERE id = #{id}")
+    int updatePasswordById(@Param("id") Long id,
+                           @Param("password") String password,
+                           @Param("updateTime") LocalDateTime updateTime);
 
 
     @Update("UPDATE sys_user SET is_enabled = 0, update_time = #{updateTime} WHERE id = #{id}")

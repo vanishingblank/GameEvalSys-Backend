@@ -3,6 +3,7 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserPasswordUpdateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.*;
@@ -51,6 +52,20 @@ public class UserController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<Void> response = userService.updateUser(token, userId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 用户修改自己的密码
+     */
+    @PutMapping("/me/password")
+    @LogRecord(value = "修改密码", module = "User")
+    public ResponseEntity<ResponseVO<Void>> updateSelfPassword(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody UserPasswordUpdateDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<Void> response = userService.updateSelfPassword(token, request);
         return ResponseEntity.ok(response);
     }
 
