@@ -20,4 +20,7 @@ public class UserUpdateDTO implements Serializable {
     private String role;
 
     private Boolean isEnabled;
+
+    @Pattern(regexp = "^.{6,100}$", message = "密码长度必须在6-100之间")
+    private String newPassword;
 }

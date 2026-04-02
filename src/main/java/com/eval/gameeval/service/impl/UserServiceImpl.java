@@ -6,6 +6,7 @@ import com.eval.gameeval.mapper.ReviewerGroupMemberMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
+import com.eval.gameeval.models.DTO.UserPasswordUpdateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
 import com.eval.gameeval.models.DTO.UserUpdateDTO;
 import com.eval.gameeval.models.VO.*;
@@ -265,6 +266,13 @@ public class UserServiceImpl implements IUserService {
                 updateUser.setIsEnabled(targetUser.getIsEnabled());
             }
 
+            // 密码：管理员可设置新密码，否则保留原值
+            if (request.getNewPassword() != null && !request.getNewPassword().trim().isEmpty()) {
+                updateUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
+            } else {
+                updateUser.setPassword(targetUser.getPassword());
+            }
+
             // 6. 执行更新
             int rows = userMapper.updateById(updateUser);
 
@@ -283,6 +291,44 @@ public class UserServiceImpl implements IUserService {
         } catch (Exception e) {
             log.error("编辑用户异常: userId={}", userId, e);
             return ResponseVO.error("编辑失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseVO<Void> updateSelfPassword(String token, @Valid UserPasswordUpdateDTO request) {
+        Long currentUserId = null;
+        try {
+            // 1. 验证Token并获取当前用户
+            currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 校验旧密码
+            if (!passwordEncoder.matches(request.getOldPassword(), currentUser.getPassword())) {
+                return ResponseVO.badRequest("旧密码不正确");
+            }
+
+            // 3. 更新密码
+            String encodedPassword = passwordEncoder.encode(request.getNewPassword());
+            int rows = userMapper.updatePasswordById(currentUserId, encodedPassword, LocalDateTime.now());
+
+            if (rows > 0) {
+                log.info("用户修改密码成功: userId={}", currentUserId);
+                return ResponseVO.<Void>success("修改成功", null);
+            } else {
+                return ResponseVO.error("修改失败：用户可能已被删除");
+            }
+
+        } catch (Exception e) {
+            log.error("修改密码异常: userId={}", currentUserId, e);
+            return ResponseVO.error("修改失败: " + e.getMessage());
         }
     }
 
