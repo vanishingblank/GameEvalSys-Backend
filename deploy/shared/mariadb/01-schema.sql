@@ -177,24 +177,22 @@ DROP EVENT IF EXISTS update_project_status;
 -- 3. 创建新事件
 DELIMITER $$
 
-CREATE EVENT update_project_status
+CREATE EVENT IF NOT EXISTS update_project_status
 ON SCHEDULE EVERY 1 DAY
-STARTS DATE_ADD(CURDATE(), INTERVAL 1 DAY)
-ON COMPLETION PRESERVE  
-ENABLE  
-COMMENT '每天定时更新项目状态'
+STARTS TIMESTAMP(CURRENT_DATE, '00:01:00')
 DO
 BEGIN
     UPDATE project
     SET status = CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN start_date > CURDATE() THEN 'not_started'
+        WHEN start_date <= CURDATE() AND end_date >= CURDATE() THEN 'ongoing'
+        WHEN end_date < CURDATE() THEN 'ended'
     END
-    WHERE status != CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+    WHERE is_enabled = 1
+        AND status <> CASE
+            WHEN start_date > CURDATE() THEN 'not_started'
+            WHEN start_date <= CURDATE() AND end_date >= CURDATE() THEN 'ongoing'
+            WHEN end_date < CURDATE() THEN 'ended'
     END;
 END$$
 
