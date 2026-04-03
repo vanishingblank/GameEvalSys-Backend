@@ -3,6 +3,8 @@ services:
     image: mariadb:11.4
     container_name: gameeval-mariadb
     restart: unless-stopped
+    ports:
+      - "13306:3306"
     environment:
       TZ: ${TZ}
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
