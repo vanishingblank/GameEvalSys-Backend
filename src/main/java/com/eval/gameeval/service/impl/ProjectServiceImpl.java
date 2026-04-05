@@ -211,7 +211,20 @@ public class ProjectServiceImpl implements IProjectService {
             updateProject.setEndDate(request.getEndDate() != null ? request.getEndDate().atStartOfDay() : project.getEndDate());
             updateProject.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : project.getIsEnabled());
             updateProject.setStandardId(request.getStandardId() != null ? request.getStandardId() : project.getStandardId());
-            updateProject.setStatus(project.getStatus()); // 状态不变
+            // 根据当前时间与项目时间范围的关系设置状态
+
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime startDateTime=project.getStartDate();
+            LocalDateTime endDateTime=project.getEndDate();
+            String status;
+            if (now.isBefore(startDateTime)) {
+                status = "not_started";      // 未开始
+            } else if (now.isAfter(endDateTime)) {
+                status = "ended";            // 已结束
+            } else {
+                status = "ongoing";      // 进行中
+            }
+            updateProject.setStatus(status); // 状态
 
             // 4. 更新项目
             projectMapper.updateById(updateProject);
