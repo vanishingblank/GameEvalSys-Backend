@@ -6,17 +6,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.servlet.mvc.condition.PathPatternsRequestCondition;
+import org.springframework.web.servlet.mvc.condition.PatternsRequestCondition;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.util.ServletRequestPathUtils;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.http.server.PathContainer;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Set;
 
 @Component
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     @Autowired(required = false)
-    private List<HandlerMapping> handlerMappings;
+    private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
     @Override
     public void commence(
@@ -25,9 +31,9 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             AuthenticationException authException
     ) throws IOException {
 
-        // 检查请求的路由是否存在
         if (!isRouteExists(request)) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.setHeader("X-Error-Written", "1");
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("""
                 {
@@ -39,7 +45,6 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             return;
         }
 
-        // 如果路由存在但认证失败，返回401
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
 
@@ -52,34 +57,70 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         """);
     }
 
-    /**
-     * 检查请求的路由是否存在
-     */
     private boolean isRouteExists(HttpServletRequest request) {
-        if (handlerMappings == null || handlerMappings.isEmpty()) {
-            return true; // 如果没有找到HandlerMappings，默认认为路由存在
+        if (requestMappingHandlerMapping == null) {
+            return true;
         }
 
-        try {
-            for (HandlerMapping handlerMapping : handlerMappings) {
-                // 只跳过父级的默认HandlerMapping（比如ResourceHandlerMapping）
-                if (!(handlerMapping instanceof RequestMappingHandlerMapping)) {
-                    continue;
-                }
-
-                try {
-                    Object handler = handlerMapping.getHandler(request);
-                    if (handler != null) {
-                        return true; // 找到了匹配的handler，路由存在
-                    }
-                } catch (Exception e) {
-                    // 继续检查其他HandlerMapping
+        String lookupPath = resolveLookupPath(request);
+        String httpMethod = request.getMethod();
+        boolean pathMatched = false;
+        for (RequestMappingInfo info : requestMappingHandlerMapping.getHandlerMethods().keySet()) {
+            if (pathMatches(info, lookupPath)) {
+                pathMatched = true;
+                if (methodMatches(info, httpMethod)) {
+                    return true;
                 }
             }
-            return false; // 没有找到任何匹配的handler，路由不存在
-        } catch (Exception e) {
-            return true; // 发生异常时，默认认为路由存在
         }
+        return pathMatched;
+    }
+
+    private String resolveLookupPath(HttpServletRequest request) {
+        try {
+            if (requestMappingHandlerMapping != null
+                    && requestMappingHandlerMapping.getPatternParser() != null) {
+                return ServletRequestPathUtils.parseAndCache(request)
+                        .pathWithinApplication()
+                        .value();
+            }
+            if (requestMappingHandlerMapping != null) {
+                return requestMappingHandlerMapping.getUrlPathHelper()
+                        .getPathWithinApplication(request);
+            }
+            return request.getRequestURI();
+        } catch (Exception e) {
+            return request.getRequestURI();
+        }
+    }
+
+    private boolean methodMatches(RequestMappingInfo info, String httpMethod) {
+        Set<RequestMethod> methods = info.getMethodsCondition().getMethods();
+        if (methods.isEmpty()) {
+            return true;
+        }
+        try {
+            RequestMethod requestMethod = RequestMethod.valueOf(httpMethod);
+            return methods.contains(requestMethod);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private boolean pathMatches(RequestMappingInfo info, String lookupPath) {
+        PathPatternsRequestCondition pathPatternsCondition = info.getPathPatternsCondition();
+        if (pathPatternsCondition != null) {
+            PathContainer path = PathContainer.parsePath(lookupPath);
+            for (PathPattern pattern : pathPatternsCondition.getPatterns()) {
+                if (pattern.matches(path)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        PatternsRequestCondition legacyCondition = info.getPatternsCondition();
+        return legacyCondition != null && !legacyCondition.getMatchingPatterns(lookupPath).isEmpty();
     }
 }
 

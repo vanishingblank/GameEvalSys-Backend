@@ -23,6 +23,10 @@ public class NotFoundFilter extends OncePerRequestFilter {
 
         // 如果响应状态是 404，直接返回，不再经过 Security 处理
         if (response.getStatus() == 404) {
+            if ("1".equals(response.getHeader("X-Error-Written")) || response.isCommitted()) {
+                return;
+            }
+            response.setHeader("X-Error-Written", "1");
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("""
                 {
