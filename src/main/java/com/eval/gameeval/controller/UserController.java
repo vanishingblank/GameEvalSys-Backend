@@ -1,7 +1,9 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
+import com.eval.gameeval.models.DTO.UserBatchDeleteDTO;
 import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
+import com.eval.gameeval.models.DTO.UserBatchStatusDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserPasswordUpdateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
@@ -56,6 +58,20 @@ public class UserController {
     }
 
     /**
+     * 批量修改用户启用状态
+     */
+    @PutMapping("/batch-status")
+    @LogRecord(value = "批量修改用户状态", module = "User")
+    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchUpdateUserStatus(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody UserBatchStatusDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<UserBatchOperationResultVO> response = userService.batchUpdateUserStatus(token, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * 用户修改自己的密码
      */
     @PutMapping("/me/password")
@@ -80,6 +96,20 @@ public class UserController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<Void> response = userService.deleteUser(token, userId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 批量删除用户
+     */
+    @DeleteMapping("/batch-delete")
+    @LogRecord(value = "批量删除用户", module = "User")
+    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchDeleteUsers(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody UserBatchDeleteDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<UserBatchOperationResultVO> response = userService.batchDeleteUsers(token, request);
         return ResponseEntity.ok(response);
     }
 

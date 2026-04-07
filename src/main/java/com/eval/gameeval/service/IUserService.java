@@ -23,6 +23,10 @@ public interface IUserService {
 
     ResponseVO<Void> deleteUser(String token, Long userId);
 
+    ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(String token, @Valid UserBatchStatusDTO request);
+
+    ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(String token, @Valid UserBatchDeleteDTO request);
+
     /**
      * 分页查询用户列表
      * @param token 认证Token

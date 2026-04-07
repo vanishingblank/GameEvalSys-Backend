@@ -5,6 +5,8 @@ import com.eval.gameeval.mapper.ReviewerGroupMapper;
 import com.eval.gameeval.mapper.ReviewerGroupMemberMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
+import com.eval.gameeval.models.DTO.UserBatchDeleteDTO;
+import com.eval.gameeval.models.DTO.UserBatchStatusDTO;
 import com.eval.gameeval.models.DTO.UserCreateDTO;
 import com.eval.gameeval.models.DTO.UserPasswordUpdateDTO;
 import com.eval.gameeval.models.DTO.UserQueryDTO;
@@ -387,6 +389,149 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    public ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(String token, UserBatchStatusDTO request) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以批量修改用户状态");
+            }
+
+            List<Long> userIds = request.getUserIds().stream()
+                    .distinct()
+                    .collect(Collectors.toList());
+            List<Long> failedIds = new ArrayList<>();
+            int successCount = 0;
+
+            for (Long userId : userIds) {
+                try {
+                    User targetUser = userMapper.selectById(userId);
+                    String failureReason = validateBatchStatusTarget(currentUser, targetUser);
+                    if (failureReason != null) {
+                        failedIds.add(userId);
+                        log.warn("批量修改用户状态跳过: userId={}, operator={}, reason={}",
+                                userId, currentUserId, failureReason);
+                        continue;
+                    }
+
+                    if (request.getIsEnabled().equals(targetUser.getIsEnabled())) {
+                        successCount++;
+                        continue;
+                    }
+
+                    User updateUser = new User();
+                    updateUser.setId(userId);
+                    updateUser.setName(targetUser.getName());
+                    updateUser.setRole(targetUser.getRole());
+                    updateUser.setPassword(targetUser.getPassword());
+                    updateUser.setIsEnabled(request.getIsEnabled());
+                    updateUser.setUpdateTime(LocalDateTime.now());
+
+                    int rows = userMapper.updateById(updateUser);
+                    if (rows > 0) {
+                        successCount++;
+                    } else {
+                        failedIds.add(userId);
+                    }
+                } catch (Exception e) {
+                    failedIds.add(userId);
+                    log.error("批量修改用户状态异常: userId={}, operator={}", userId, currentUserId, e);
+                }
+            }
+
+            UserBatchOperationResultVO result = new UserBatchOperationResultVO()
+                    .setTotalCount(userIds.size())
+                    .setSuccessCount(successCount)
+                    .setFailCount(failedIds.size())
+                    .setFailedIds(failedIds);
+
+            String actionText = Boolean.TRUE.equals(request.getIsEnabled()) ? "启用" : "禁用";
+            String message = failedIds.isEmpty()
+                    ? "批量" + actionText + "完成"
+                    : "批量" + actionText + "完成，部分用户操作失败";
+            return ResponseVO.success(message, result);
+        } catch (Exception e) {
+            log.error("批量修改用户状态异常", e);
+            return ResponseVO.error("批量修改用户状态失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(String token, UserBatchDeleteDTO request) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以批量删除用户");
+            }
+
+            List<Long> userIds = request.getUserIds().stream()
+                    .distinct()
+                    .collect(Collectors.toList());
+            List<Long> failedIds = new ArrayList<>();
+            int successCount = 0;
+
+            for (Long userId : userIds) {
+                try {
+                    User targetUser = userMapper.selectById(userId);
+                    String failureReason = validateBatchDeleteTarget(currentUserId, currentUser, targetUser);
+                    if (failureReason != null) {
+                        failedIds.add(userId);
+                        log.warn("批量删除用户跳过: userId={}, operator={}, reason={}",
+                                userId, currentUserId, failureReason);
+                        continue;
+                    }
+
+                    if (Boolean.FALSE.equals(targetUser.getIsEnabled())) {
+                        successCount++;
+                        continue;
+                    }
+
+                    int rows = userMapper.disableById(userId, LocalDateTime.now());
+                    if (rows > 0) {
+                        successCount++;
+                    } else {
+                        failedIds.add(userId);
+                    }
+                } catch (Exception e) {
+                    failedIds.add(userId);
+                    log.error("批量删除用户异常: userId={}, operator={}", userId, currentUserId, e);
+                }
+            }
+
+            UserBatchOperationResultVO result = new UserBatchOperationResultVO()
+                    .setTotalCount(userIds.size())
+                    .setSuccessCount(successCount)
+                    .setFailCount(failedIds.size())
+                    .setFailedIds(failedIds);
+
+            String message = failedIds.isEmpty()
+                    ? "批量删除完成"
+                    : "批量删除完成，部分用户删除失败";
+            return ResponseVO.success(message, result);
+        } catch (Exception e) {
+            log.error("批量删除用户异常", e);
+            return ResponseVO.error("批量删除用户失败: " + e.getMessage());
+        }
+    }
+
+    @Override
     public ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query) {
         try {
             // 1. 验证Token并获取当前用户
@@ -524,6 +669,32 @@ public class UserServiceImpl implements IUserService {
                 "admin".equals(role) ||
                 "scorer".equals(role) ||
                 "normal".equals(role);
+    }
+
+    private String validateBatchStatusTarget(User currentUser, User targetUser) {
+        if (targetUser == null) {
+            return "用户不存在";
+        }
+        if ("admin".equals(currentUser.getRole()) && "super_admin".equals(targetUser.getRole())) {
+            return "无权修改超级管理员";
+        }
+        return null;
+    }
+
+    private String validateBatchDeleteTarget(Long currentUserId, User currentUser, User targetUser) {
+        if (targetUser == null) {
+            return "用户不存在";
+        }
+        if (targetUser.getId().equals(currentUserId)) {
+            return "不能删除自己";
+        }
+        if ("super_admin".equals(targetUser.getRole())) {
+            return "禁止删除超级管理员";
+        }
+        if ("admin".equals(currentUser.getRole()) && "admin".equals(targetUser.getRole())) {
+            return "无权删除其他管理员";
+        }
+        return null;
     }
 
     /**
