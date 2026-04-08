@@ -4,6 +4,7 @@ import com.eval.gameeval.mapper.ScoringIndicatorMapper;
 import com.eval.gameeval.mapper.ScoringStandardMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
+import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.models.entity.ScoringIndicator;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -128,7 +130,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     }
 
     @Override
-    public ResponseVO<List<ScoringStandardVO>> getStandardList(String token) {
+    public ResponseVO<List<ScoringStandardVO>> getStandardList(String token, ScoringStandardQueryDTO query) {
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -136,49 +138,68 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
+            int page = query != null && query.getPage() != null ? query.getPage() : 1;
+            int size = query != null && query.getSize() != null ? query.getSize() : 10;
+            String keyWords = query != null && query.getKeyWords() != null ? query.getKeyWords().trim() : null;
+
             // 2. 先尝试从Redis获取缓存
             Object cache = standardCacheUtil.getStandardListCache();
+            List<ScoringStandardVO> standardVOs;
             if (cache != null) {
                 // 缓存命中：直接返回（类型转换）
                 @SuppressWarnings("unchecked")
                 List<ScoringStandardVO> cachedList = (List<ScoringStandardVO>) cache;
                 log.info("【缓存命中】获取打分标准列表: count={}", cachedList.size());
-                return ResponseVO.success("查询成功", cachedList);
+                standardVOs = cachedList;
+            } else {
+                // 3. 缓存未命中：查询数据库
+                log.info("【缓存未命中】查询数据库获取打分标准列表");
+                List<ScoringStandard> standards = standardMapper.selectAll();
+
+                // 4. 转换为VO列表
+                standardVOs = new ArrayList<>();
+
+                for (ScoringStandard standard : standards) {
+                    ScoringStandardVO vo = new ScoringStandardVO();
+                    vo.setId(standard.getId());
+                    vo.setName(standard.getName());
+                    vo.setCreateTime(standard.getCreateTime());
+
+                    List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(standard.getId());
+                    List<ScoringStandardVO.IndicatorVO> indicatorVOs = indicators.stream()
+                            .map(indicator -> {
+                                ScoringStandardVO.IndicatorVO indicatorVO = new ScoringStandardVO.IndicatorVO();
+                                BeanUtils.copyProperties(indicator, indicatorVO);
+                                return indicatorVO;
+                            })
+                            .collect(Collectors.toList());
+
+                    vo.setIndicators(indicatorVOs);
+                    standardVOs.add(vo);
+                }
+
+                // 5. 写入缓存
+                standardCacheUtil.cacheStandardList(standardVOs);
+                log.info("查询打分标准列表成功: count={}", standardVOs.size());
             }
 
-
-            // 3. 缓存未命中：查询数据库
-            log.info("【缓存未命中】查询数据库获取打分标准列表");
-            List<ScoringStandard> standards = standardMapper.selectAll();
-
-            // 4. 转换为VO列表
-            List<ScoringStandardVO> standardVOs = new ArrayList<>();
-
-            for (ScoringStandard standard : standards) {
-                ScoringStandardVO vo = new ScoringStandardVO();
-                vo.setId(standard.getId());
-                vo.setName(standard.getName());
-                vo.setCreateTime(standard.getCreateTime());
-
-                // 4. 查询每个标准的指标列表
-                List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(standard.getId());
-                List<ScoringStandardVO.IndicatorVO> indicatorVOs = indicators.stream()
-                        .map(indicator -> {
-                            ScoringStandardVO.IndicatorVO indicatorVO = new ScoringStandardVO.IndicatorVO();
-                            BeanUtils.copyProperties(indicator, indicatorVO);
-                            return indicatorVO;
-                        })
+            List<ScoringStandardVO> filteredStandards = standardVOs;
+            if (keyWords != null && !keyWords.isEmpty()) {
+                String normalizedKeyWords = keyWords.toLowerCase(Locale.ROOT);
+                filteredStandards = standardVOs.stream()
+                        .filter(standard -> standard.getName() != null
+                                && standard.getName().toLowerCase(Locale.ROOT).contains(normalizedKeyWords))
                         .collect(Collectors.toList());
-
-                vo.setIndicators(indicatorVOs);
-                standardVOs.add(vo);
             }
 
-            // 5. 写入缓存
-            standardCacheUtil.cacheStandardList(standardVOs);
-            log.info("查询打分标准列表成功: count={}", standardVOs.size());
+            int fromIndex = Math.min((page - 1) * size, filteredStandards.size());
+            int toIndex = Math.min(fromIndex + size, filteredStandards.size());
+            List<ScoringStandardVO> pageList = filteredStandards.subList(fromIndex, toIndex);
 
-            return ResponseVO.success("查询成功", standardVOs);
+            log.info("查询打分标准列表成功: operator={}, keyWords={}, page={}, size={}, count={}",
+                    currentUserId, keyWords, page, size, pageList.size());
+
+            return ResponseVO.success("查询成功", pageList);
 
         } catch (Exception e) {
             log.error("查询打分标准列表异常", e);

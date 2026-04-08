@@ -1,6 +1,7 @@
 package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
+import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 
@@ -18,9 +19,10 @@ public interface IScoringStandardService {
     /**
      * 获取打分标准列表
      * @param token 认证Token
+     * @param query 查询参数
      * @return 打分标准列表
      */
-    ResponseVO<List<ScoringStandardVO>> getStandardList(String token);
+    ResponseVO<List<ScoringStandardVO>> getStandardList(String token, ScoringStandardQueryDTO query);
 
     /**
      * 获取单个打分标准详情

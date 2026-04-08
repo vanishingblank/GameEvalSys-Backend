@@ -2,6 +2,7 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
+import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.service.IScoringStandardService;
@@ -40,10 +41,11 @@ public class ScoringStandardController {
      */
     @GetMapping
     public ResponseEntity<ResponseVO<List<ScoringStandardVO>>> getStandardList(
-            @RequestHeader("Authorization") String authorization) {
+            @RequestHeader("Authorization") String authorization,
+            ScoringStandardQueryDTO query) {
 
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<ScoringStandardVO>> response = scoringStandardService.getStandardList(token);
+        ResponseVO<List<ScoringStandardVO>> response = scoringStandardService.getStandardList(token, query);
         return ResponseEntity.ok(response);
     }
 
