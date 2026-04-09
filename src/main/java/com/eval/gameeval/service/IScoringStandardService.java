@@ -3,9 +3,8 @@ package com.eval.gameeval.service;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
-
-import java.util.List;
 
 public interface IScoringStandardService {
     /**
@@ -22,7 +21,7 @@ public interface IScoringStandardService {
      * @param query 查询参数
      * @return 打分标准列表
      */
-    ResponseVO<List<ScoringStandardVO>> getStandardList(String token, ScoringStandardQueryDTO query);
+    ResponseVO<ScoringStandardPageVO> getStandardList(String token, ScoringStandardQueryDTO query);
 
     /**
      * 获取单个打分标准详情

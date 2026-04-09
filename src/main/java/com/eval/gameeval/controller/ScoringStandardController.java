@@ -4,6 +4,7 @@ import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.service.IScoringStandardService;
 import com.eval.gameeval.util.TokenUtil;
@@ -12,8 +13,6 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @Slf4j
 @RestController
@@ -40,12 +39,12 @@ public class ScoringStandardController {
      * 获取打分标准列表
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<List<ScoringStandardVO>>> getStandardList(
+    public ResponseEntity<ResponseVO<ScoringStandardPageVO>> getStandardList(
             @RequestHeader("Authorization") String authorization,
             ScoringStandardQueryDTO query) {
 
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<ScoringStandardVO>> response = scoringStandardService.getStandardList(token, query);
+        ResponseVO<ScoringStandardPageVO> response = scoringStandardService.getStandardList(token, query);
         return ResponseEntity.ok(response);
     }
 

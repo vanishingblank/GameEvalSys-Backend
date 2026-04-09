@@ -6,6 +6,7 @@ import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.models.entity.ScoringIndicator;
 import com.eval.gameeval.models.entity.ScoringStandard;
@@ -130,7 +131,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     }
 
     @Override
-    public ResponseVO<List<ScoringStandardVO>> getStandardList(String token, ScoringStandardQueryDTO query) {
+    public ResponseVO<ScoringStandardPageVO> getStandardList(String token, ScoringStandardQueryDTO query) {
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -195,11 +196,18 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
             int fromIndex = Math.min((page - 1) * size, filteredStandards.size());
             int toIndex = Math.min(fromIndex + size, filteredStandards.size());
             List<ScoringStandardVO> pageList = filteredStandards.subList(fromIndex, toIndex);
+            long total = filteredStandards.size();
 
-            log.info("查询打分标准列表成功: operator={}, keyWords={}, page={}, size={}, count={}",
-                    currentUserId, keyWords, page, size, pageList.size());
+            ScoringStandardPageVO pageVO = new ScoringStandardPageVO();
+            pageVO.setList(pageList);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
 
-            return ResponseVO.success("查询成功", pageList);
+            log.info("查询打分标准列表成功: operator={}, keyWords={}, page={}, size={}, count={}, total={}",
+                    currentUserId, keyWords, page, size, pageList.size(), total);
+
+            return ResponseVO.success("查询成功", pageVO);
 
         } catch (Exception e) {
             log.error("查询打分标准列表异常", e);
