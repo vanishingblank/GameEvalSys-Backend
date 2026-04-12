@@ -318,7 +318,17 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 尝试从缓存获取小组列表
+            // 3. 新增：检查当前用户是否被授权查看该项目
+            // 用户必须在project_scorer中有该项目的授权记录，否则无权访问
+            List<ProjectScorer> projectScorers = projectScorerMapper.selectByProjectId(projectId);
+            boolean isAuthorized = projectScorers.stream()
+                    .anyMatch(scorer -> scorer.getUserId().equals(currentUserId));
+            if (!isAuthorized) {
+                log.warn("用户未授权访问项目的小组列表: userId={}, projectId={}", currentUserId, projectId);
+                return ResponseVO.forbidden("您没有权限查看该项目的小组列表");
+            }
+
+            // 4. 尝试从缓存获取小组列表
             Object cache = projectCacheUtil.getProjectGroupsCache(projectId);
             if (cache != null) {
                 @SuppressWarnings("unchecked")
@@ -327,11 +337,11 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.success("查询成功", cachedList);
             }
 
-            // 4. 缓存未命中：查询关联关系
+            // 5. 缓存未命中：查询关联关系
             log.info("【缓存未命中】查询数据库: projectId={}", projectId);
             List<ProjectGroup> relations = groupMapper.selectByProjectId(projectId);
 
-            // 5. 获取小组信息并转换为VO列表
+            // 6. 获取小组信息并转换为VO列表
             List<GroupVO> groupVOs = new ArrayList<>();
             for (ProjectGroup relation : relations) {
                 ProjectGroupInfo groupInfo = groupInfoMapper.selectById(relation.getGroupInfoId());
@@ -350,7 +360,7 @@ public class GroupServiceImpl implements IGroupService {
             }
 
             projectCacheUtil.cacheProjectGroups(projectId, groupVOs);
-            log.info("查询项目小组列表成功: projectId={}, count={}", projectId, groupVOs.size());
+            log.info("查询项目小组列表成功: projectId={}, count={}, userId={}", projectId, groupVOs.size(), currentUserId);
 
             return ResponseVO.success("查询成功", groupVOs);
 
