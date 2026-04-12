@@ -161,9 +161,17 @@ public class ProjectServiceImpl implements IProjectService {
                 scorerMapper.insertBatch(scorers);
             }
 
-            // 7. 构建响应
-            projectCacheUtil.clearAllProjectListCache(); // 实际需遍历删除所有列表缓存键
+            // 7. 清除缓存
+            projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
+            
+            // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
+            for (Long scorerId : request.getScorerIds()) {
+                projectCacheUtil.clearAuthorizedProjectsCache(scorerId);
+                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorerId, project.getId());
+            }
             log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
+
+            // 8. 构建响应
             ProjectCreateVO responseVO = new ProjectCreateVO();
             BeanUtils.copyProperties(project, responseVO);
             responseVO.setGroupNames(request.getGroupNames());
@@ -648,6 +656,12 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache();
+            
+            // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
+            for (Long scorerId : scorerIds) {
+                projectCacheUtil.clearAuthorizedProjectsCache(scorerId);
+                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorerId, project.getId());
+            }
 
             // 10. 构建响应
             ProjectVO responseVO = new ProjectVO();
