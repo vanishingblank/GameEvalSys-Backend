@@ -177,7 +177,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 // 创建新记录
                 record = new ScoringRecord();
                 record.setProjectId(request.getProjectId());
-                record.setGroupId(request.getGroupId());
+                record.setGroupInfoId(request.getGroupId());
                 record.setUserId(currentUserId);
                 record.setTotalScore(totalScore);
                 record.setCreateTime(LocalDateTime.now());

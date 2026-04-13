@@ -16,7 +16,7 @@ public class ScoringRecord implements Serializable {
     private static final long serialVersionUID = 1L;
     private Long id;
     private Long projectId;
-    private Long groupId;
+    private Long groupInfoId;
     private Long userId;
     private BigDecimal totalScore;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

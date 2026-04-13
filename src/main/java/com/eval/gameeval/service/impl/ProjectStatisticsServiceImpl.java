@@ -160,7 +160,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 row.add(project.getName());
 
                 // 小组名称（从project_group_info获取）
-                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(record.getGroupId());
+                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(record.getGroupInfoId());
                 row.add(groupInfo != null ? groupInfo.getName() : "未知");
 
                 // 打分用户
