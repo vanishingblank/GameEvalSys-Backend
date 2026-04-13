@@ -362,6 +362,7 @@ public class ProjectServiceImpl implements IProjectService {
             String cacheKey = RedisKeyUtil.buildProjectListKey(
                     query.getStatus(),
                     query.getIsEnabled(),
+                    query.getKeyWords(),
                     page,
                     size
             );
@@ -376,8 +377,8 @@ public class ProjectServiceImpl implements IProjectService {
             }
             // 5. 查询项目列表
             log.info("【缓存未命中】查询数据库: key={}", cacheKey);
-            List<Project> projects = projectMapper.selectPage(offset, size, query.getStatus(), query.getIsEnabled());
-            Long total = projectMapper.countTotal(query.getStatus(), query.getIsEnabled());
+            List<Project> projects = projectMapper.selectPage(offset, size, query.getStatus(), query.getIsEnabled(), query.getKeyWords());
+            Long total = projectMapper.countTotal(query.getStatus(), query.getIsEnabled(), query.getKeyWords());
 
             // 6. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();

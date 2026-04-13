@@ -21,4 +21,6 @@ public class ProjectQueryDTO implements Serializable {
     private String status;
 
     private Boolean isEnabled;
+
+    private String keyWords;
 }

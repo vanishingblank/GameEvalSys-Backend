@@ -27,6 +27,9 @@ public interface ProjectMapper {
             "<if test='isEnabled != null'>" +
             "  AND is_enabled = #{isEnabled} " +
             "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (name LIKE CONCAT('%', #{keyWords}, '%') OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
             "ORDER BY create_time DESC " +
             "LIMIT #{offset}, #{limit}" +
             "</script>")
@@ -34,7 +37,8 @@ public interface ProjectMapper {
             @Param("offset") int offset,
             @Param("limit") int limit,
             @Param("status") String status,
-            @Param("isEnabled") Boolean isEnabled
+            @Param("isEnabled") Boolean isEnabled,
+            @Param("keyWords") String keyWords
     );
 
     @Select("<script>" +
@@ -46,8 +50,11 @@ public interface ProjectMapper {
             "<if test='isEnabled != null'>" +
             "  AND is_enabled = #{isEnabled} " +
             "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (name LIKE CONCAT('%', #{keyWords}, '%') OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
             "</script>")
-    Long countTotal(@Param("status") String status, @Param("isEnabled") Boolean isEnabled);
+    Long countTotal(@Param("status") String status, @Param("isEnabled") Boolean isEnabled, @Param("keyWords") String keyWords);
 
     @Select("SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
             "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
