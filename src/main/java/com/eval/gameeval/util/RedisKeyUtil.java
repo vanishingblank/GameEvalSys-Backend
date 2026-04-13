@@ -53,12 +53,26 @@ public final class RedisKeyUtil {
     // ========== 项目键构建==========
     /**
      * 构建项目列表缓存键（含分页参数）
-     * 格式: project:list:{status}:{isEnabled}:{page}:{size}
+     * 格式: project:list:{status}:{isEnabled}:{keyWords}:{page}:{size}
      */
     public static String buildProjectListKey(String status, Boolean isEnabled, int page, int size) {
         StringBuilder key = new StringBuilder(PROJECT_LIST_KEY_PREFIX);
         key.append(status != null ? status : "allStatus").append(":");
         key.append(isEnabled != null ? isEnabled : "allOnlyEnabled").append(":");
+        key.append("allKeywords").append(":");
+        key.append(page).append(":").append(size);
+        return key.toString();
+    }
+
+    /**
+     * 构建项目列表缓存键（含分页和关键词查询参数）
+     * 格式: project:list:{status}:{isEnabled}:{keyWords}:{page}:{size}
+     */
+    public static String buildProjectListKey(String status, Boolean isEnabled, String keyWords, int page, int size) {
+        StringBuilder key = new StringBuilder(PROJECT_LIST_KEY_PREFIX);
+        key.append(status != null ? status : "allStatus").append(":");
+        key.append(isEnabled != null ? isEnabled : "allOnlyEnabled").append(":");
+        key.append(keyWords != null && !keyWords.isEmpty() ? keyWords : "allKeywords").append(":");
         key.append(page).append(":").append(size);
         return key.toString();
     }
