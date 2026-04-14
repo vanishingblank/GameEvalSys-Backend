@@ -38,4 +38,14 @@ public interface IProjectStatisticsService {
      * @throws IOException IO异常
      */
     void exportProjectData(String token, Long projectId, String format, HttpServletResponse response) throws IOException;
+
+    /**
+     * 导出项目内各小组在各评分项上的得分明细
+     * @param token 认证Token
+     * @param projectId 项目ID
+     * @param format 导出格式（excel/csv）
+     * @param response HTTP响应
+     * @throws IOException IO异常
+     */
+    void exportProjectGroupIndicatorItemScores(String token, Long projectId, String format, HttpServletResponse response) throws IOException;
 }

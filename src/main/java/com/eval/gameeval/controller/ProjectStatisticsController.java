@@ -66,5 +66,19 @@ public class ProjectStatisticsController {
         projectStatisticsService.exportProjectData(token, projectId, format, response);
     }
 
+    /**
+     * 导出项目内各小组在各评分项上的得分明细
+     */
+    @GetMapping("/{projectId}/export/group-indicator-items")
+    public void exportProjectGroupIndicatorItemScores(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long projectId,
+            @RequestParam(required = false, defaultValue = "excel") String format,
+            HttpServletResponse response) throws IOException {
+
+        String token = TokenUtil.extractToken(authorization);
+        projectStatisticsService.exportProjectGroupIndicatorItemScores(token, projectId, format, response);
+    }
+
 
 }
