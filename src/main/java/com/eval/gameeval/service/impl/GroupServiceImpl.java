@@ -312,6 +312,11 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
             // 2. 验证项目是否存在
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
@@ -324,8 +329,11 @@ public class GroupServiceImpl implements IGroupService {
             boolean isAuthorized = projectScorers.stream()
                     .anyMatch(scorer -> scorer.getUserId().equals(currentUserId));
             if (!isAuthorized) {
-                log.warn("用户未授权访问项目的小组列表: userId={}, projectId={}", currentUserId, projectId);
-                return ResponseVO.forbidden("您没有权限查看该项目的小组列表");
+                // 权限校验：只有管理员可以查看非授权小组
+                if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                    log.warn("用户未授权访问项目的小组列表: userId={}, projectId={}", currentUserId, projectId);
+                    return ResponseVO.forbidden("权限不足，只有管理员可以查看非授权的项目小组");
+                }
             }
 
             // 4. 尝试从缓存获取小组列表
