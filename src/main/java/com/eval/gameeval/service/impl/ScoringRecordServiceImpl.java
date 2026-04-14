@@ -196,6 +196,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             // 10. 构建响应
             ScoringRecordVO responseVO = new ScoringRecordVO();
             BeanUtils.copyProperties(record, responseVO);
+            responseVO.setGroupId(record.getGroupInfoId());
             responseVO.setScores(details.stream()
                     .map(detail -> {
                         ScoringRecordVO.ScoreVO scoreVO = new ScoringRecordVO.ScoreVO();
@@ -244,6 +245,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             // 4. 构建响应
             ScoringRecordVO responseVO = new ScoringRecordVO();
             BeanUtils.copyProperties(record, responseVO);
+            responseVO.setGroupId(record.getGroupInfoId());
             responseVO.setScores(details.stream()
                     .map(detail -> {
                         ScoringRecordVO.ScoreVO scoreVO = new ScoringRecordVO.ScoreVO();
@@ -341,6 +343,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     private ScoringRecordVO buildScoringRecordVO(ScoringRecord record, List<ScoringRecordDetail> details) {
         ScoringRecordVO responseVO = new ScoringRecordVO();
         BeanUtils.copyProperties(record, responseVO);
+        responseVO.setGroupId(record.getGroupInfoId());
         responseVO.setScores(details.stream()
                 .map(detail -> {
                     ScoringRecordVO.ScoreVO scoreVO = new ScoringRecordVO.ScoreVO();

@@ -11,28 +11,28 @@ import java.util.Map;
 public interface ScoringRecordMapper {
 
     // ========== 查询 ==========
-    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE id = #{id}")
     ScoringRecord selectById(@Param("id") Long id);
 
-    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE project_id = #{projectId} ORDER BY create_time DESC")
     List<ScoringRecord> selectByProjectId(@Param("projectId") Long projectId);
 
-    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record " +
-            "WHERE project_id = #{projectId} AND group_info_id = #{groupId} AND user_id = #{userId} " +
+            "WHERE project_id = #{projectId} AND group_info_id = #{groupInfoId} AND user_id = #{userId} " +
             "LIMIT 1")
     ScoringRecord selectByUniqueKey(
             @Param("projectId") Long projectId,
-            @Param("groupId") Long groupId,
+            @Param("groupInfoId") Long groupInfoId,
             @Param("userId") Long userId
     );
 
-    @Select("SELECT id, project_id AS projectId, group_info_id AS groupId, user_id AS userId, " +
+    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
             "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record " +
             "WHERE project_id = #{projectId} AND user_id = #{userId} " +
@@ -101,7 +101,7 @@ public interface ScoringRecordMapper {
 
     // ========== 插入 ==========
     @Insert("INSERT INTO scoring_record(project_id, group_info_id, user_id, total_score, create_time, update_time) " +
-            "VALUES(#{projectId}, #{groupId}, #{userId}, #{totalScore}, #{createTime}, #{updateTime})")
+            "VALUES(#{projectId}, #{groupInfoId}, #{userId}, #{totalScore}, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScoringRecord record);
 
