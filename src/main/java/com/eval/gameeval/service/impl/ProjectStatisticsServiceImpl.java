@@ -4,6 +4,7 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
 import com.eval.gameeval.mapper.*;
+import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.*;
@@ -110,6 +111,52 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
         } catch (Exception e) {
             log.error("查询项目统计异常: projectId={}", projectId, e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<GroupIndicatorStatisticsVO> getGroupIndicatorStatistics(String token, Long projectId, Long groupId) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            Project project = projectMapper.selectById(projectId);
+            if (project == null) {
+                return ResponseVO.notFound("项目不存在");
+            }
+
+            ProjectGroup relation = groupMapper.selectByGroupIdAndProjectId(groupId, projectId);
+            if (relation == null) {
+                return ResponseVO.notFound("小组不在该项目内");
+            }
+
+            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupId);
+            if (groupInfo == null) {
+                return ResponseVO.notFound("小组不存在");
+            }
+
+            List<Map<String, Object>> indicatorAvgList =
+                    recordMapper.selectIndicatorAverageByProjectAndGroup(projectId, groupId);
+
+            List<GroupIndicatorStatisticsVO.IndicatorAverageVO> indicatorAverage = indicatorAvgList.stream()
+                    .map(map -> new GroupIndicatorStatisticsVO.IndicatorAverageVO()
+                            .setIndicatorId(((Number) map.get("indicatorId")).longValue())
+                            .setIndicatorName((String) map.get("indicatorName"))
+                            .setAverageScore(convertToBigDecimal(map.get("averageScore"))))
+                    .collect(Collectors.toList());
+
+            GroupIndicatorStatisticsVO result = new GroupIndicatorStatisticsVO()
+                    .setGroupId(groupId)
+                    .setGroupName(groupInfo.getName())
+                    .setIndicatorAverage(indicatorAverage);
+
+            log.info("查询项目小组指标平均分成功: projectId={}, groupId={}", projectId, groupId);
+            return ResponseVO.success("查询成功", result);
+        } catch (Exception e) {
+            log.error("查询项目小组指标平均分异常: projectId={}, groupId={}", projectId, groupId, e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }

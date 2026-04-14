@@ -1,5 +1,6 @@
 package com.eval.gameeval.controller;
 
+import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.service.IProjectStatisticsService;
@@ -33,6 +34,21 @@ public class ProjectStatisticsController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<ProjectStatisticsVO> response = projectStatisticsService.getProjectStatistics(token, projectId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 获取项目内指定小组的指标平均得分明细
+     */
+    @GetMapping("/{projectId}/statistics/groups/{groupId}")
+    public ResponseEntity<ResponseVO<GroupIndicatorStatisticsVO>> getGroupIndicatorStatistics(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long projectId,
+            @PathVariable Long groupId) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<GroupIndicatorStatisticsVO> response =
+                projectStatisticsService.getGroupIndicatorStatistics(token, projectId, groupId);
         return ResponseEntity.ok(response);
     }
 

@@ -99,6 +99,24 @@ public interface ScoringRecordMapper {
             "ORDER BY u.id, scoreRange")
     List<Map<String, Object>> selectScorerDistribution(@Param("projectId") Long projectId);
 
+    /**
+     * 查询项目内指定小组的各指标平均分
+     */
+    @Select("SELECT " +
+            "  si.id AS indicatorId, " +
+            "  si.name AS indicatorName, " +
+            "  AVG(srd.score) AS averageScore " +
+            "FROM scoring_record sr " +
+            "JOIN scoring_record_detail srd ON sr.id = srd.record_id " +
+            "JOIN scoring_indicator si ON srd.indicator_id = si.id " +
+            "WHERE sr.project_id = #{projectId} AND sr.group_info_id = #{groupId} " +
+            "GROUP BY si.id, si.name " +
+            "ORDER BY si.id ASC")
+    List<Map<String, Object>> selectIndicatorAverageByProjectAndGroup(
+            @Param("projectId") Long projectId,
+            @Param("groupId") Long groupId
+    );
+
     // ========== 插入 ==========
     @Insert("INSERT INTO scoring_record(project_id, group_info_id, user_id, total_score, create_time, update_time) " +
             "VALUES(#{projectId}, #{groupInfoId}, #{userId}, #{totalScore}, #{createTime}, #{updateTime})")
