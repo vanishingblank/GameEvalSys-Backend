@@ -3,6 +3,7 @@ package com.eval.gameeval.service;
 import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringOverviewVO;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -19,6 +20,13 @@ public interface IProjectStatisticsService {
      * @return 统计数据
      */
     ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId);
+
+    /**
+     * 获取用户打分概览
+     * @param token 认证Token
+     * @return 概览统计
+     */
+    ResponseVO<ScoringOverviewVO> getScoringOverview(String token);
 
     /**
      * 获取项目内指定小组的指标平均得分明细

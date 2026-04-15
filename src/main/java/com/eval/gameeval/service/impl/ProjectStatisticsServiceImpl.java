@@ -7,9 +7,11 @@ import com.eval.gameeval.mapper.*;
 import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringOverviewVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
     @Resource
     private RedisToken redisToken;
+
+    @Resource
+    private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
 
     @Override
     public ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId) {
@@ -119,6 +124,42 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         } catch (Exception e) {
             log.error("查询项目统计异常: projectId={}", projectId, e);
             return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<ScoringOverviewVO> getScoringOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            Object cache = scoringOverviewCacheUtil.getUserOverviewCache(currentUserId);
+            if (cache != null) {
+                ScoringOverviewVO cachedOverview = (ScoringOverviewVO) cache;
+                log.info("【缓存命中】获取用户打分概览: userId={}, total={}",
+                        currentUserId, cachedOverview.getTotalProjects());
+                return ResponseVO.success("获取成功", cachedOverview);
+            }
+
+            Map<String, Object> overviewMap = projectMapper.selectScoringOverviewByUserId(currentUserId);
+            if (overviewMap == null) {
+                overviewMap = Collections.emptyMap();
+            }
+            ScoringOverviewVO overviewVO = new ScoringOverviewVO()
+                    .setTotalProjects(toLong(overviewMap.get("totalProjects")))
+                    .setOngoingProjects(toLong(overviewMap.get("ongoingProjects")))
+                    .setCompletedProjects(toLong(overviewMap.get("completedProjects")))
+                    .setPendingProjects(toLong(overviewMap.get("pendingProjects")));
+
+            scoringOverviewCacheUtil.cacheUserOverview(currentUserId, overviewVO);
+            log.info("获取用户打分概览成功: userId={}, total={}",
+                    currentUserId, overviewVO.getTotalProjects());
+            return ResponseVO.success("获取成功", overviewVO);
+        } catch (Exception e) {
+            log.error("获取用户打分概览异常", e);
+            return ResponseVO.error("获取失败: " + e.getMessage());
         }
     }
 
@@ -475,5 +516,15 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         }
         BigDecimal normalized = value.stripTrailingZeros();
         return normalized.scale() < 0 ? normalized.setScale(0).toPlainString() : normalized.toPlainString();
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(value.toString());
     }
 }
