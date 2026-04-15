@@ -24,12 +24,14 @@ public final class RedisKeyUtil {
     public static final String PROJECT_AUTHORIZED_KEY_PREFIX = "project:authorized:";
     public static final String PROJECT_GROUPS_KEY_PREFIX = "project:groups:";
     public static final String SCORING_RECORD_PAGE_KEY_PREFIX = "scoring:record:page:";
+    public static final String SCORING_OVERVIEW_KEY_PREFIX = "scoring:overview:user:";
 
     public static final long PROJECT_LIST_TTL = 300;      // 5分钟（分页数据变化频繁）
     public static final long PROJECT_DETAIL_TTL = 3600;   // 60分钟
     public static final long PROJECT_AUTHORIZED_TTL = 600; // 10分钟（用户权限可能变化）
     public static final long PROJECT_GROUPS_TTL = 1800;   // 30分钟
     public static final long SCORING_RECORD_PAGE_TTL = 300; // 5分钟
+    public static final long SCORING_OVERVIEW_TTL = 120; // 2分钟
 
     // ========== 私有构造函数（工具类不可实例化）==========
     private RedisKeyUtil() {
@@ -107,6 +109,20 @@ public final class RedisKeyUtil {
     }
 
     /**
+     * 构建用户授权项目分页缓存键（含查询条件）
+     * 格式: project:authorized:{userId}:{status}:{isEnabled}:{keyWords}:{page}:{size}
+     */
+    public static String buildAuthorizedProjectsKey(Long userId, String status, Boolean isEnabled, String keyWords, int page, int size) {
+        StringBuilder key = new StringBuilder(PROJECT_AUTHORIZED_KEY_PREFIX);
+        key.append(userId).append(":");
+        key.append(status != null ? status : "allStatus").append(":");
+        key.append(isEnabled != null ? isEnabled : "allEnabled").append(":");
+        key.append(keyWords != null && !keyWords.isEmpty() ? keyWords : "allKeywords").append(":");
+        key.append(page).append(":").append(size);
+        return key.toString();
+    }
+
+    /**
      * 构建用户授权项目分页缓存前缀
      * 格式: project:authorized:{userId}:
      */
@@ -135,5 +151,13 @@ public final class RedisKeyUtil {
      */
     public static String buildScoringRecordPagePrefix(Long projectId, Long userId) {
         return SCORING_RECORD_PAGE_KEY_PREFIX + projectId + ":" + userId + ":";
+    }
+
+    /**
+     * 构建用户打分概览缓存键
+     * 格式: scoring:overview:user:{userId}
+     */
+    public static String buildScoringOverviewKey(Long userId) {
+        return SCORING_OVERVIEW_KEY_PREFIX + userId;
     }
 }
