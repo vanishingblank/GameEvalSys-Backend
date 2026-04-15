@@ -6,6 +6,7 @@ import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
+import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
 import com.eval.gameeval.service.IReviewerGroupService;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
@@ -45,12 +46,12 @@ public class ReviewerGroupController {
      * 获取评审组列表
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<List<ReviewerGroupVO>>> getReviewerGroupList(
+    public ResponseEntity<ResponseVO<ReviewerGroupPageVO>> getReviewerGroupList(
             @RequestHeader("Authorization") String authorization,
             ReviewerGroupQueryDTO query
     ) {
         String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<ReviewerGroupVO>> response = reviewerGroupService.getReviewerGroupList(token,query);
+        ResponseVO<ReviewerGroupPageVO> response = reviewerGroupService.getReviewerGroupList(token,query);
         return ResponseEntity.ok(response);
     }
 

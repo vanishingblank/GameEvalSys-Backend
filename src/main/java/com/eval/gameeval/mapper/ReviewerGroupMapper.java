@@ -36,6 +36,39 @@ public interface ReviewerGroupMapper {
             "</script>")
     List<ReviewerGroup> selectAllEnabledWithKeywords(@Param("keyWords") String keyWords);
 
+    /**
+     * 查询分页评审组（支持关键词搜索）
+     */
+    @Select("<script>" +
+            "SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
+            "       create_time AS createTime, update_time AS updateTime " +
+            "FROM reviewer_group " +
+            "WHERE is_enabled = 1 " +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "ORDER BY create_time DESC " +
+            "LIMIT #{offset}, #{pageSize}" +
+            "</script>")
+    List<ReviewerGroup> selectPageWithSearch(
+            @Param("offset") int offset,
+            @Param("pageSize") int pageSize,
+            @Param("keyWords") String keyWords);
+
+    /**
+     * 统计启用的评审组数量（支持关键词搜索）
+     */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM reviewer_group " +
+            "WHERE is_enabled = 1 " +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "</script>")
+    Long countWithSearch(@Param("keyWords") String keyWords);
+
     // ========== 插入 ==========
     @Insert("INSERT INTO reviewer_group(name, description, creator_id, is_enabled, create_time, update_time) " +
             "VALUES(#{name}, #{description}, #{creatorId}, #{isEnabled}, #{createTime}, #{updateTime})")

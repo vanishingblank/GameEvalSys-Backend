@@ -8,6 +8,7 @@ import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
+import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
 import com.eval.gameeval.models.entity.ReviewerGroup;
 import com.eval.gameeval.models.entity.ReviewerGroupMember;
 import com.eval.gameeval.models.entity.User;
@@ -109,7 +110,7 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     }
 
     @Override
-    public ResponseVO<List<ReviewerGroupVO>> getReviewerGroupList(String token, ReviewerGroupQueryDTO query) {
+    public ResponseVO<ReviewerGroupPageVO> getReviewerGroupList(String token, ReviewerGroupQueryDTO query) {
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
@@ -117,15 +118,29 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
-            // 2. 查询所有启用的评审组
-            String keyWords = query != null ? query.getKeyWords() :null;
-            List<ReviewerGroup> groups = groupMapper.selectAllEnabledWithKeywords(keyWords);
+            // 2. 处理分页参数
+            int pageNum = query != null && query.getPage() != null ? query.getPage() : 1;
+            int pageSize = query != null && query.getSize() != null ? query.getSize() : 10;
+            int offset = (pageNum - 1) * pageSize;
 
-            // 3. 转换为VO
-            List<ReviewerGroupVO> groupVOs = new ArrayList<>();
+            // 3. 获取关键词
+            String keyWords = query != null ? query.getKeyWords() : null;
+
+            // 4. 查询分页数据
+            List<ReviewerGroup> groups = groupMapper.selectPageWithSearch(offset, pageSize, keyWords);
+            Long total = groupMapper.countWithSearch(keyWords);
+
+            // 5. 转换为VO
+            List<ReviewerGroupPageVO.ReviewerGroupVO> groupVOs = new ArrayList<>();
             for (ReviewerGroup group : groups) {
-                ReviewerGroupVO vo = new ReviewerGroupVO();
-                BeanUtils.copyProperties(group, vo);
+                ReviewerGroupPageVO.ReviewerGroupVO vo = new ReviewerGroupPageVO.ReviewerGroupVO();
+                vo.setId(group.getId());
+                vo.setName(group.getName());
+                vo.setDescription(group.getDescription());
+                vo.setCreatorId(group.getCreatorId());
+                vo.setIsEnabled(group.getIsEnabled());
+                vo.setCreateTime(group.getCreateTime());
+                vo.setUpdateTime(group.getUpdateTime());
 
                 // 查询成员列表
                 List<Long> memberIds = memberMapper.selectUserIdsByGroupId(group.getId());
@@ -134,9 +149,17 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
                 groupVOs.add(vo);
             }
 
-            log.info("查询评审组列表成功: count={}", groupVOs.size());
+            // 6. 构建分页响应
+            ReviewerGroupPageVO pageVO = new ReviewerGroupPageVO();
+            pageVO.setList(groupVOs);
+            pageVO.setTotal(total);
+            pageVO.setPage(pageNum);
+            pageVO.setSize(pageSize);
 
-            return ResponseVO.success("查询成功", groupVOs);
+            log.info("查询评审组列表成功: userId={}, total={}, page={}, size={}",
+                    currentUserId, total, pageNum, pageSize);
+
+            return ResponseVO.success("查询成功", pageVO);
 
         } catch (Exception e) {
             log.error("查询评审组列表异常", e);
