@@ -14,6 +14,7 @@ import com.eval.gameeval.service.IProjectService;
 import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -22,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -57,6 +60,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Resource
     private ProjectCacheUtil projectCacheUtil;
+
+    @Resource
+    private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -165,10 +171,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
-            for (Long scorerId : request.getScorerIds()) {
-                projectCacheUtil.clearAuthorizedProjectsCache(scorerId);
-                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorerId, project.getId());
-            }
+            clearUserProjectCaches(request.getScorerIds(), project.getId(), "createProject");
             log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
 
             // 8. 构建响应
@@ -207,6 +210,10 @@ public class ProjectServiceImpl implements IProjectService {
             if (project == null) {
                 return ResponseVO.notFound("项目不存在");
             }
+
+            List<Long> oldScorerIds = scorerMapper.selectByProjectId(projectId).stream()
+                    .map(ProjectScorer::getUserId)
+                    .collect(Collectors.toList());
 
             // 3. 构建更新对象（保留原值）
             Project updateProject = new Project();
@@ -278,13 +285,12 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
-            
-            // 清除所有相关用户的授权项目缓存，确保他们获取最新数据
-            List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
-            for (ProjectScorer scorer : projectScorers) {
-                projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
-                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorer.getUserId(), projectId);
-            }
+
+            List<Long> currentScorerIds = scorerMapper.selectByProjectId(projectId).stream()
+                    .map(ProjectScorer::getUserId)
+                    .collect(Collectors.toList());
+            List<Long> affectedScorerIds = mergeDistinctUserIds(oldScorerIds, currentScorerIds);
+            clearUserProjectCaches(affectedScorerIds, projectId, "updateProject");
             
             log.info("编辑项目成功: projectId={}, operator={}", projectId, currentUserId);
 
@@ -330,9 +336,8 @@ public class ProjectServiceImpl implements IProjectService {
             
             // 清除所有相关用户的授权项目缓存
             List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
-            for (ProjectScorer scorer : projectScorers) {
-                projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
-            }
+            List<Long> scorerIds = projectScorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
+            clearUserProjectCaches(scorerIds, projectId, "endProject");
             
             log.info("结束项目成功: projectId={}, operator={}", projectId, currentUserId);
 
@@ -491,22 +496,42 @@ public class ProjectServiceImpl implements IProjectService {
             size = Math.max(size, 1);
             int offset = (page - 1) * size;
 
-            // 2. 按用户ID + 分页参数构建缓存键
-            String cacheKey = RedisKeyUtil.buildAuthorizedProjectsKey(currentUserId, page, size);
+            // 2. 构建缓存键（包含查询条件）
+            String cacheKey = RedisKeyUtil.buildAuthorizedProjectsKey(
+                    currentUserId,
+                    safeQuery.getStatus(),
+                    safeQuery.getIsEnabled(),
+                    safeQuery.getKeyWords(),
+                    page,
+                    size
+            );
 
             // 3. 尝试从缓存获取
             Object cache = projectCacheUtil.getAuthorizedProjectsCache(cacheKey);
             if (cache != null) {
                 ProjectPageVO cachedPage = (ProjectPageVO) cache;
-                log.info("【缓存命中】获取授权项目: userId={}, page={}, size={}, total={}",
-                        currentUserId, page, size, cachedPage.getTotal());
+                log.info("【缓存命中】获取授权项目: userId={}, status={}, isEnabled={}, keyWords={}, page={}, size={}, total={}",
+                        currentUserId, safeQuery.getStatus(), safeQuery.getIsEnabled(), safeQuery.getKeyWords(), page, size, cachedPage.getTotal());
                 return ResponseVO.success("查询成功", cachedPage);
             }
 
             // 4. 缓存未命中：查询数据库
-            log.info("【缓存未命中】查询数据库: userId={}, page={}, size={}", currentUserId, page, size);
-            List<Project> projects = projectMapper.selectPageByScorerId(currentUserId, offset, size);
-            Long total = projectMapper.countByScorerId(currentUserId);
+            log.info("【缓存未命中】查询数据库: userId={}, status={}, isEnabled={}, keyWords={}, page={}, size={}",
+                    currentUserId, safeQuery.getStatus(), safeQuery.getIsEnabled(), safeQuery.getKeyWords(), page, size);
+            List<Project> projects = projectMapper.selectPageByScorerId(
+                    currentUserId,
+                    offset,
+                    size,
+                    safeQuery.getStatus(),
+                    safeQuery.getIsEnabled(),
+                    safeQuery.getKeyWords()
+            );
+            Long total = projectMapper.countByScorerId(
+                    currentUserId,
+                    safeQuery.getStatus(),
+                    safeQuery.getIsEnabled(),
+                    safeQuery.getKeyWords()
+            );
 
             // 5. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
@@ -534,8 +559,8 @@ public class ProjectServiceImpl implements IProjectService {
             pageVO.setSize(size);
 
             projectCacheUtil.cacheAuthorizedProjects(cacheKey, pageVO);
-            log.info("查询授权项目列表成功: userId={}, page={}, size={}, count={}, total={}",
-                    currentUserId, page, size, projectVOs.size(), total);
+            log.info("查询授权项目列表成功: userId={}, status={}, isEnabled={}, keyWords={}, page={}, size={}, count={}, total={}",
+                    currentUserId, safeQuery.getStatus(), safeQuery.getIsEnabled(), safeQuery.getKeyWords(), page, size, projectVOs.size(), total);
 
             return ResponseVO.success("查询成功", pageVO);
 
@@ -659,10 +684,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearAllProjectListCache();
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
-            for (Long scorerId : scorerIds) {
-                projectCacheUtil.clearAuthorizedProjectsCache(scorerId);
-                log.debug("清除用户授权项目缓存: userId={}, projectId={}", scorerId, project.getId());
-            }
+            clearUserProjectCaches(scorerIds, project.getId(), "createProjectWithGroup");
 
             // 10. 构建响应
             ProjectVO responseVO = new ProjectVO();
@@ -679,5 +701,31 @@ public class ProjectServiceImpl implements IProjectService {
             log.error("通过评审组创建项目异常", e);
             return ResponseVO.error("创建失败: " + e.getMessage());
         }
+    }
+
+    private void clearUserProjectCaches(List<Long> userIds, Long projectId, String scene) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+        Set<Long> distinctUserIds = new HashSet<>(userIds);
+        for (Long userId : distinctUserIds) {
+            if (userId == null) {
+                continue;
+            }
+            projectCacheUtil.clearAuthorizedProjectsCache(userId);
+            scoringOverviewCacheUtil.clearUserOverviewCache(userId);
+            log.debug("清除用户项目相关缓存: scene={}, userId={}, projectId={}", scene, userId, projectId);
+        }
+    }
+
+    private List<Long> mergeDistinctUserIds(List<Long> userIds1, List<Long> userIds2) {
+        Set<Long> result = new HashSet<>();
+        if (userIds1 != null) {
+            result.addAll(userIds1);
+        }
+        if (userIds2 != null) {
+            result.addAll(userIds2);
+        }
+        return new ArrayList<>(result);
     }
 }
