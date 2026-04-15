@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.Scoring;
 
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -7,36 +7,19 @@ import lombok.experimental.Accessors;
 import java.io.Serial;
 import java.io.Serializable;
 
+/**
+ * 项目打分页记录查询DTO
+ */
 @Data
 @Accessors(chain = true)
-public class UserQueryDTO implements Serializable {
+public class ScoringRecordPageQueryDTO implements Serializable {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /**
-     * 页码（默认1）
-     */
     @Min(value = 1, message = "页码必须大于0")
     private Integer page = 1;
 
-    /**
-     * 每页条数（默认10）
-     */
     @Min(value = 1, message = "每页条数必须大于0")
     private Integer size = 10;
-
-    /**
-     * 角色
-     */
-    private String role;
-
-    /**
-     * 关键词
-     */
-    private String keyWords;
-
-    /**
-     * 是否启用
-     */
-    private Boolean isEnabled;
 }

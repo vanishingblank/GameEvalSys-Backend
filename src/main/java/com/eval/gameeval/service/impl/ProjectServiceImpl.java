@@ -1,10 +1,10 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.*;
-import com.eval.gameeval.models.DTO.ProjectCreateDTO;
-import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
-import com.eval.gameeval.models.DTO.ProjectQueryDTO;
-import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectCreateDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectCreateWithGroupDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
 import com.eval.gameeval.models.VO.ProjectCreateVO;
 import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;

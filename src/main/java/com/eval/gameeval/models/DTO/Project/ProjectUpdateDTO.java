@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.Project;
 
 import lombok.Data;
 import lombok.experimental.Accessors;

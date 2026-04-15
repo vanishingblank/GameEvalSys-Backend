@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.Scoring;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

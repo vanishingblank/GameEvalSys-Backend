@@ -1,9 +1,9 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.*;
-import com.eval.gameeval.models.DTO.ScoringRecordCreateDTO;
-import com.eval.gameeval.models.DTO.ScoringRecordPageQueryDTO;
-import com.eval.gameeval.models.DTO.ScoringRecordQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordCreateDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordPageQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringRecordPageVO;
 import com.eval.gameeval.models.VO.ScoringRecordVO;

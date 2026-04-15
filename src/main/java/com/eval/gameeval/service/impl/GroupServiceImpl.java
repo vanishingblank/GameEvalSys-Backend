@@ -5,10 +5,10 @@ import com.eval.gameeval.mapper.ProjectGroupMapper;
 import com.eval.gameeval.mapper.ProjectMapper;
 import com.eval.gameeval.mapper.ProjectScorerMapper;
 import com.eval.gameeval.mapper.UserMapper;
-import com.eval.gameeval.models.DTO.GroupAddToProjectDTO;
-import com.eval.gameeval.models.DTO.GroupCreateDTO;
-import com.eval.gameeval.models.DTO.GroupQueryDTO;
-import com.eval.gameeval.models.DTO.GroupUpdateDTO;
+import com.eval.gameeval.models.DTO.Group.GroupAddToProjectDTO;
+import com.eval.gameeval.models.DTO.Group.GroupCreateDTO;
+import com.eval.gameeval.models.DTO.Group.GroupQueryDTO;
+import com.eval.gameeval.models.DTO.Group.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -28,8 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service

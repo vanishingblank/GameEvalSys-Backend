@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.Scoring;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;

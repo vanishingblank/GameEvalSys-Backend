@@ -1,6 +1,6 @@
 package com.eval.gameeval.service;
 
-import com.eval.gameeval.models.DTO.*;
+import com.eval.gameeval.models.DTO.User.*;
 import com.eval.gameeval.models.VO.*;
 import jakarta.validation.Valid;
 

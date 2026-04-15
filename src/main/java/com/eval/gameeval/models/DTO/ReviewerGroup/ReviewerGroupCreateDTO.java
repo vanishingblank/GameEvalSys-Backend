@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.ReviewerGroup;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

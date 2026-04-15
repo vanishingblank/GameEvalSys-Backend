@@ -1,11 +1,10 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
-import com.eval.gameeval.models.DTO.LoginRequestDTO;
+import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.service.IAuthService;
-import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;

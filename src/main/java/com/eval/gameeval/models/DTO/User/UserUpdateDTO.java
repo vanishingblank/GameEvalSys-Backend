@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.User;
 
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;

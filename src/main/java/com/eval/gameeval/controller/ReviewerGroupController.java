@@ -1,9 +1,9 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
-import com.eval.gameeval.models.DTO.ReviewerGroupCreateDTO;
-import com.eval.gameeval.models.DTO.ReviewerGroupQueryDTO;
-import com.eval.gameeval.models.DTO.ReviewerGroupUpdateDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupCreateDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
+import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.service.IReviewerGroupService;

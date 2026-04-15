@@ -1,13 +1,13 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
-import com.eval.gameeval.models.DTO.UserBatchDeleteDTO;
-import com.eval.gameeval.models.DTO.UserBatchQueryDTO;
-import com.eval.gameeval.models.DTO.UserBatchStatusDTO;
-import com.eval.gameeval.models.DTO.UserCreateDTO;
-import com.eval.gameeval.models.DTO.UserPasswordUpdateDTO;
-import com.eval.gameeval.models.DTO.UserQueryDTO;
-import com.eval.gameeval.models.DTO.UserUpdateDTO;
+import com.eval.gameeval.models.DTO.User.UserBatchDeleteDTO;
+import com.eval.gameeval.models.DTO.User.UserBatchQueryDTO;
+import com.eval.gameeval.models.DTO.User.UserBatchStatusDTO;
+import com.eval.gameeval.models.DTO.User.UserCreateDTO;
+import com.eval.gameeval.models.DTO.User.UserPasswordUpdateDTO;
+import com.eval.gameeval.models.DTO.User.UserQueryDTO;
+import com.eval.gameeval.models.DTO.User.UserUpdateDTO;
 import com.eval.gameeval.models.VO.*;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.TokenUtil;

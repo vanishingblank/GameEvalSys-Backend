@@ -1,8 +1,8 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
-import com.eval.gameeval.models.DTO.ScoringStandardCreateDTO;
-import com.eval.gameeval.models.DTO.ScoringStandardQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;

@@ -1,7 +1,7 @@
 package com.eval.gameeval.controller;
 
-import com.eval.gameeval.models.DTO.ScoringRecordCreateDTO;
-import com.eval.gameeval.models.DTO.ScoringRecordQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordCreateDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordQueryDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringRecordVO;
 import com.eval.gameeval.service.IScoringRecordService;

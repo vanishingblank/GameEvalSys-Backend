@@ -1,11 +1,11 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
-import com.eval.gameeval.models.DTO.ProjectCreateDTO;
-import com.eval.gameeval.models.DTO.ProjectCreateWithGroupDTO;
-import com.eval.gameeval.models.DTO.ProjectQueryDTO;
-import com.eval.gameeval.models.DTO.ProjectUpdateDTO;
-import com.eval.gameeval.models.DTO.ScoringRecordPageQueryDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectCreateDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectCreateWithGroupDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
+import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringRecordPageQueryDTO;
 import com.eval.gameeval.models.VO.*;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.service.IProjectService;

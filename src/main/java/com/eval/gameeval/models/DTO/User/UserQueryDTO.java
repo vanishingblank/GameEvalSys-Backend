@@ -1,4 +1,4 @@
-package com.eval.gameeval.models.DTO;
+package com.eval.gameeval.models.DTO.User;
 
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -9,14 +9,9 @@ import java.io.Serializable;
 
 @Data
 @Accessors(chain = true)
-public class ScoringStandardQueryDTO implements Serializable {
+public class UserQueryDTO implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
-
-    /**
-     * 模糊搜索关键词
-     */
-    private String keyWords;
 
     /**
      * 页码（默认1）
@@ -29,4 +24,19 @@ public class ScoringStandardQueryDTO implements Serializable {
      */
     @Min(value = 1, message = "每页条数必须大于0")
     private Integer size = 10;
+
+    /**
+     * 角色
+     */
+    private String role;
+
+    /**
+     * 关键词
+     */
+    private String keyWords;
+
+    /**
+     * 是否启用
+     */
+    private Boolean isEnabled;
 }

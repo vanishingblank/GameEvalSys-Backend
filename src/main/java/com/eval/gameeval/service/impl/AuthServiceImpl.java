@@ -1,7 +1,7 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
-import com.eval.gameeval.models.DTO.LoginRequestDTO;
+import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.User;
@@ -15,7 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 @Slf4j
 @Service
