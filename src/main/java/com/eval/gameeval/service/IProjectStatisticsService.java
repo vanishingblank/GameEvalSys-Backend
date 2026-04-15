@@ -1,6 +1,7 @@
 package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
+import com.eval.gameeval.models.VO.PlatformStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringOverviewVO;
@@ -27,6 +28,13 @@ public interface IProjectStatisticsService {
      * @return 概览统计
      */
     ResponseVO<ScoringOverviewVO> getScoringOverview(String token);
+
+    /**
+     * 获取平台全局统计（管理员）
+     * @param token 认证Token
+     * @return 平台统计
+     */
+    ResponseVO<PlatformStatisticsVO> getPlatformStatistics(String token);
 
     /**
      * 获取项目内指定小组的指标平均得分明细

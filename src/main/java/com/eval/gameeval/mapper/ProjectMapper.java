@@ -143,6 +143,48 @@ public interface ProjectMapper {
             ") sr ON sr.projectId = ap.projectId")
     Map<String, Object> selectScoringOverviewByUserId(@Param("userId") Long userId);
 
+    /**
+     * 统计某天之前的累计项目总数（用于构建累计趋势基线）
+     */
+    @Select("SELECT COUNT(*) FROM project WHERE create_time < #{startTime}")
+    Long countProjectsBefore(@Param("startTime") LocalDateTime startTime);
+
+    /**
+     * 查询时间段内每日新增项目数
+     */
+    @Select("SELECT DATE(create_time) AS statDate, COUNT(*) AS cnt " +
+            "FROM project " +
+            "WHERE create_time >= #{startTime} AND create_time < #{endTime} " +
+            "GROUP BY DATE(create_time)")
+    List<Map<String, Object>> selectDailyProjectCount(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
+    /**
+     * 查询时间段内每日新增评分数
+     */
+    @Select("SELECT DATE(create_time) AS statDate, COUNT(*) AS cnt " +
+            "FROM scoring_record " +
+            "WHERE create_time >= #{startTime} AND create_time < #{endTime} " +
+            "GROUP BY DATE(create_time)")
+    List<Map<String, Object>> selectDailyScoreCount(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
+    /**
+     * 查询时间段内每日平均得分
+     */
+    @Select("SELECT DATE(create_time) AS statDate, COALESCE(AVG(total_score), 0) AS avgScore " +
+            "FROM scoring_record " +
+            "WHERE create_time >= #{startTime} AND create_time < #{endTime} " +
+            "GROUP BY DATE(create_time)")
+    List<Map<String, Object>> selectDailyAverageScore(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
     // ========== 插入 ==========
     @Insert("INSERT INTO project(name, description, start_date, end_date, status, is_enabled, " +
             "standard_id, creator_id, create_time, update_time) " +

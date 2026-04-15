@@ -5,12 +5,15 @@ import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
 import com.eval.gameeval.mapper.*;
 import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
+import com.eval.gameeval.models.VO.PlatformStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringOverviewVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.RedisBaseUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,6 +25,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -58,6 +63,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
     @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
+
+    @Resource
+    private RedisBaseUtil redisBaseUtil;
 
     @Override
     public ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId) {
@@ -160,6 +168,81 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         } catch (Exception e) {
             log.error("获取用户打分概览异常", e);
             return ResponseVO.error("获取失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<PlatformStatisticsVO> getPlatformStatistics(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null ||
+                    (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole()))) {
+                return ResponseVO.forbidden("权限不足");
+            }
+
+            String cacheKey = RedisKeyUtil.PLATFORM_STATISTICS_KEY;
+            Object cache = redisBaseUtil.get(cacheKey);
+            if (cache != null) {
+                PlatformStatisticsVO cached = (PlatformStatisticsVO) cache;
+                log.info("【缓存命中】获取平台趋势统计: days={}, projectPoints={}, scorePoints={}, avgPoints={}",
+                        cached.getDates() != null ? cached.getDates().size() : 0,
+                        cached.getProjectTrend() != null ? cached.getProjectTrend().size() : 0,
+                        cached.getScoreTrend() != null ? cached.getScoreTrend().size() : 0,
+                        cached.getAverageScoreTrend() != null ? cached.getAverageScoreTrend().size() : 0);
+                return ResponseVO.success("查询成功", cached);
+            }
+
+            final int days = 30;
+            LocalDate today = LocalDate.now();
+            LocalDate startDate = today.minusDays(days - 1L);
+            LocalDateTime startTime = startDate.atStartOfDay();
+            LocalDateTime endTime = today.plusDays(1L).atStartOfDay();
+
+            Long baseProjects = projectMapper.countProjectsBefore(startTime);
+            Map<LocalDate, Long> dailyProjectMap = toDailyLongMap(
+                    projectMapper.selectDailyProjectCount(startTime, endTime), "cnt");
+            Map<LocalDate, Long> dailyScoreMap = toDailyLongMap(
+                    projectMapper.selectDailyScoreCount(startTime, endTime), "cnt");
+            Map<LocalDate, BigDecimal> dailyAverageScoreMap = toDailyBigDecimalMap(
+                    projectMapper.selectDailyAverageScore(startTime, endTime), "avgScore");
+
+            List<String> dateAxis = new ArrayList<>(days);
+            List<Long> projectTrend = new ArrayList<>(days);
+            List<Long> scoreTrend = new ArrayList<>(days);
+            List<BigDecimal> averageScoreTrend = new ArrayList<>(days);
+
+            long runningProjects = baseProjects != null ? baseProjects : 0L;
+            for (int i = 0; i < days; i++) {
+                LocalDate date = startDate.plusDays(i);
+                dateAxis.add(date.toString());
+
+                long todayProjectIncrease = dailyProjectMap.getOrDefault(date, 0L);
+                runningProjects += todayProjectIncrease;
+                projectTrend.add(runningProjects);
+
+                scoreTrend.add(dailyScoreMap.getOrDefault(date, 0L));
+                averageScoreTrend.add(dailyAverageScoreMap.getOrDefault(
+                        date, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)));
+            }
+
+            PlatformStatisticsVO vo = new PlatformStatisticsVO()
+                    .setDates(dateAxis)
+                    .setProjectTrend(projectTrend)
+                    .setScoreTrend(scoreTrend)
+                    .setAverageScoreTrend(averageScoreTrend);
+
+            redisBaseUtil.set(cacheKey, vo, RedisKeyUtil.PLATFORM_STATISTICS_TTL);
+            log.info("获取平台趋势统计成功: startDate={}, endDate={}, points={}",
+                    startDate, today, days);
+            return ResponseVO.success("查询成功", vo);
+        } catch (Exception e) {
+            log.error("获取平台全局统计异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
@@ -526,5 +609,66 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             return number.longValue();
         }
         return Long.parseLong(value.toString());
+    }
+
+    private BigDecimal toScaledBigDecimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal decimalValue;
+        if (value instanceof BigDecimal bigDecimal) {
+            decimalValue = bigDecimal;
+        } else if (value instanceof Number number) {
+            decimalValue = BigDecimal.valueOf(number.doubleValue());
+        } else {
+            decimalValue = new BigDecimal(value.toString());
+        }
+        return decimalValue.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Map<LocalDate, Long> toDailyLongMap(List<Map<String, Object>> rows, String valueKey) {
+        Map<LocalDate, Long> result = new HashMap<>();
+        if (rows == null || rows.isEmpty()) {
+            return result;
+        }
+        for (Map<String, Object> row : rows) {
+            LocalDate date = parseStatDate(row.get("statDate"));
+            if (date == null) {
+                continue;
+            }
+            result.put(date, toLong(row.get(valueKey)));
+        }
+        return result;
+    }
+
+    private Map<LocalDate, BigDecimal> toDailyBigDecimalMap(List<Map<String, Object>> rows, String valueKey) {
+        Map<LocalDate, BigDecimal> result = new HashMap<>();
+        if (rows == null || rows.isEmpty()) {
+            return result;
+        }
+        for (Map<String, Object> row : rows) {
+            LocalDate date = parseStatDate(row.get("statDate"));
+            if (date == null) {
+                continue;
+            }
+            result.put(date, toScaledBigDecimal(row.get(valueKey)));
+        }
+        return result;
+    }
+
+    private LocalDate parseStatDate(Object dateObj) {
+        if (dateObj == null) {
+            return null;
+        }
+        if (dateObj instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (dateObj instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        if (dateObj instanceof java.util.Date utilDate) {
+            return utilDate.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        }
+        return LocalDate.parse(dateObj.toString());
     }
 }
