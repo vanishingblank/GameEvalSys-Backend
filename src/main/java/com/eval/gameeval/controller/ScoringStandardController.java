@@ -3,6 +3,7 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
@@ -61,5 +62,18 @@ public class ScoringStandardController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 编辑打分标准
+     */
+    @PutMapping("/{standardId}")
+    @LogRecord(value = "编辑打分标准", module = "ScoringStandard")
+    public ResponseEntity<ResponseVO<Void>> updateStandard(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long standardId,
+            @Valid @RequestBody ScoringStandardUpdateDTO request) {
 
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<Void> response = scoringStandardService.updateStandard(token, standardId, request);
+        return ResponseEntity.ok(response);
+    }
 }

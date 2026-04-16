@@ -42,6 +42,16 @@ public interface ScoringIndicatorMapper {
             "</script>")
     int insertBatch(@Param("indicators") List<ScoringIndicator> indicators);
 
+    // ========== 更新 ==========
+    @Update("UPDATE scoring_indicator " +
+            "SET name = #{name}, " +
+            "    description = #{description}, " +
+            "    min_score = #{minScore}, " +
+            "    max_score = #{maxScore}, " +
+            "    sort = #{sort} " +
+            "WHERE id = #{id}")
+    int updateById(ScoringIndicator indicator);
+
     // ========== 删除 ==========
     @Delete("DELETE FROM scoring_indicator WHERE id = #{id}")
     int deleteById(@Param("id") Long id);

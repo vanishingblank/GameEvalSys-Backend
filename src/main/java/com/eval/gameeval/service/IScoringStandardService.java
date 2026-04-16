@@ -2,6 +2,7 @@ package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
@@ -30,4 +31,13 @@ public interface IScoringStandardService {
      * @return 打分标准详情
      */
     ResponseVO<ScoringStandardVO> getStandardDetail(String token, Long standardId);
+
+    /**
+     * 编辑打分标准
+     * @param token 认证Token
+     * @param standardId 标准ID
+     * @param request 编辑请求
+     * @return 编辑结果
+     */
+    ResponseVO<Void> updateStandard(String token, Long standardId, ScoringStandardUpdateDTO request);
 }

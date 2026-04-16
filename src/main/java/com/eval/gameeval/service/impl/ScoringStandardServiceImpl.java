@@ -5,6 +5,7 @@ import com.eval.gameeval.mapper.ScoringStandardMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
+import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
@@ -21,9 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -285,6 +284,113 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
         } catch (Exception e) {
             log.error("查询打分标准详情异常: standardId={}", standardId, e);
             return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseVO<Void> updateStandard(String token, Long standardId, ScoringStandardUpdateDTO request) {
+        try {
+            // 1. 验证Token并获取当前用户
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            // 2. 权限校验：只有管理员可以编辑打分标准
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以编辑打分标准");
+            }
+
+            // 3. 检查标准是否存在
+            ScoringStandard standard = standardMapper.selectById(standardId);
+            if (standard == null) {
+                return ResponseVO.notFound("打分标准不存在");
+            }
+
+            // 4. 更新标准名称（如果提供了新名称）
+            if (request.getName() != null && !request.getName().isEmpty()) {
+                String newName = request.getName().trim();
+                // 检查名称是否被其他标准占用
+                ScoringStandard existingStandard = standardMapper.selectByName(newName);
+                if (existingStandard != null && !existingStandard.getId().equals(standardId)) {
+                    return ResponseVO.badRequest("打分标准名称 \"" + newName + "\" 已存在");
+                }
+                standard.setName(newName);
+            }
+
+            standard.setUpdateTime(LocalDateTime.now());
+            standardMapper.updateById(standard);
+            log.info("更新打分标准名称成功: standardId={}, newName={}", standardId, standard.getName());
+
+            // 5. 处理指标列表（如果提供了新指标）
+            if (request.getIndicators() != null && !request.getIndicators().isEmpty()) {
+                // 获取现有所有指标
+                List<ScoringIndicator> existingIndicators = indicatorMapper.selectByStandardId(standardId);
+                Map<Long, ScoringIndicator> existingIndicatorMap = new HashMap<>();
+                for (ScoringIndicator indicator : existingIndicators) {
+                    existingIndicatorMap.put(indicator.getId(), indicator);
+                }
+
+                // 获取请求中的指标ID集合
+                Set<Long> requestIndicatorIds = new HashSet<>();
+                for (ScoringStandardUpdateDTO.IndicatorDTO indicatorDTO : request.getIndicators()) {
+                    requestIndicatorIds.add(indicatorDTO.getId());
+                }
+
+                // 删除未在请求中的指标
+                for (ScoringIndicator existingIndicator : existingIndicators) {
+                    if (!requestIndicatorIds.contains(existingIndicator.getId())) {
+                        indicatorMapper.deleteById(existingIndicator.getId());
+                        log.info("删除指标成功: indicatorId={}, standardId={}", existingIndicator.getId(), standardId);
+                    }
+                }
+
+                // 更新或新增指标
+                int sort = 0;
+                for (ScoringStandardUpdateDTO.IndicatorDTO indicatorDTO : request.getIndicators()) {
+                    if (existingIndicatorMap.containsKey(indicatorDTO.getId())) {
+                        // 更新现有指标
+                        ScoringIndicator indicator = existingIndicatorMap.get(indicatorDTO.getId());
+                        indicator.setName(indicatorDTO.getName());
+                        indicator.setDescription(indicatorDTO.getDescription() != null ? indicatorDTO.getDescription() : "");
+                        indicator.setMinScore(indicatorDTO.getMinScore());
+                        indicator.setMaxScore(indicatorDTO.getMaxScore());
+                        indicator.setSort(sort);
+                        indicatorMapper.updateById(indicator);
+                        log.info("更新指标成功: indicatorId={}, standardId={}", indicator.getId(), standardId);
+                    } else {
+                        // 新增指标（请求中的ID为0或负数表示新增）
+                        ScoringIndicator newIndicator = new ScoringIndicator();
+                        newIndicator.setStandardId(standardId);
+                        newIndicator.setName(indicatorDTO.getName());
+                        newIndicator.setDescription(indicatorDTO.getDescription() != null ? indicatorDTO.getDescription() : "");
+                        newIndicator.setMinScore(indicatorDTO.getMinScore());
+                        newIndicator.setMaxScore(indicatorDTO.getMaxScore());
+                        newIndicator.setSort(sort);
+                        newIndicator.setCreateTime(LocalDateTime.now());
+                        indicatorMapper.insert(newIndicator);
+                        log.info("新增指标成功: indicatorId={}, standardId={}", newIndicator.getId(), standardId);
+                    }
+                    sort++;
+                }
+            }
+
+            // 6. 清除缓存
+            standardCacheUtil.clearStandardCache();
+            standardCacheUtil.clearStandardDetailCache(standardId);
+            log.info("编辑打分标准成功: standardId={}, operatorId={}", standardId, currentUserId);
+
+            return ResponseVO.success("编辑成功", null);
+
+        } catch (Exception e) {
+            log.error("编辑打分标准异常: standardId={}", standardId, e);
+            return ResponseVO.error("编辑失败: " + e.getMessage());
         }
     }
 }
