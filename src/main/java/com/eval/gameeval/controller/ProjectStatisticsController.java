@@ -67,7 +67,7 @@ public class ProjectStatisticsController {
     }
 
     /**
-     * 导出项目内各小组在各评分项上的得分明细
+     * 导出项目内各小组评分汇总（指标平均分 + 分类总分平均分）
      */
     @GetMapping("/{projectId}/export/group-indicator-items")
     public void exportProjectGroupIndicatorItemScores(

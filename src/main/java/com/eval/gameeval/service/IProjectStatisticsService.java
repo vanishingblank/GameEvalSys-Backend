@@ -56,7 +56,7 @@ public interface IProjectStatisticsService {
     void exportProjectData(String token, Long projectId, String format, HttpServletResponse response) throws IOException;
 
     /**
-     * 导出项目内各小组在各评分项上的得分明细
+     * 导出项目内各小组评分汇总（按小组一行，包含指标平均分与分类总分平均分）
      * @param token 认证Token
      * @param projectId 项目ID
      * @param format 导出格式（excel/csv）

@@ -56,6 +56,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringIndicatorMapper indicatorMapper;
 
     @Resource
+    private ScoringIndicatorCategoryMapper categoryMapper;
+
+    @Resource
     private ScoringStandardMapper standardMapper;
 
     @Resource
@@ -441,13 +444,25 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 throw new RuntimeException("该项目未配置评分项");
             }
 
-            String standardName = getScoringStandardName(project);
+            List<ScoringIndicatorCategory> categories = project.getStandardId() == null
+                    ? Collections.emptyList()
+                    : categoryMapper.selectByStandardId(project.getStandardId());
+
             List<Long> recordIds = records.stream().map(ScoringRecord::getId).toList();
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
 
+            if (allDetails == null) {
+                allDetails = Collections.emptyList();
+            }
+
             Map<Long, ScoringRecord> recordMap = records.stream()
                     .collect(Collectors.toMap(ScoringRecord::getId, r -> r));
+
+            Map<Long, List<ScoringRecord>> groupRecordMap = records.stream()
+                    .collect(Collectors.groupingBy(ScoringRecord::getGroupInfoId));
+
             Map<Long, Map<Long, List<BigDecimal>>> groupIndicatorScoreMap = new HashMap<>();
+            Map<Long, Map<Long, BigDecimal>> recordIndicatorScoreMap = new HashMap<>();
 
             for (ScoringRecordDetail detail : allDetails) {
                 ScoringRecord record = recordMap.get(detail.getRecordId());
@@ -460,11 +475,34 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                         .computeIfAbsent(groupId, k -> new HashMap<>())
                         .computeIfAbsent(indicatorId, k -> new ArrayList<>())
                         .add(detail.getScore());
+
+                recordIndicatorScoreMap
+                        .computeIfAbsent(detail.getRecordId(), k -> new HashMap<>())
+                        .put(indicatorId, detail.getScore());
+            }
+
+            Map<Long, List<Long>> categoryIndicatorIds = new LinkedHashMap<>();
+            for (ScoringIndicatorCategory category : categories) {
+                List<Long> indicatorIds = indicators.stream()
+                        .filter(indicator -> category.getId().equals(indicator.getCategoryId()))
+                        .map(ScoringIndicator::getId)
+                        .collect(Collectors.toList());
+                categoryIndicatorIds.put(category.getId(), indicatorIds);
             }
 
             Map<Long, String> groupNameCache = new HashMap<>();
             List<List<Object>> rows = new ArrayList<>();
-            rows.add(Arrays.asList("项目名称", "评分标准", "小组名称", "评分项", "每项得分明细", "平均分", "评分次数"));
+
+            List<Object> header = new ArrayList<>();
+            header.add("小组ID");
+            header.add("小组名称");
+            for (ScoringIndicator indicator : indicators) {
+                header.add(indicator.getName() + "_平均分");
+            }
+            for (ScoringIndicatorCategory category : categories) {
+                header.add(category.getName() + "_总分平均分");
+            }
+            rows.add(header);
 
             for (ProjectGroup group : projectGroups) {
                 String groupName = groupNameCache.computeIfAbsent(group.getGroupInfoId(), groupId -> {
@@ -472,43 +510,79 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     return groupInfo != null ? groupInfo.getName() : "未知";
                 });
 
+                List<Object> row = new ArrayList<>();
+                row.add(group.getGroupInfoId());
+                row.add(groupName);
+
                 for (ScoringIndicator indicator : indicators) {
                     List<BigDecimal> scores = groupIndicatorScoreMap
                             .getOrDefault(group.getGroupInfoId(), Collections.emptyMap())
                             .getOrDefault(indicator.getId(), Collections.emptyList());
 
-                    String scoreDetails = scores.isEmpty()
-                            ? "-"
-                            : scores.stream().map(this::formatDecimal).collect(Collectors.joining(", "));
-
-                    String averageScore = "-";
-                    if (!scores.isEmpty()) {
+                    if (scores.isEmpty()) {
+                        row.add("-");
+                    } else {
                         BigDecimal sum = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-                        averageScore = formatDecimal(sum.divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP));
+                        BigDecimal avg = sum.divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP);
+                        row.add(formatDecimal(avg));
+                    }
+                }
+
+                List<ScoringRecord> groupRecords = groupRecordMap.getOrDefault(group.getGroupInfoId(), Collections.emptyList());
+                for (ScoringIndicatorCategory category : categories) {
+                    List<Long> categoryIndicators = categoryIndicatorIds.getOrDefault(category.getId(), Collections.emptyList());
+                    if (categoryIndicators.isEmpty()) {
+                        row.add("-");
+                        continue;
                     }
 
-                    rows.add(Arrays.asList(
-                            project.getName(),
-                            standardName,
-                            groupName,
-                            indicator.getName(),
-                            scoreDetails,
-                            averageScore,
-                            scores.size()
-                    ));
+                    BigDecimal categoryTotalSum = BigDecimal.ZERO;
+                    int validRecordCount = 0;
+
+                    for (ScoringRecord groupRecord : groupRecords) {
+                        Map<Long, BigDecimal> indicatorScoreMap = recordIndicatorScoreMap.get(groupRecord.getId());
+                        if (indicatorScoreMap == null || indicatorScoreMap.isEmpty()) {
+                            continue;
+                        }
+
+                        BigDecimal recordCategorySum = BigDecimal.ZERO;
+                        boolean hasScore = false;
+                        for (Long indicatorId : categoryIndicators) {
+                            BigDecimal score = indicatorScoreMap.get(indicatorId);
+                            if (score != null) {
+                                recordCategorySum = recordCategorySum.add(score);
+                                hasScore = true;
+                            }
+                        }
+
+                        if (hasScore) {
+                            categoryTotalSum = categoryTotalSum.add(recordCategorySum);
+                            validRecordCount++;
+                        }
+                    }
+
+                    if (validRecordCount == 0) {
+                        row.add("-");
+                    } else {
+                        BigDecimal categoryAvg = categoryTotalSum
+                                .divide(BigDecimal.valueOf(validRecordCount), 2, RoundingMode.HALF_UP);
+                        row.add(formatDecimal(categoryAvg));
+                    }
                 }
+
+                rows.add(row);
             }
 
-            String fileName = project.getName() + "_小组评分项明细_" + DateUtil.format(new Date(), "yyyyMMddHHmmss");
+            String fileName = project.getName() + "_小组评分汇总_" + DateUtil.format(new Date(), "yyyyMMddHHmmss");
             if ("csv".equalsIgnoreCase(format)) {
                 exportCsv(response, fileName, rows);
             } else {
                 exportExcel(response, fileName, rows);
             }
 
-            log.info("导出项目小组评分项明细成功: projectId={}, format={}", projectId, format);
+            log.info("导出项目小组评分汇总成功: projectId={}, format={}", projectId, format);
         } catch (Exception e) {
-            log.error("导出项目小组评分项明细异常: projectId={}", projectId, e);
+            log.error("导出项目小组评分汇总异常: projectId={}", projectId, e);
             throw new IOException("导出失败: " + e.getMessage(), e);
         }
     }
