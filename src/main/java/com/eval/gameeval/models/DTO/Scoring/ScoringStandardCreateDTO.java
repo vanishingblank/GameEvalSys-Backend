@@ -2,7 +2,6 @@ package com.eval.gameeval.models.DTO.Scoring;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -21,9 +20,30 @@ public class ScoringStandardCreateDTO implements Serializable {
     @NotNull(message = "打分标准名称不能为空")
     private String name;
 
-    @NotEmpty(message = "指标列表不能为空")
+    @Valid
+    private List<CategoryDTO> categories;
+
     @Valid
     private List<IndicatorDTO> indicators;
+
+    /**
+     * 分类DTO
+     */
+    @Data
+    @Accessors(chain = true)
+    public static class CategoryDTO implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        @NotNull(message = "分类名称不能为空")
+        private String name;
+
+        private String description;
+
+        @Valid
+        private List<IndicatorDTO> indicators;
+    }
 
     /**
      * 指标DTO
