@@ -27,6 +27,11 @@ public class ScoringStandardVO implements Serializable {
     private List<IndicatorVO> indicators;
 
     /**
+     * 分类列表
+     */
+    private List<CategoryVO> categories;
+
+    /**
      * 创建时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -48,6 +53,11 @@ public class ScoringStandardVO implements Serializable {
         private Long id;
 
         /**
+         * 指标所属分类ID
+         */
+        private Long categoryId;
+
+        /**
          * 指标名称
          */
         private String name;
@@ -66,5 +76,41 @@ public class ScoringStandardVO implements Serializable {
          * 分值最大值
          */
         private Integer maxScore;
+    }
+
+    /**
+     * 分类VO
+     */
+    @Data
+    @Accessors(chain = true)
+    public static class CategoryVO implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * 分类ID
+         */
+        private Long id;
+
+        /**
+         * 分类名称
+         */
+        private String name;
+
+        /**
+         * 分类说明
+         */
+        private String description;
+
+        /**
+         * 分类排序号
+         */
+        private Integer sort;
+
+        /**
+         * 分类下指标
+         */
+        private List<IndicatorVO> indicators;
     }
 }

@@ -1,6 +1,7 @@
 package com.eval.gameeval.models.DTO.Scoring;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -21,10 +22,43 @@ public class ScoringStandardUpdateDTO implements Serializable {
     private String name;
 
     /**
-     * 指标列表（可选）
+     * 分类列表（可选）
      */
     @Valid
-    private List<IndicatorDTO> indicators;
+    private List<CategoryDTO> categories;
+
+    /**
+     * 分类DTO
+     */
+    @Data
+    @Accessors(chain = true)
+    public static class CategoryDTO implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /**
+         * 分类ID（可选，存在则更新，不存在则新增）
+         */
+        private Long id;
+
+        /**
+         * 分类名称
+         */
+        @NotBlank(message = "分类名称不能为空")
+        private String name;
+
+        /**
+         * 分类说明
+         */
+        private String description;
+
+        /**
+         * 分类下指标
+         */
+        @Valid
+        private List<IndicatorDTO> indicators;
+    }
 
     /**
      * 指标DTO
@@ -37,15 +71,14 @@ public class ScoringStandardUpdateDTO implements Serializable {
         private static final long serialVersionUID = 1L;
 
         /**
-         * 指标ID（必填，用于识别指标）
+         * 指标ID（可选，存在则更新，不存在则新增）
          */
-        @NotNull(message = "指标ID不能为空")
         private Long id;
 
         /**
          * 指标名称
          */
-        @NotNull(message = "指标名称不能为空")
+        @NotBlank(message = "指标名称不能为空")
         private String name;
 
         /**

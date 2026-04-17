@@ -14,6 +14,7 @@ public class ScoringIndicator implements Serializable {
     private static final long serialVersionUID = 1L;
     private Long id;
     private Long standardId;
+    private Long categoryId;
     private String name;
     private String description;
     private Integer minScore;

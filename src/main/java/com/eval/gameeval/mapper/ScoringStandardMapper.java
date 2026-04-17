@@ -3,7 +3,6 @@ package com.eval.gameeval.mapper;
 import com.eval.gameeval.models.entity.ScoringStandard;
 import org.apache.ibatis.annotations.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
