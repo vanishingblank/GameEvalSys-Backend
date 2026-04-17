@@ -25,10 +25,25 @@ CREATE TABLE `scoring_standard` (
                                     CONSTRAINT `fk_standard_creator` FOREIGN KEY (`creator_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分标准主表';
 
+-- 打分指标分类表
+CREATE TABLE `scoring_indicator_category` (
+                                             `id` bigint NOT NULL AUTO_INCREMENT COMMENT '分类ID',
+                                             `standard_id` bigint NOT NULL COMMENT '所属打分标准ID',
+                                             `name` varchar(100) NOT NULL COMMENT '分类名称',
+                                             `description` varchar(500) DEFAULT '' COMMENT '分类说明',
+                                             `sort` int DEFAULT 0 COMMENT '分类排序号',
+                                             `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                             `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                             PRIMARY KEY (`id`),
+                                             KEY `idx_standard_id` (`standard_id`),
+                                             CONSTRAINT `fk_indicator_category_standard` FOREIGN KEY (`standard_id`) REFERENCES `scoring_standard` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分指标分类表';
+
 -- 打分指标表
 CREATE TABLE `scoring_indicator` (
                                      `id` bigint NOT NULL AUTO_INCREMENT COMMENT '指标ID',
                                      `standard_id` bigint NOT NULL COMMENT '关联标准ID',
+                                     `category_id` bigint DEFAULT NULL COMMENT '分类ID',
                                      `name` varchar(100) NOT NULL COMMENT '指标名称',
                                      `description` varchar(500) DEFAULT '' COMMENT '指标说明',
                                      `min_score` int NOT NULL COMMENT '分值最小值',
@@ -37,7 +52,9 @@ CREATE TABLE `scoring_indicator` (
                                      `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                      PRIMARY KEY (`id`),
                                      KEY `idx_standard_id` (`standard_id`),
-                                     CONSTRAINT `fk_indicator_standard` FOREIGN KEY (`standard_id`) REFERENCES `scoring_standard` (`id`) ON DELETE CASCADE
+                                     KEY `idx_category_id` (`category_id`),
+                                     CONSTRAINT `fk_indicator_standard` FOREIGN KEY (`standard_id`) REFERENCES `scoring_standard` (`id`) ON DELETE CASCADE,
+                                     CONSTRAINT `fk_indicator_category` FOREIGN KEY (`category_id`) REFERENCES `scoring_indicator_category` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分指标表';
 
 -- 课题项目表
