@@ -20,6 +20,12 @@
    ``` bash
    docker compose --env-file .env up -d --build
    ```
+### 若出现镜像拉取速度慢的情况
+- 单独分别拉取以下镜像
+~~~bash
+docker pull eclipse-temurin:17-jre-alpine-3.22
+docker pull  maven:3.9.9-eclipse-temurin-17
+~~~
 
 ## 代码更改后docker镜像操作
 - 修改了src 或 pom.xml
