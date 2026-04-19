@@ -67,4 +67,20 @@ app:
       name: ${APP_ADMIN_INIT_NAME:System Admin}
       role: ${APP_ADMIN_INIT_ROLE:super_admin}
       is-enabled: ${APP_ADMIN_INIT_IS_ENABLED:true}
+  cache:
+    scheduler:
+      # 总开关：关闭后所有缓存维护任务不执行
+      enabled: ${APP_CACHE_SCHEDULER_ENABLED:true}
+      reconcile:
+        # 项目状态纠偏任务开关
+        enabled: ${APP_CACHE_RECONCILE_ENABLED:true}
+        # 本地开发默认 2 分钟
+        fixed-delay-ms: ${APP_CACHE_RECONCILE_FIXED_DELAY_MS:120000}
+        initial-delay-ms: ${APP_CACHE_RECONCILE_INITIAL_DELAY_MS:30000}
+      warmup:
+        # 全局热键预热任务开关
+        enabled: ${APP_CACHE_WARMUP_ENABLED:true}
+        # 本地开发默认 5 分钟
+        fixed-delay-ms: ${APP_CACHE_WARMUP_FIXED_DELAY_MS:300000}
+        initial-delay-ms: ${APP_CACHE_WARMUP_INITIAL_DELAY_MS:45000}
 

@@ -13,3 +13,18 @@ spring:
 
 server:
   port: 8080
+
+app:
+  cache:
+    scheduler:
+      enabled: ${APP_CACHE_SCHEDULER_ENABLED:true}
+      reconcile:
+        enabled: ${APP_CACHE_RECONCILE_ENABLED:true}
+        # LXC 环境默认 5 分钟
+        fixed-delay-ms: ${APP_CACHE_RECONCILE_FIXED_DELAY_MS:300000}
+        initial-delay-ms: ${APP_CACHE_RECONCILE_INITIAL_DELAY_MS:60000}
+      warmup:
+        enabled: ${APP_CACHE_WARMUP_ENABLED:true}
+        # LXC 环境默认 15 分钟
+        fixed-delay-ms: ${APP_CACHE_WARMUP_FIXED_DELAY_MS:900000}
+        initial-delay-ms: ${APP_CACHE_WARMUP_INITIAL_DELAY_MS:120000}

@@ -834,6 +834,11 @@ public class ProjectServiceImpl implements IProjectService {
         }
     }
 
+    /**
+     * 统一失效入口，一次清全链路缓存，确保数据一致性和完整的失效闭环，避免遗漏导致的脏数据风险。
+     * @param projectIds
+     * @param scene
+     */
     private void invalidateStatusChangeCaches(List<Long> projectIds, String scene) {
         if (projectIds == null || projectIds.isEmpty()) {
             return;

@@ -4,6 +4,7 @@ import com.eval.gameeval.service.impl.ProjectServiceImpl;
 import com.eval.gameeval.service.impl.ProjectStatisticsServiceImpl;
 import com.eval.gameeval.service.impl.ScoringStandardServiceImpl;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,15 @@ public class CacheMaintenanceScheduler {
     private final ScoringStandardServiceImpl scoringStandardService;
     private final ProjectStatisticsServiceImpl projectStatisticsService;
 
+    @Value("${app.cache.scheduler.enabled:true}")
+    private boolean schedulerEnabled;
+
+    @Value("${app.cache.scheduler.reconcile.enabled:true}")
+    private boolean reconcileEnabled;
+
+    @Value("${app.cache.scheduler.warmup.enabled:true}")
+    private boolean warmupEnabled;
+
     public CacheMaintenanceScheduler(ProjectServiceImpl projectService,
                                      ScoringStandardServiceImpl scoringStandardService,
                                      ProjectStatisticsServiceImpl projectStatisticsService) {
@@ -24,10 +34,13 @@ public class CacheMaintenanceScheduler {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.cache.reconcile.fixed-delay-ms:120000}",
-            initialDelayString = "${app.cache.reconcile.initial-delay-ms:30000}"
+            fixedDelayString = "${app.cache.scheduler.reconcile.fixed-delay-ms:120000}",
+            initialDelayString = "${app.cache.scheduler.reconcile.initial-delay-ms:30000}"
     )
     public void reconcileProjectStatusAndInvalidateCaches() {
+        if (!schedulerEnabled || !reconcileEnabled) {
+            return;
+        }
         try {
             projectService.reconcileProjectStatusesByScheduler();
         } catch (Exception e) {
@@ -36,10 +49,13 @@ public class CacheMaintenanceScheduler {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.cache.warmup.fixed-delay-ms:300000}",
-            initialDelayString = "${app.cache.warmup.initial-delay-ms:45000}"
+            fixedDelayString = "${app.cache.scheduler.warmup.fixed-delay-ms:300000}",
+            initialDelayString = "${app.cache.scheduler.warmup.initial-delay-ms:45000}"
     )
     public void warmupGlobalHotCaches() {
+        if (!schedulerEnabled || !warmupEnabled) {
+            return;
+        }
         try {
             projectService.warmupDefaultProjectListCache();
         } catch (Exception e) {
