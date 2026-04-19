@@ -29,8 +29,9 @@ public class ProjectCreateVO implements Serializable {
     private String status;
     private Boolean isEnabled;
     private Long standardId;
-    private List<String> groupNames;
+    private List<Long> groupIds;
     private List<Long> scorerIds;
+    private Long reviewerGroupId;
     private Long creatorId;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

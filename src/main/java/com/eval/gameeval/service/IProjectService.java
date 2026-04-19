@@ -1,7 +1,6 @@
 package com.eval.gameeval.service;
 
 import com.eval.gameeval.models.DTO.Project.ProjectCreateDTO;
-import com.eval.gameeval.models.DTO.Project.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
 import com.eval.gameeval.models.VO.ProjectCreateVO;
@@ -21,9 +20,4 @@ public interface IProjectService {
     ResponseVO<ProjectVO> getProjectDetail(String token, Long projectId);
 
     ResponseVO<ProjectPageVO> getAuthorizedProjects(String token, ProjectQueryDTO query);
-
-    /**
-     * 通过评审组创建项目
-     */
-    ResponseVO<ProjectVO> createProjectWithGroup(String token, ProjectCreateWithGroupDTO request);
 }

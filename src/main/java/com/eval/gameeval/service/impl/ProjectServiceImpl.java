@@ -2,7 +2,6 @@ package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.*;
 import com.eval.gameeval.models.DTO.Project.ProjectCreateDTO;
-import com.eval.gameeval.models.DTO.Project.ProjectCreateWithGroupDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
 import com.eval.gameeval.models.VO.ProjectCreateVO;
@@ -91,7 +90,46 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.badRequest("起始日期不能晚于结束日期");
             }
 
-            // 4. 创建项目
+            // 4. 解析小组来源（仅支持 groupIds）
+            List<Long> resolvedGroupInfoIds = new ArrayList<>();
+            List<Long> distinctGroupIds = request.getGroupIds().stream().distinct().collect(Collectors.toList());
+            for (Long groupInfoId : distinctGroupIds) {
+                if (groupInfoId == null || groupInfoId <= 0) {
+                    return ResponseVO.badRequest("小组ID必须大于0");
+                }
+                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
+                if (groupInfo == null) {
+                    return ResponseVO.badRequest("小组ID " + groupInfoId + " 不存在");
+                }
+                resolvedGroupInfoIds.add(groupInfoId);
+            }
+
+            // 5. 解析打分用户来源（scorerIds 与 reviewerGroupId 二选一）
+            boolean hasScorerIds = request.getScorerIds() != null && !request.getScorerIds().isEmpty();
+            boolean hasReviewerGroupId = request.getReviewerGroupId() != null;
+            if (hasScorerIds && hasReviewerGroupId) {
+                return ResponseVO.badRequest("scorerIds 与 reviewerGroupId 不能同时传入");
+            }
+            if (!hasScorerIds && !hasReviewerGroupId) {
+                return ResponseVO.badRequest("至少需要提供 scorerIds 或 reviewerGroupId");
+            }
+
+            List<Long> resolvedScorerIds;
+            if (hasReviewerGroupId) {
+                ReviewerGroup reviewerGroup = reviewerGroupMapper.selectById(request.getReviewerGroupId());
+                if (reviewerGroup == null) {
+                    return ResponseVO.badRequest("评审组不存在");
+                }
+                resolvedScorerIds = reviewerGroupMemberMapper.selectUserIdsByGroupId(request.getReviewerGroupId());
+                if (resolvedScorerIds == null || resolvedScorerIds.isEmpty()) {
+                    return ResponseVO.badRequest("评审组没有成员");
+                }
+                resolvedScorerIds = resolvedScorerIds.stream().distinct().collect(Collectors.toList());
+            } else {
+                resolvedScorerIds = request.getScorerIds().stream().distinct().collect(Collectors.toList());
+            }
+
+            // 6. 创建项目
             Project project = new Project();
             project.setName(request.getName());
             project.setDescription(request.getDescription() != null ? request.getDescription() : "");
@@ -122,22 +160,12 @@ public class ProjectServiceImpl implements IProjectService {
 
             projectMapper.insert(project);
 
-            // 5. 创建小组关联（先创建小组信息，再创建关联）
+            // 7. 创建小组关联
             List<ProjectGroup> groups = new ArrayList<>();
-            for (String groupName : request.getGroupNames()) {
-                // 创建小组信息
-                ProjectGroupInfo groupInfo = new ProjectGroupInfo();
-                groupInfo.setName(groupName);
-                groupInfo.setDescription("");
-                groupInfo.setIsEnabled(1);
-                groupInfo.setCreateTime(LocalDateTime.now());
-                groupInfo.setUpdateTime(LocalDateTime.now());
-                groupInfoMapper.insert(groupInfo);
-                
-                // 创建项目与小组的关联
+            for (Long groupInfoId : resolvedGroupInfoIds) {
                 ProjectGroup group = new ProjectGroup();
                 group.setProjectId(project.getId());
-                group.setGroupInfoId(groupInfo.getId());
+                group.setGroupInfoId(groupInfoId);
                 group.setCreateTime(LocalDateTime.now());
                 group.setUpdateTime(LocalDateTime.now());
                 groups.add(group);
@@ -146,9 +174,12 @@ public class ProjectServiceImpl implements IProjectService {
                 groupMapper.insertBatch(groups);
             }
 
-            // 6. 创建打分用户关联
+            // 8. 创建打分用户关联
             List<ProjectScorer> scorers = new ArrayList<>();
-            for (Long scorerId : request.getScorerIds()) {
+            for (Long scorerId : resolvedScorerIds) {
+                if (scorerId == null || scorerId <= 0) {
+                    return ResponseVO.badRequest("打分用户ID必须大于0");
+                }
                 // 验证打分用户是否存在
                 User scorer = userMapper.selectById(scorerId);
                 if (scorer == null) {
@@ -168,19 +199,20 @@ public class ProjectServiceImpl implements IProjectService {
                 scorerMapper.insertBatch(scorers);
             }
 
-            // 7. 清除缓存
+            // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
-            clearUserProjectCaches(request.getScorerIds(), project.getId(), "createProject");
+            clearUserProjectCaches(resolvedScorerIds, project.getId(), "createProject");
             log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
 
-            // 8. 构建响应
+            // 10. 构建响应
             ProjectCreateVO responseVO = new ProjectCreateVO();
             BeanUtils.copyProperties(project, responseVO);
-            responseVO.setGroupNames(request.getGroupNames());
-            responseVO.setScorerIds(request.getScorerIds());
+            responseVO.setGroupIds(resolvedGroupInfoIds);
+            responseVO.setScorerIds(resolvedScorerIds);
+            responseVO.setReviewerGroupId(request.getReviewerGroupId());
 
             log.info("创建项目成功: projectId={}, creatorId={}", project.getId(), currentUserId);
 
@@ -599,140 +631,6 @@ public class ProjectServiceImpl implements IProjectService {
         } catch (Exception e) {
             log.error("查询授权项目列表异常: userId={}", currentUserId, e);
             return ResponseVO.error("查询失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ProjectVO> createProjectWithGroup(String token, ProjectCreateWithGroupDTO request) {
-        try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
-            if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
-            }
-
-            User currentUser = userMapper.selectById(currentUserId);
-            if (currentUser == null || (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole()))) {
-                return ResponseVO.forbidden("权限不足");
-            }
-
-            // 2. 验证打分标准
-            ScoringStandard standard = standardMapper.selectById(request.getStandardId());
-            if (standard == null) {
-                return ResponseVO.badRequest("打分标准不存在");
-            }
-
-            // 3. 验证日期
-            if (request.getStartDate().isAfter(request.getEndDate())) {
-                return ResponseVO.badRequest("起始日期不能晚于结束日期");
-            }
-
-            // 4. 验证评审组是否存在
-            ReviewerGroup reviewerGroup = reviewerGroupMapper.selectById(request.getReviewerGroupId());
-            if (reviewerGroup == null) {
-                return ResponseVO.badRequest("评审组不存在");
-            }
-
-            // 5. 查询评审组成员
-            List<Long> scorerIds = reviewerGroupMemberMapper.selectUserIdsByGroupId(request.getReviewerGroupId());
-            if (scorerIds == null || scorerIds.isEmpty()) {
-                return ResponseVO.badRequest("评审组没有成员");
-            }
-
-            // 6. 创建项目
-            Project project = new Project();
-            project.setName(request.getName());
-            project.setDescription(request.getDescription() != null ? request.getDescription() : "");
-
-            LocalDateTime startDateTime = request.getStartDate();
-            LocalDateTime endDateTime = request.getEndDate();
-            log.info("项目开始时间"+startDateTime+"end"+endDateTime);
-            project.setStartDate(startDateTime);
-            project.setEndDate(endDateTime);
-
-            // 根据当前时间与项目时间范围的关系设置状态
-            LocalDateTime now = LocalDateTime.now();
-            String status;
-            if (now.isBefore(startDateTime)) {
-                status = "not_started";      // 未开始
-            } else if (now.isAfter(endDateTime)) {
-                status = "ended";            // 已结束
-            } else {
-                status = "ongoing";      // 进行中
-            }
-            project.setStatus(status);
-            log.info("项目状态 "+status);
-            project.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : true);
-            project.setStandardId(request.getStandardId());
-            project.setCreatorId(currentUserId);
-            project.setCreateTime(LocalDateTime.now());
-            project.setUpdateTime(LocalDateTime.now());
-
-            projectMapper.insert(project);
-
-            // 7. 创建小组关联（验证并关联project_group_info中的小组）
-            List<ProjectGroup> groups = new ArrayList<>();
-            for (Long groupInfoId : request.getGroupIds()) {
-                // 验证小组是否存在
-                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
-                if (groupInfo == null) {
-                    return ResponseVO.badRequest("小组不存在: " + groupInfoId);
-                }
-
-                ProjectGroup relation = new ProjectGroup();
-                relation.setProjectId(project.getId());
-                relation.setGroupInfoId(groupInfoId);
-                relation.setCreateTime(LocalDateTime.now());
-                relation.setUpdateTime(LocalDateTime.now());
-                groups.add(relation);
-            }
-            if (!groups.isEmpty()) {
-                groupMapper.insertBatch(groups);
-            }
-
-            // 8. 创建打分用户关联（从评审组获取）
-            List<ProjectScorer> scorers = new ArrayList<>();
-            for (Long scorerId : scorerIds) {
-                User scorer = userMapper.selectById(scorerId);
-                if (scorer == null) {
-                    return ResponseVO.badRequest("评审组成员用户不存在: " + scorerId);
-                }
-                if (!"scorer".equals(scorer.getRole()) && !"admin".equals(scorer.getRole()) && !"super_admin".equals(scorer.getRole())) {
-                    return ResponseVO.badRequest("用户 " + scorerId + " 不是打分用户");
-                }
-
-                ProjectScorer scorerRel = new ProjectScorer();
-                scorerRel.setProjectId(project.getId());
-                scorerRel.setUserId(scorerId);
-                scorerRel.setCreateTime(LocalDateTime.now());
-                scorers.add(scorerRel);
-            }
-            if (!scorers.isEmpty()) {
-                scorerMapper.insertBatch(scorers);
-            }
-
-            // 9. 清除缓存
-            projectCacheUtil.clearAllProjectListCache();
-            projectCacheUtil.clearPlatformStatisticsCache();
-            
-            // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
-            clearUserProjectCaches(scorerIds, project.getId(), "createProjectWithGroup");
-
-            // 10. 构建响应
-            ProjectVO responseVO = new ProjectVO();
-            BeanUtils.copyProperties(project, responseVO);
-            responseVO.setGroupIds(request.getGroupIds());
-            responseVO.setScorerIds(scorerIds);
-
-            log.info("通过评审组创建项目成功: projectId={}, reviewerGroupId={}, scorerCount={}",
-                    project.getId(), request.getReviewerGroupId(), scorerIds.size());
-
-            return ResponseVO.success("创建成功", responseVO);
-
-        } catch (Exception e) {
-            log.error("通过评审组创建项目异常", e);
-            return ResponseVO.error("创建失败: " + e.getMessage());
         }
     }
 
