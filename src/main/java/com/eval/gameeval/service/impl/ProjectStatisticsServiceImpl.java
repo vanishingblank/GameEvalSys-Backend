@@ -687,6 +687,18 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
     private BigDecimal toScaledBigDecimal(Object value) {
         if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal decimalValue;
+        if (value instanceof BigDecimal bigDecimal) {
+            decimalValue = bigDecimal;
+        } else if (value instanceof Number number) {
+            decimalValue = BigDecimal.valueOf(number.doubleValue());
+        } else {
+            decimalValue = new BigDecimal(value.toString());
+        }
+        return decimalValue.setScale(2, RoundingMode.HALF_UP);
+    }
 
     public void warmupPlatformStatisticsCache() {
         try {
@@ -739,18 +751,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         } catch (Exception e) {
             log.error("全局热键预热异常: key={}", RedisKeyUtil.PLATFORM_STATISTICS_KEY, e);
         }
-    }
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-        BigDecimal decimalValue;
-        if (value instanceof BigDecimal bigDecimal) {
-            decimalValue = bigDecimal;
-        } else if (value instanceof Number number) {
-            decimalValue = BigDecimal.valueOf(number.doubleValue());
-        } else {
-            decimalValue = new BigDecimal(value.toString());
-        }
-        return decimalValue.setScale(2, RoundingMode.HALF_UP);
     }
 
     private Map<LocalDate, Long> toDailyLongMap(List<Map<String, Object>> rows, String valueKey) {
