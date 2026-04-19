@@ -40,15 +40,7 @@ public class ProjectCreateDTO implements Serializable {
     @Size(min = 1, message = "至少需要一个小组")
     private List<Long> groupIds;
 
-    /**
-     * 显式指定打分用户，和 reviewerGroupId 二选一。
-     */
-    @Size(min = 1, message = "至少需要一个打分用户")
-    private List<Long> scorerIds;
-
-    /**
-     * 通过评审组自动生成打分用户，和 scorerIds 二选一。
-     */
+    @NotNull(message = "评审组ID不能为空")
     @Min(value = 1, message = "评审组ID必须大于0")
     private Long reviewerGroupId;
 }

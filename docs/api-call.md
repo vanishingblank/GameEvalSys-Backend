@@ -532,10 +532,9 @@
   | isEnabled | boolean | 否 | 是否启用（默认true） |
   | standardId | number | 是 | 关联打分标准ID |
   | groupIds | array | 是 | 关联小组ID列表 |
-  | scorerIds | array | 条件必填 | 可参与打分的用户ID列表；与 `reviewerGroupId` 二选一 |
-  | reviewerGroupId | number | 条件必填 | 评审组ID，后端将自动绑定该评审组成员为打分用户；与 `scorerIds` 二选一 |
+  | reviewerGroupId | number | 是 | 评审组ID，后端将自动绑定该评审组成员为打分用户 |
 - **参数规则**：
-  - `scorerIds` 与 `reviewerGroupId` 不能同时传，且必须至少传一个。
+  - 创建项目时不再接收 `scorerIds`，打分用户统一由 `reviewerGroupId` 推导。
 - **响应示例**：
   ```json
   {
@@ -565,7 +564,17 @@
 - **请求方式**：PUT
 - **请求头**：`Authorization: Bearer {token}`
 - **路径参数**：`projectId` - 项目ID
-- **请求参数**：同创建项目（非必填）
+- **请求参数**：
+  | 参数名 | 类型 | 必填 | 说明 |
+  |--------|------|------|------|
+  | name | string | 否 | 项目名称 |
+  | description | string | 否 | 项目描述 |
+  | startDate | string | 否 | 起始日期（yyyy-MM-dd HH:mm） |
+  | endDate | string | 否 | 结束日期（yyyy-MM-dd HH:mm） |
+  | isEnabled | boolean | 否 | 是否启用 |
+  | standardId | number | 否 | 关联打分标准ID |
+  | groupIds | array | 否 | 关联小组ID列表 |
+  | scorerIds | array | 否 | 手动调整可参与打分的用户ID列表 |
 - **响应示例**：
   ```json
   {

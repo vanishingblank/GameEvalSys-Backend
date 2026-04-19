@@ -104,30 +104,16 @@ public class ProjectServiceImpl implements IProjectService {
                 resolvedGroupInfoIds.add(groupInfoId);
             }
 
-            // 5. 解析打分用户来源（scorerIds 与 reviewerGroupId 二选一）
-            boolean hasScorerIds = request.getScorerIds() != null && !request.getScorerIds().isEmpty();
-            boolean hasReviewerGroupId = request.getReviewerGroupId() != null;
-            if (hasScorerIds && hasReviewerGroupId) {
-                return ResponseVO.badRequest("scorerIds 与 reviewerGroupId 不能同时传入");
+            // 5. 通过评审组解析打分用户
+            ReviewerGroup reviewerGroup = reviewerGroupMapper.selectById(request.getReviewerGroupId());
+            if (reviewerGroup == null) {
+                return ResponseVO.badRequest("评审组不存在");
             }
-            if (!hasScorerIds && !hasReviewerGroupId) {
-                return ResponseVO.badRequest("至少需要提供 scorerIds 或 reviewerGroupId");
+            List<Long> resolvedScorerIds = reviewerGroupMemberMapper.selectUserIdsByGroupId(request.getReviewerGroupId());
+            if (resolvedScorerIds == null || resolvedScorerIds.isEmpty()) {
+                return ResponseVO.badRequest("评审组没有成员");
             }
-
-            List<Long> resolvedScorerIds;
-            if (hasReviewerGroupId) {
-                ReviewerGroup reviewerGroup = reviewerGroupMapper.selectById(request.getReviewerGroupId());
-                if (reviewerGroup == null) {
-                    return ResponseVO.badRequest("评审组不存在");
-                }
-                resolvedScorerIds = reviewerGroupMemberMapper.selectUserIdsByGroupId(request.getReviewerGroupId());
-                if (resolvedScorerIds == null || resolvedScorerIds.isEmpty()) {
-                    return ResponseVO.badRequest("评审组没有成员");
-                }
-                resolvedScorerIds = resolvedScorerIds.stream().distinct().collect(Collectors.toList());
-            } else {
-                resolvedScorerIds = request.getScorerIds().stream().distinct().collect(Collectors.toList());
-            }
+            resolvedScorerIds = resolvedScorerIds.stream().distinct().collect(Collectors.toList());
 
             // 6. 创建项目
             Project project = new Project();
