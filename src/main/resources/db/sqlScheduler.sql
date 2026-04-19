@@ -17,14 +17,14 @@ DO
 BEGIN
     UPDATE project
     SET status = CASE
-                 WHEN CURDATE() < start_date THEN 'not_started'
-                 WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-                 WHEN CURDATE() > end_date THEN 'ended'
+                 WHEN NOW() < start_date THEN 'not_started'
+                 WHEN NOW() > end_date THEN 'ended'
+                 ELSE 'ongoing'
     END
     WHERE status != CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
     END;
 
     -- 可选：记录执行日志
@@ -45,14 +45,14 @@ DO
 BEGIN
     UPDATE project
     SET status = CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
     END
     WHERE status != CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
     END;
 END$$
 

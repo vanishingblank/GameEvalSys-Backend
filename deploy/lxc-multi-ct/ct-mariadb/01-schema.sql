@@ -67,8 +67,8 @@ CREATE TABLE `project` (
                            `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目ID',
                            `name` varchar(200) NOT NULL COMMENT '项目名称',
                            `description` varchar(1000) DEFAULT '' COMMENT '项目描述',
-                           `start_date` date NOT NULL COMMENT '起始日期',
-                           `end_date` date NOT NULL COMMENT '结束日期',
+                           `start_date` datetime NOT NULL COMMENT '起始时间',
+                           `end_date` datetime NOT NULL COMMENT '结束时间',
                            `status` varchar(20) DEFAULT 'not_started' COMMENT '项目状态：not_started-未开始/ongoing-进行中/ended-已结束',
                            `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
                            `standard_id` bigint NOT NULL COMMENT '关联打分标准ID',
@@ -202,14 +202,14 @@ DO
 BEGIN
     UPDATE project
     SET status = CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
     END
     WHERE status != CASE
-        WHEN CURDATE() < start_date THEN 'not_started'
-        WHEN CURDATE() BETWEEN start_date AND end_date THEN 'ongoing'
-        WHEN CURDATE() > end_date THEN 'ended'
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
     END;
 END$$
 
