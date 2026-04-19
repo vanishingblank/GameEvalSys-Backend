@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -95,8 +96,8 @@ public class ProjectServiceImpl implements IProjectService {
             project.setName(request.getName());
             project.setDescription(request.getDescription() != null ? request.getDescription() : "");
 
-            LocalDateTime startDateTime = request.getStartDate().atStartOfDay();
-            LocalDateTime endDateTime = request.getEndDate().atStartOfDay();
+            LocalDateTime startDateTime = request.getStartDate();
+            LocalDateTime endDateTime = request.getEndDate();
             log.info("项目开始时间"+startDateTime+"end"+endDateTime);
             project.setStartDate(startDateTime);
             project.setEndDate(endDateTime);
@@ -169,6 +170,7 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 7. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
+            projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
             clearUserProjectCaches(request.getScorerIds(), project.getId(), "createProject");
@@ -222,15 +224,20 @@ public class ProjectServiceImpl implements IProjectService {
 
             updateProject.setName(request.getName() != null ? request.getName() : project.getName());
             updateProject.setDescription(request.getDescription() != null ? request.getDescription() : project.getDescription());
-            updateProject.setStartDate(request.getStartDate() != null ? request.getStartDate().atStartOfDay() : project.getStartDate());
-            updateProject.setEndDate(request.getEndDate() != null ? request.getEndDate().atStartOfDay() : project.getEndDate());
+            LocalDateTime effectiveStartDate = request.getStartDate() != null ? request.getStartDate() : project.getStartDate();
+            LocalDateTime effectiveEndDate = request.getEndDate() != null ? request.getEndDate() : project.getEndDate();
+            if (effectiveStartDate.isAfter(effectiveEndDate)) {
+                return ResponseVO.badRequest("起始日期不能晚于结束日期");
+            }
+            updateProject.setStartDate(effectiveStartDate);
+            updateProject.setEndDate(effectiveEndDate);
             updateProject.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : project.getIsEnabled());
             updateProject.setStandardId(request.getStandardId() != null ? request.getStandardId() : project.getStandardId());
             // 根据当前时间与项目时间范围的关系设置状态
 
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime startDateTime=project.getStartDate();
-            LocalDateTime endDateTime=project.getEndDate();
+            LocalDateTime startDateTime = effectiveStartDate;
+            LocalDateTime endDateTime = effectiveEndDate;
             String status;
             if (now.isBefore(startDateTime)) {
                 status = "not_started";      // 未开始
@@ -285,6 +292,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
+            projectCacheUtil.clearPlatformStatisticsCache();          // 清除平台统计缓存
 
             List<Long> currentScorerIds = scorerMapper.selectByProjectId(projectId).stream()
                     .map(ProjectScorer::getUserId)
@@ -333,6 +341,7 @@ public class ProjectServiceImpl implements IProjectService {
 
             projectCacheUtil.clearProjectDetailCache(projectId);
             projectCacheUtil.clearAllProjectListCache();
+            projectCacheUtil.clearPlatformStatisticsCache();
             
             // 清除所有相关用户的授权项目缓存
             List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
@@ -358,6 +367,9 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
+            // 1.1 兜底纠偏项目状态并触发缓存失效闭环
+            reconcileProjectStatuses("getProjectList");
+
             // 2. 处理分页
             int page = query.getPage() != null ? query.getPage() : 1;
             int size = query.getSize() != null ? query.getSize() : 10;
@@ -377,8 +389,13 @@ public class ProjectServiceImpl implements IProjectService {
             if (cache != null) {
                 @SuppressWarnings("unchecked")
                 ProjectPageVO cachedPage = (ProjectPageVO) cache;
+                List<Long> staleProjectIds = collectStaleProjectIdsFromPage(cachedPage);
+                if (!staleProjectIds.isEmpty()) {
+                    invalidateStatusChangeCaches(staleProjectIds, "getProjectList:cacheHitStale");
+                } else {
                 log.info("【缓存命中】获取项目列表: key={}, total={}", cacheKey, cachedPage.getTotal());
                 return ResponseVO.success("查询成功", cachedPage);
+                }
             }
             // 5. 查询项目列表
             log.info("【缓存未命中】查询数据库: key={}", cacheKey);
@@ -431,6 +448,9 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
+            // 1.1 兜底纠偏项目状态并触发缓存失效闭环
+            reconcileProjectStatuses("getProjectDetail");
+
             // 2. 缓存穿透防护 - 检查空值缓存
             if (projectCacheUtil.isProjectNullCached(projectId)) {
                 log.warn("【缓存穿透防护】空值缓存命中: projectId={}", projectId);
@@ -441,8 +461,12 @@ public class ProjectServiceImpl implements IProjectService {
             Object cache = projectCacheUtil.getProjectDetailCache(projectId);
             if (cache != null) {
                 ProjectVO cachedVO = (ProjectVO) cache;
+                if (!isStatusFresh(cachedVO.getStatus(), cachedVO.getStartDate(), cachedVO.getEndDate())) {
+                    invalidateStatusChangeCaches(Collections.singletonList(projectId), "getProjectDetail:cacheHitStale");
+                } else {
                 log.info("【缓存命中】获取项目详情: projectId={}", projectId);
                 return ResponseVO.success("查询成功", cachedVO);
+                }
             }
 
             // 4. 缓存未命中：查询数据库
@@ -489,6 +513,9 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.unauthorized("Token无效");
             }
 
+            // 1.1 兜底纠偏项目状态并触发缓存失效闭环
+            reconcileProjectStatuses("getAuthorizedProjects");
+
             ProjectQueryDTO safeQuery = query != null ? query : new ProjectQueryDTO();
             int page = safeQuery.getPage() != null ? safeQuery.getPage() : 1;
             int size = safeQuery.getSize() != null ? safeQuery.getSize() : 10;
@@ -510,9 +537,14 @@ public class ProjectServiceImpl implements IProjectService {
             Object cache = projectCacheUtil.getAuthorizedProjectsCache(cacheKey);
             if (cache != null) {
                 ProjectPageVO cachedPage = (ProjectPageVO) cache;
+                List<Long> staleProjectIds = collectStaleProjectIdsFromPage(cachedPage);
+                if (!staleProjectIds.isEmpty()) {
+                    invalidateStatusChangeCaches(staleProjectIds, "getAuthorizedProjects:cacheHitStale");
+                } else {
                 log.info("【缓存命中】获取授权项目: userId={}, status={}, isEnabled={}, keyWords={}, page={}, size={}, total={}",
                         currentUserId, safeQuery.getStatus(), safeQuery.getIsEnabled(), safeQuery.getKeyWords(), page, size, cachedPage.getTotal());
                 return ResponseVO.success("查询成功", cachedPage);
+                }
             }
 
             // 4. 缓存未命中：查询数据库
@@ -613,8 +645,8 @@ public class ProjectServiceImpl implements IProjectService {
             project.setName(request.getName());
             project.setDescription(request.getDescription() != null ? request.getDescription() : "");
 
-            LocalDateTime startDateTime = request.getStartDate().atStartOfDay();
-            LocalDateTime endDateTime = request.getEndDate().atStartOfDay();
+            LocalDateTime startDateTime = request.getStartDate();
+            LocalDateTime endDateTime = request.getEndDate();
             log.info("项目开始时间"+startDateTime+"end"+endDateTime);
             project.setStartDate(startDateTime);
             project.setEndDate(endDateTime);
@@ -682,6 +714,7 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache();
+            projectCacheUtil.clearPlatformStatisticsCache();
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
             clearUserProjectCaches(scorerIds, project.getId(), "createProjectWithGroup");
@@ -727,5 +760,89 @@ public class ProjectServiceImpl implements IProjectService {
             result.addAll(userIds2);
         }
         return new ArrayList<>(result);
+    }
+
+    /**
+     * 兜底同步项目状态并补齐缓存失效闭环：project list/detail、authorized、overview、platform。
+     */
+    private void reconcileProjectStatuses(String scene) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            List<Long> mismatchProjectIds = projectMapper.selectStatusMismatchProjectIds(now);
+            if (mismatchProjectIds == null || mismatchProjectIds.isEmpty()) {
+                return;
+            }
+
+            int updatedCount = projectMapper.syncStatusByNow(now);
+            if (updatedCount <= 0) {
+                return;
+            }
+
+            invalidateStatusChangeCaches(mismatchProjectIds, "reconcileProjectStatuses:" + scene);
+            log.info("项目状态兜底同步完成: scene={}, updatedCount={}, affectedProjectCount={}",
+                    scene, updatedCount, mismatchProjectIds.size());
+        } catch (Exception e) {
+            log.error("项目状态兜底同步异常: scene={}", scene, e);
+        }
+    }
+
+    private void invalidateStatusChangeCaches(List<Long> projectIds, String scene) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> distinctProjectIds = new HashSet<>(projectIds);
+        projectCacheUtil.clearAllProjectListCache();
+        projectCacheUtil.clearPlatformStatisticsCache();
+
+        Set<Long> affectedUserIds = new HashSet<>();
+        for (Long projectId : distinctProjectIds) {
+            if (projectId == null) {
+                continue;
+            }
+                projectCacheUtil.clearProjectDetailCache(projectId);
+                List<ProjectScorer> scorers = scorerMapper.selectByProjectId(projectId);
+                for (ProjectScorer scorer : scorers) {
+                    if (scorer.getUserId() != null) {
+                        affectedUserIds.add(scorer.getUserId());
+                    }
+                }
+        }
+
+        clearUserProjectCaches(new ArrayList<>(affectedUserIds), null, scene);
+        log.info("项目状态缓存失效完成: scene={}, affectedProjectCount={}, affectedUserCount={}",
+                scene, distinctProjectIds.size(), affectedUserIds.size());
+    }
+
+    private List<Long> collectStaleProjectIdsFromPage(ProjectPageVO pageVO) {
+        if (pageVO == null || pageVO.getList() == null || pageVO.getList().isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> staleProjectIds = new ArrayList<>();
+        for (ProjectVO projectVO : pageVO.getList()) {
+            if (projectVO == null || projectVO.getId() == null) {
+                continue;
+            }
+            if (!isStatusFresh(projectVO.getStatus(), projectVO.getStartDate(), projectVO.getEndDate())) {
+                staleProjectIds.add(projectVO.getId());
+            }
+        }
+        return staleProjectIds;
+    }
+
+    private boolean isStatusFresh(String cachedStatus, LocalDateTime startDate, LocalDateTime endDate) {
+        if (cachedStatus == null || startDate == null || endDate == null) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        String expectedStatus;
+        if (now.isBefore(startDate)) {
+            expectedStatus = "not_started";
+        } else if (now.isAfter(endDate)) {
+            expectedStatus = "ended";
+        } else {
+            expectedStatus = "ongoing";
+        }
+        return expectedStatus.equals(cachedStatus);
     }
 }

@@ -16,6 +16,14 @@ public interface ProjectMapper {
             "FROM project WHERE id = #{id}")
     Project selectById(@Param("id") Long id);
 
+    @Select("SELECT id FROM project " +
+            "WHERE status <> CASE " +
+            "  WHEN #{now} < start_date THEN 'not_started' " +
+            "  WHEN #{now} > end_date THEN 'ended' " +
+            "  ELSE 'ongoing' " +
+            "END")
+    List<Long> selectStatusMismatchProjectIds(@Param("now") LocalDateTime now);
+
     @Select("<script>" +
             "SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
             "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
@@ -208,6 +216,20 @@ public interface ProjectMapper {
 
     @Update("UPDATE project SET status = 'ended', update_time = #{updateTime} WHERE id = #{id}")
     int endProject(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
+
+    @Update("UPDATE project " +
+            "SET status = CASE " +
+            "  WHEN #{now} < start_date THEN 'not_started' " +
+            "  WHEN #{now} > end_date THEN 'ended' " +
+            "  ELSE 'ongoing' " +
+            "END, " +
+            "update_time = #{now} " +
+            "WHERE status <> CASE " +
+            "  WHEN #{now} < start_date THEN 'not_started' " +
+            "  WHEN #{now} > end_date THEN 'ended' " +
+            "  ELSE 'ongoing' " +
+            "END")
+    int syncStatusByNow(@Param("now") LocalDateTime now);
 
     // ========== 删除 ==========
     @Delete("DELETE FROM project WHERE id = #{id}")

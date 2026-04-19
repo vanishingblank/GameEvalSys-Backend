@@ -161,4 +161,13 @@ public class ProjectCacheUtil {
             log.debug("【项目小组缓存】清除(key不存在或失败): key={}", key);
         }
     }
+
+    public void clearPlatformStatisticsCache() {
+        try {
+            redisBaseUtil.delete(RedisKeyUtil.PLATFORM_STATISTICS_KEY);
+            log.info("【缓存清除】清除平台统计缓存成功: key={}", RedisKeyUtil.PLATFORM_STATISTICS_KEY);
+        } catch (Exception e) {
+            log.error("【缓存清除】清除平台统计缓存异常", e);
+        }
+    }
 }

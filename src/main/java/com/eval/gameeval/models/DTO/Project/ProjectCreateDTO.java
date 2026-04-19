@@ -1,12 +1,13 @@
 package com.eval.gameeval.models.DTO.Project;
 
 import jakarta.validation.constraints.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -22,10 +23,12 @@ public class ProjectCreateDTO implements Serializable {
     private String description;
 
     @NotNull(message = "起始日期不能为空")
-    private LocalDate startDate;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    private LocalDateTime startDate;
 
     @NotNull(message = "结束日期不能为空")
-    private LocalDate endDate;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    private LocalDateTime endDate;
 
     private Boolean isEnabled = true;
 
