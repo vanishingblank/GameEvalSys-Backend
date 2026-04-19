@@ -462,4 +462,24 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     private boolean isAdmin(User user) {
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
     }
+
+    public void warmupStandardListCache() {
+        try {
+            if (standardCacheUtil.getStandardListCache() != null) {
+                return;
+            }
+
+            List<ScoringStandard> standards = standardMapper.selectAll();
+            List<ScoringStandardVO> standardVOs = standards.stream().map(standard -> {
+                List<ScoringIndicatorCategory> categories = categoryMapper.selectByStandardId(standard.getId());
+                List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(standard.getId());
+                return buildStandardVO(standard, categories, indicators);
+            }).collect(Collectors.toList());
+
+            standardCacheUtil.cacheStandardList(standardVOs);
+            log.info("全局热键预热完成: key={}, count={}", "scoring:standard:list", standardVOs.size());
+        } catch (Exception e) {
+            log.error("全局热键预热异常: scoring:standard:list", e);
+        }
+    }
 }

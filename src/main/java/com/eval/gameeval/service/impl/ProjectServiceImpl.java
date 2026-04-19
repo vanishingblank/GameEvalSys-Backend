@@ -762,6 +762,54 @@ public class ProjectServiceImpl implements IProjectService {
         return new ArrayList<>(result);
     }
 
+    public void reconcileProjectStatusesByScheduler() {
+        reconcileProjectStatuses("scheduler");
+    }
+
+    public void warmupDefaultProjectListCache() {
+        try {
+            reconcileProjectStatuses("warmupDefaultProjectListCache");
+
+            int page = 1;
+            int size = 10;
+            int offset = 0;
+            String cacheKey = RedisKeyUtil.buildProjectListKey(null, true, null, page, size);
+            if (projectCacheUtil.getProjectListCache(cacheKey) != null) {
+                return;
+            }
+
+            List<Project> projects = projectMapper.selectPage(offset, size, null, true, null);
+            Long total = projectMapper.countTotal(null, true, null);
+
+            List<ProjectVO> projectVOs = new ArrayList<>();
+            for (Project project : projects) {
+                ProjectVO vo = new ProjectVO();
+                BeanUtils.copyProperties(project, vo);
+
+                List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
+                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
+                vo.setGroupIds(groupIds);
+
+                List<ProjectScorer> scorers = scorerMapper.selectByProjectId(project.getId());
+                List<Long> scorerIds = scorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
+                vo.setScorerIds(scorerIds);
+
+                projectVOs.add(vo);
+            }
+
+            ProjectPageVO pageVO = new ProjectPageVO();
+            pageVO.setList(projectVOs);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
+
+            projectCacheUtil.cacheProjectList(cacheKey, pageVO);
+            log.info("全局热键预热完成: key={}, count={}, total={}", cacheKey, projectVOs.size(), total);
+        } catch (Exception e) {
+            log.error("全局热键预热异常: project:list 默认首页", e);
+        }
+    }
+
     /**
      * 兜底同步项目状态并补齐缓存失效闭环：project list/detail、authorized、overview、platform。
      */

@@ -687,6 +687,59 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
     private BigDecimal toScaledBigDecimal(Object value) {
         if (value == null) {
+
+    public void warmupPlatformStatisticsCache() {
+        try {
+            String cacheKey = RedisKeyUtil.PLATFORM_STATISTICS_KEY;
+            if (redisBaseUtil.get(cacheKey) != null) {
+                return;
+            }
+
+            final int days = 30;
+            LocalDate today = LocalDate.now();
+            LocalDate startDate = today.minusDays(days - 1L);
+            LocalDateTime startTime = startDate.atStartOfDay();
+            LocalDateTime endTime = today.plusDays(1L).atStartOfDay();
+
+            Long baseProjects = projectMapper.countProjectsBefore(startTime);
+            Map<LocalDate, Long> dailyProjectMap = toDailyLongMap(
+                    projectMapper.selectDailyProjectCount(startTime, endTime), "cnt");
+            Map<LocalDate, Long> dailyScoreMap = toDailyLongMap(
+                    projectMapper.selectDailyScoreCount(startTime, endTime), "cnt");
+            Map<LocalDate, BigDecimal> dailyAverageScoreMap = toDailyBigDecimalMap(
+                    projectMapper.selectDailyAverageScore(startTime, endTime), "avgScore");
+
+            List<String> dateAxis = new ArrayList<>(days);
+            List<Long> projectTrend = new ArrayList<>(days);
+            List<Long> scoreTrend = new ArrayList<>(days);
+            List<BigDecimal> averageScoreTrend = new ArrayList<>(days);
+
+            long runningProjects = baseProjects != null ? baseProjects : 0L;
+            for (int i = 0; i < days; i++) {
+                LocalDate date = startDate.plusDays(i);
+                dateAxis.add(date.toString());
+
+                long todayProjectIncrease = dailyProjectMap.getOrDefault(date, 0L);
+                runningProjects += todayProjectIncrease;
+                projectTrend.add(runningProjects);
+
+                scoreTrend.add(dailyScoreMap.getOrDefault(date, 0L));
+                averageScoreTrend.add(dailyAverageScoreMap.getOrDefault(
+                        date, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)));
+            }
+
+            PlatformStatisticsVO vo = new PlatformStatisticsVO()
+                    .setDates(dateAxis)
+                    .setProjectTrend(projectTrend)
+                    .setScoreTrend(scoreTrend)
+                    .setAverageScoreTrend(averageScoreTrend);
+
+            redisBaseUtil.set(cacheKey, vo, RedisKeyUtil.PLATFORM_STATISTICS_TTL);
+            log.info("全局热键预热完成: key={}, points={}", cacheKey, days);
+        } catch (Exception e) {
+            log.error("全局热键预热异常: key={}", RedisKeyUtil.PLATFORM_STATISTICS_KEY, e);
+        }
+    }
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
         BigDecimal decimalValue;
