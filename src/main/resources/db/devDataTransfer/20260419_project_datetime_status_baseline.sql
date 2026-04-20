@@ -18,3 +18,33 @@ WHERE status <> CASE
     WHEN NOW() > end_date THEN 'ended'
     ELSE 'ongoing'
 END;
+
+-- 事件调度器更新
+-- 1.启用事件调度器
+SET GLOBAL event_scheduler = ON;
+
+-- 2.先删除旧的事件（如果存在）
+DROP EVENT IF EXISTS update_project_status;
+
+-- 3. 创建新事件
+DELIMITER $$
+
+CREATE EVENT IF NOT EXISTS update_project_status
+ON SCHEDULE EVERY 1 DAY
+STARTS TIMESTAMP(CURRENT_DATE, '00:01:00')
+DO
+BEGIN
+    UPDATE project
+    SET status = CASE
+        WHEN NOW() < start_date THEN 'not_started'
+        WHEN NOW() > end_date THEN 'ended'
+        ELSE 'ongoing'
+    END
+    WHERE status <> CASE
+            WHEN NOW() < start_date THEN 'not_started'
+            WHEN NOW() > end_date THEN 'ended'
+            ELSE 'ongoing'
+    END;
+END$$
+
+DELIMITER ;
