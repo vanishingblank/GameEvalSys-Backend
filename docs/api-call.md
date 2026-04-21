@@ -322,6 +322,36 @@
   }
   ```
 
+### 2.9 获取用户概览统计
+
+- **接口地址**：`/users/overview`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **权限要求**：仅超级管理员、管理员可调用
+- **请求参数**：无
+- **响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": {
+    "totalUsers": 120,
+    "adminUsers": 6,
+    "scorerUsers": 88,
+    "normalUsers": 26
+  }
+}
+```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | totalUsers | number | 用户总数 |
+  | adminUsers | number | 管理员与超级管理员总数 |
+  | scorerUsers | number | 打分用户总数 |
+  | normalUsers | number | 普通用户总数 |
+
 ## 3. 打分标准管理模块（管理员）
 
 ### 3.1 创建打分标准
@@ -515,6 +545,32 @@
   }
   ```
 
+### 3.5 获取打分标准概览统计
+
+- **接口地址**：`/scoring-standards/overview`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **权限要求**：仅超级管理员、管理员可调用
+- **请求参数**：无
+- **响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": {
+    "totalStandards": 23,
+    "enabledStandards": 20
+  }
+}
+```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | totalStandards | number | 打分标准总数 |
+  | enabledStandards | number | 已启用打分标准总数 |
+
 ## 4. 项目管理模块（管理员）
 
 ### 4.1 创建项目
@@ -655,6 +711,36 @@
   | page | number | 否 | 页码（默认1） |
   | size | number | 否 | 每页条数（默认10） |
 - **响应示例**：同上（列表格式）
+
+### 4.7 获取项目概览统计
+
+- **接口地址**：`/projects/overview`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **权限要求**：仅超级管理员、管理员可调用
+- **请求参数**：无
+- **响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": {
+    "totalProjects": 42,
+    "notStartedProjects": 10,
+    "ongoingProjects": 25,
+    "endedProjects": 7
+  }
+}
+```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | totalProjects | number | 项目总数 |
+  | notStartedProjects | number | 未开始项目数（status=not_started） |
+  | ongoingProjects | number | 进行中项目数（status=ongoing） |
+  | endedProjects | number | 已截止项目数（status=ended） |
 
 ## 5. 小组管理模块（管理员）
 
@@ -843,6 +929,36 @@
   }
 }
 ```
+
+### 5.6 获取小组概览统计
+
+- **接口地址**：`/groups/overview`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **权限要求**：仅超级管理员、管理员可调用
+- **请求参数**：无
+- **响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": {
+    "totalGroups": 66,
+    "activeGroups": 61,
+    "totalMembers": 314,
+    "avgGroupSize": 4.76
+  }
+}
+```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | totalGroups | number | 小组总数 |
+  | activeGroups | number | 启用小组总数 |
+  | totalMembers | number | 小组成员总数 |
+  | avgGroupSize | number | 平均小组规模（保留2位小数） |
 
 ## 6. 打分模块（打分用户）
 
@@ -1305,6 +1421,36 @@ GET /projects/114514/export/group-indicator-items?format=excel
   }
 }
 ```
+
+### 8.5 获取评审组概览统计
+
+- **接口地址**：`/reviewer-groups/overview`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **权限要求**：仅超级管理员、管理员可调用
+- **请求参数**：无
+- **响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": {
+    "totalGroups": 18,
+    "activeGroups": 16,
+    "totalMembers": 92,
+    "avgGroupSize": 5.11
+  }
+}
+```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | totalGroups | number | 评审组总数 |
+  | activeGroups | number | 启用评审组总数 |
+  | totalMembers | number | 评审组成员总数 |
+  | avgGroupSize | number | 平均评审组规模（保留2位小数） |
 
 ---
 
