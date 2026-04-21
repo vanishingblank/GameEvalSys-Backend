@@ -11,11 +11,15 @@ CREATE TABLE `sys_user` (
                             `name` varchar(50) NOT NULL COMMENT '真实姓名',
                             `role` varchar(20) NOT NULL COMMENT '角色：super_admin/管理员 admin/打分用户 scorer/普通用户 normal',
                             `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
+                            `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '软删除：0-否 1-是',
+                            `deleted_time` datetime DEFAULT NULL COMMENT '删除时间',
+                            `delete_token` bigint NOT NULL DEFAULT 0 COMMENT '删除占位token，活跃=0，已删=唯一值',
                             `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                             PRIMARY KEY (`id`),
-                            UNIQUE KEY `uk_username` (`username`),
-                            KEY `idx_role` (`role`)
+                            UNIQUE KEY `uk_username_token` (`username`,`delete_token`),
+                            KEY `idx_role` (`role`),
+                            KEY `idx_is_deleted_enabled` (`is_deleted`,`is_enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
 -- 打分标准主表
@@ -71,12 +75,14 @@ CREATE TABLE `project` (
                            `end_date` datetime NOT NULL COMMENT '结束时间',
                            `status` varchar(20) DEFAULT 'not_started' COMMENT '项目状态：not_started-未开始/ongoing-进行中/ended-已结束',
                            `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
+                           `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '软删除：0-否 1-是',
                            `standard_id` bigint NOT NULL COMMENT '关联打分标准ID',
                            `creator_id` bigint NOT NULL COMMENT '创建人ID',
                            `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                            `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                            PRIMARY KEY (`id`),
                            KEY `idx_status` (`status`),
+                           KEY `idx_project_is_deleted` (`is_deleted`),
                            KEY `idx_standard_id` (`standard_id`),
                            KEY `idx_creator_id` (`creator_id`),
                            CONSTRAINT `fk_project_standard` FOREIGN KEY (`standard_id`) REFERENCES `scoring_standard` (`id`) ON DELETE RESTRICT,
@@ -91,9 +97,11 @@ CREATE TABLE `project_group_info` (
                                       `name` varchar(100) NOT NULL COMMENT '小组名称',
                                       `description` varchar(500) DEFAULT '' COMMENT '小组描述',
                                       `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
+                                      `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '软删除：0-否 1-是',
                                       `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                       `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                                      PRIMARY KEY (`id`)
+                                      PRIMARY KEY (`id`),
+                                      KEY `idx_group_info_is_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='小组信息主表';
 
 -- ==========================================
@@ -166,10 +174,12 @@ CREATE TABLE `reviewer_group` (
                                   `description` varchar(500) DEFAULT '' COMMENT '评审组描述',
                                   `creator_id` bigint NOT NULL COMMENT '创建人ID',
                                   `is_enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用：1-是 0-否',
+                                  `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '软删除：0-否 1-是',
                                   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                   PRIMARY KEY (`id`),
-                                  KEY `idx_creator_id` (`creator_id`)
+                                  KEY `idx_creator_id` (`creator_id`),
+                                  KEY `idx_reviewer_group_is_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评审组主表';
 
 -- 评审组成员关联表
