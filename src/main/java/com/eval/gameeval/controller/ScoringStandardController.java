@@ -5,6 +5,7 @@ import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardOverviewVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.service.IScoringStandardService;
@@ -59,6 +60,15 @@ public class ScoringStandardController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<ScoringStandardVO> response = scoringStandardService.getStandardDetail(token, standardId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/overview")
+    public ResponseEntity<ResponseVO<ScoringStandardOverviewVO>> getStandardOverview(
+            @RequestHeader("Authorization") String authorization) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<ScoringStandardOverviewVO> response = scoringStandardService.getStandardOverview(token);
         return ResponseEntity.ok(response);
     }
 

@@ -8,6 +8,7 @@ import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardOverviewVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 import com.eval.gameeval.models.entity.ScoringIndicator;
@@ -15,6 +16,7 @@ import com.eval.gameeval.models.entity.ScoringIndicatorCategory;
 import com.eval.gameeval.models.entity.ScoringStandard;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IScoringStandardService;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.StandardCacheUtil;
 import jakarta.annotation.Resource;
@@ -52,6 +54,9 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
     @Resource
     private StandardCacheUtil standardCacheUtil;
+
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -133,6 +138,7 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
             ScoringStandardVO responseVO = buildStandardVO(standard, savedCategories, savedIndicators);
 
             standardCacheUtil.clearStandardCache();
+            overviewCacheUtil.clearStandardOverviewCache();
             log.info("创建打分标准成功: standardId={}, creatorId={}", standard.getId(), currentUserId);
             return ResponseVO.success("创建成功", responseVO);
         } catch (Exception e) {
@@ -373,12 +379,54 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
             standardCacheUtil.clearStandardCache();
             standardCacheUtil.clearStandardDetailCache(standardId);
+            overviewCacheUtil.clearStandardOverviewCache();
             log.info("编辑打分标准成功: standardId={}, operatorId={}", standardId, currentUserId);
 
             return ResponseVO.success("编辑成功", null);
         } catch (Exception e) {
             log.error("编辑打分标准异常: standardId={}", standardId, e);
             return ResponseVO.error("编辑失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<ScoringStandardOverviewVO> getStandardOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以查看打分标准概览");
+            }
+
+            Object cache = overviewCacheUtil.getStandardOverviewCache();
+            if (cache != null) {
+                ScoringStandardOverviewVO cachedOverview = (ScoringStandardOverviewVO) cache;
+                log.info("【缓存命中】查询打分标准概览: totalStandards={}", cachedOverview.getTotalStandards());
+                return ResponseVO.success("查询成功", cachedOverview);
+            }
+
+            Map<String, Object> overviewMap = standardMapper.selectStandardOverview();
+            if (overviewMap == null) {
+                overviewMap = new HashMap<>();
+            }
+
+            ScoringStandardOverviewVO overviewVO = new ScoringStandardOverviewVO()
+                    .setTotalStandards(toLong(overviewMap.get("totalStandards")))
+                    .setEnabledStandards(toLong(overviewMap.get("enabledStandards")));
+
+                overviewCacheUtil.cacheStandardOverview(overviewVO);
+
+            return ResponseVO.success("查询成功", overviewVO);
+        } catch (Exception e) {
+            log.error("查询打分标准概览异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
@@ -461,6 +509,21 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
     private boolean isAdmin(User user) {
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            log.warn("统计字段转换失败: {}", value, e);
+            return 0L;
+        }
     }
 
     public void warmupStandardListCache() {

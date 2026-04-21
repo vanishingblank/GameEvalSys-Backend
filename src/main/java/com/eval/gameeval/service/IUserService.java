@@ -34,6 +34,9 @@ public interface IUserService {
      * @return 分页用户列表
      */
     ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query);
+
+    ResponseVO<UserOverviewVO> getUserOverview(String token);
+
     /**
      * 批量查询用户详细信息
      * @param token 认证Token

@@ -5,11 +5,13 @@ import com.eval.gameeval.models.DTO.Project.ProjectCreateDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
 import com.eval.gameeval.models.VO.ProjectCreateVO;
+import com.eval.gameeval.models.VO.ProjectOverviewVO;
 import com.eval.gameeval.models.VO.ProjectPageVO;
 import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectService;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
@@ -63,6 +65,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
+
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -188,6 +193,9 @@ public class ProjectServiceImpl implements IProjectService {
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
+            overviewCacheUtil.clearProjectOverviewCache();
+            overviewCacheUtil.clearStandardOverviewCache();
+            overviewCacheUtil.clearGroupOverviewCache();
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
             clearUserProjectCaches(resolvedScorerIds, project.getId(), "createProject");
@@ -311,6 +319,9 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
             projectCacheUtil.clearPlatformStatisticsCache();          // 清除平台统计缓存
+                overviewCacheUtil.clearProjectOverviewCache();
+                overviewCacheUtil.clearStandardOverviewCache();
+                overviewCacheUtil.clearGroupOverviewCache();
 
             List<Long> currentScorerIds = scorerMapper.selectByProjectId(projectId).stream()
                     .map(ProjectScorer::getUserId)
@@ -360,6 +371,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);
             projectCacheUtil.clearAllProjectListCache();
             projectCacheUtil.clearPlatformStatisticsCache();
+            overviewCacheUtil.clearProjectOverviewCache();
             
             // 清除所有相关用户的授权项目缓存
             List<ProjectScorer> projectScorers = scorerMapper.selectByProjectId(projectId);
@@ -620,6 +632,48 @@ public class ProjectServiceImpl implements IProjectService {
         }
     }
 
+    @Override
+    public ResponseVO<ProjectOverviewVO> getProjectOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null || (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole()))) {
+                return ResponseVO.forbidden("权限不足");
+            }
+
+            reconcileProjectStatuses("getProjectOverview");
+
+            Object cache = overviewCacheUtil.getProjectOverviewCache();
+            if (cache != null) {
+                ProjectOverviewVO cachedOverview = (ProjectOverviewVO) cache;
+                log.info("【缓存命中】查询项目概览: totalProjects={}", cachedOverview.getTotalProjects());
+                return ResponseVO.success("查询成功", cachedOverview);
+            }
+
+            java.util.Map<String, Object> overviewMap = projectMapper.selectProjectOverview();
+            if (overviewMap == null) {
+                overviewMap = java.util.Collections.emptyMap();
+            }
+
+            ProjectOverviewVO overviewVO = new ProjectOverviewVO()
+                    .setTotalProjects(toLong(overviewMap.get("totalProjects")))
+                    .setNotStartedProjects(toLong(overviewMap.get("notStartedProjects")))
+                    .setOngoingProjects(toLong(overviewMap.get("ongoingProjects")))
+                    .setEndedProjects(toLong(overviewMap.get("endedProjects")));
+
+                overviewCacheUtil.cacheProjectOverview(overviewVO);
+
+            return ResponseVO.success("查询成功", overviewVO);
+        } catch (Exception e) {
+            log.error("查询项目概览异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
     private void clearUserProjectCaches(List<Long> userIds, Long projectId, String scene) {
         if (userIds == null || userIds.isEmpty()) {
             return;
@@ -731,6 +785,7 @@ public class ProjectServiceImpl implements IProjectService {
         Set<Long> distinctProjectIds = new HashSet<>(projectIds);
         projectCacheUtil.clearAllProjectListCache();
         projectCacheUtil.clearPlatformStatisticsCache();
+        overviewCacheUtil.clearProjectOverviewCache();
 
         Set<Long> affectedUserIds = new HashSet<>();
         for (Long projectId : distinctProjectIds) {
@@ -781,5 +836,20 @@ public class ProjectServiceImpl implements IProjectService {
             expectedStatus = "ongoing";
         }
         return expectedStatus.equals(cachedStatus);
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            log.warn("统计字段转换失败: {}", value, e);
+            return 0L;
+        }
     }
 }

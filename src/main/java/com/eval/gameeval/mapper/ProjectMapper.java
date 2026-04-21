@@ -124,6 +124,14 @@ public interface ProjectMapper {
             "</script>")
     Long countByScorerId(@Param("userId") Long userId, @Param("status") String status, @Param("isEnabled") Boolean isEnabled, @Param("keyWords") String keyWords);
 
+    @Select("SELECT " +
+            "  COUNT(*) AS totalProjects, " +
+            "  COALESCE(SUM(CASE WHEN status = 'not_started' THEN 1 ELSE 0 END), 0) AS notStartedProjects, " +
+            "  COALESCE(SUM(CASE WHEN status = 'ongoing' THEN 1 ELSE 0 END), 0) AS ongoingProjects, " +
+            "  COALESCE(SUM(CASE WHEN status = 'ended' THEN 1 ELSE 0 END), 0) AS endedProjects " +
+            "FROM project WHERE is_deleted = 0")
+    Map<String, Object> selectProjectOverview();
+
     /**
      * 查询用户打分概览统计
      */

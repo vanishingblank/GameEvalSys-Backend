@@ -126,6 +126,16 @@ public class UserController {
         ResponseVO<UserPageVO> response = userService.getUserList(token, query);
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/overview")
+    public ResponseEntity<ResponseVO<UserOverviewVO>> getUserOverview(
+            @RequestHeader("Authorization") String authorization) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<UserOverviewVO> response = userService.getUserOverview(token);
+        return ResponseEntity.ok(response);
+    }
+
     /**
      * 批量查询用户详细信息
 

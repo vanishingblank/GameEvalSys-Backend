@@ -87,6 +87,15 @@ public class ProjectController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/overview")
+    public ResponseEntity<ResponseVO<ProjectOverviewVO>> getProjectOverview(
+            @RequestHeader("Authorization") String authorization) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<ProjectOverviewVO> response = projectService.getProjectOverview(token);
+        return ResponseEntity.ok(response);
+    }
+
     /**
      * 获取单个项目详情
      */

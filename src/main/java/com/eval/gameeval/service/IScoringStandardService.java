@@ -4,6 +4,7 @@ import com.eval.gameeval.models.DTO.Scoring.ScoringStandardCreateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardQueryDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringStandardUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ScoringStandardOverviewVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
 
@@ -31,6 +32,8 @@ public interface IScoringStandardService {
      * @return 打分标准详情
      */
     ResponseVO<ScoringStandardVO> getStandardDetail(String token, Long standardId);
+
+    ResponseVO<ScoringStandardOverviewVO> getStandardOverview(String token);
 
     /**
      * 编辑打分标准

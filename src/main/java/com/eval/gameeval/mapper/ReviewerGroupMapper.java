@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface ReviewerGroupMapper {
@@ -87,4 +88,13 @@ public interface ReviewerGroupMapper {
     // ========== 删除 ==========
     @Update("UPDATE reviewer_group SET is_deleted = 1, is_enabled = 0, update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
     int deleteById(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
+
+        @Select("SELECT " +
+                        "  COUNT(*) AS totalGroups, " +
+                        "  COALESCE(SUM(CASE WHEN rg.is_enabled = 1 THEN 1 ELSE 0 END), 0) AS activeGroups, " +
+                        "  COALESCE((SELECT COUNT(*) FROM reviewer_group_member rgm " +
+                        "            JOIN reviewer_group rg2 ON rg2.id = rgm.group_id " +
+                        "            WHERE rg2.is_deleted = 0), 0) AS totalMembers " +
+                        "FROM reviewer_group rg WHERE rg.is_deleted = 0")
+        Map<String, Object> selectReviewerGroupOverview();
 }

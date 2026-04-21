@@ -7,12 +7,14 @@ import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupCreateDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ReviewerGroupOverviewVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
 import com.eval.gameeval.models.entity.ReviewerGroup;
 import com.eval.gameeval.models.entity.ReviewerGroupMember;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IReviewerGroupService;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -20,9 +22,13 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -42,6 +48,9 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
 
     @Resource
     private ReviewerGroupMapper reviewerGroupMapper;
+
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -93,6 +102,7 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
             if (!members.isEmpty()) {
                 memberMapper.insertBatch(members);
             }
+            overviewCacheUtil.clearReviewerGroupOverviewCache();
 
             // 5. 构建响应
             ReviewerGroupVO responseVO = new ReviewerGroupVO();
@@ -329,11 +339,81 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
             log.info("编辑评审组成功: groupId={}, operator={}, changes={}",
                     groupId, currentUserId, changes);
 
+                overviewCacheUtil.clearReviewerGroupOverviewCache();
+
             return ResponseVO.success("编辑成功", responseVO);
 
         } catch (Exception e) {
             log.error("编辑评审组异常: groupId={}", groupId, e);
             return ResponseVO.error("编辑失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            boolean isAdmin = "super_admin".equals(currentUser.getRole()) || "admin".equals(currentUser.getRole());
+            if (!isAdmin) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以查看评审组概览");
+            }
+
+            Object cache = overviewCacheUtil.getReviewerGroupOverviewCache();
+            if (cache != null) {
+                ReviewerGroupOverviewVO cachedOverview = (ReviewerGroupOverviewVO) cache;
+                log.info("【缓存命中】查询评审组概览: totalGroups={}", cachedOverview.getTotalGroups());
+                return ResponseVO.success("查询成功", cachedOverview);
+            }
+
+            Map<String, Object> overviewMap = reviewerGroupMapper.selectReviewerGroupOverview();
+            if (overviewMap == null) {
+                overviewMap = Collections.emptyMap();
+            }
+
+            Long totalGroups = toLong(overviewMap.get("totalGroups"));
+            Long totalMembers = toLong(overviewMap.get("totalMembers"));
+            BigDecimal avgGroupSize = BigDecimal.ZERO;
+            if (totalGroups != null && totalGroups > 0) {
+                avgGroupSize = BigDecimal.valueOf(totalMembers)
+                        .divide(BigDecimal.valueOf(totalGroups), 2, RoundingMode.HALF_UP);
+            }
+
+            ReviewerGroupOverviewVO overviewVO = new ReviewerGroupOverviewVO()
+                    .setTotalGroups(totalGroups)
+                    .setActiveGroups(toLong(overviewMap.get("activeGroups")))
+                    .setTotalMembers(totalMembers)
+                    .setAvgGroupSize(avgGroupSize);
+
+                overviewCacheUtil.cacheReviewerGroupOverview(overviewVO);
+
+            return ResponseVO.success("查询成功", overviewVO);
+        } catch (Exception e) {
+            log.error("查询评审组概览异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            log.warn("统计字段转换失败: {}", value, e);
+            return 0L;
         }
     }
 }

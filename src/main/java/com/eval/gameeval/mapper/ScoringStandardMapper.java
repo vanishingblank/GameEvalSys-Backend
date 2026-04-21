@@ -4,6 +4,7 @@ import com.eval.gameeval.models.entity.ScoringStandard;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface ScoringStandardMapper {
@@ -38,4 +39,9 @@ public interface ScoringStandardMapper {
     @Select("SELECT id, creator_id AS creatorId, name, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_standard WHERE name = #{name} LIMIT 1")
     ScoringStandard selectByName(@Param("name") String name);
+
+    @Select("SELECT " +
+            "  (SELECT COUNT(*) FROM scoring_standard) AS totalStandards, " +
+            "  (SELECT COUNT(DISTINCT standard_id) FROM project WHERE is_deleted = 0 AND is_enabled = 1) AS enabledStandards")
+    Map<String, Object> selectStandardOverview();
 }

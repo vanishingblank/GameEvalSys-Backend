@@ -5,6 +5,7 @@ import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupCreateDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ReviewerGroupOverviewVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
 import com.eval.gameeval.service.IReviewerGroupService;
@@ -14,8 +15,6 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * 评审组控制器
@@ -76,6 +75,15 @@ public class ReviewerGroupController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<ReviewerGroupVO> response = reviewerGroupService.updateReviewerGroup(token, groupId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/overview")
+    public ResponseEntity<ResponseVO<ReviewerGroupOverviewVO>> getReviewerGroupOverview(
+            @RequestHeader("Authorization") String authorization) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<ReviewerGroupOverviewVO> response = reviewerGroupService.getReviewerGroupOverview(token);
         return ResponseEntity.ok(response);
     }
 

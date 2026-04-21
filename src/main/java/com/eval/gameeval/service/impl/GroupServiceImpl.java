@@ -10,6 +10,7 @@ import com.eval.gameeval.models.DTO.Group.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupQueryDTO;
 import com.eval.gameeval.models.DTO.Group.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
+import com.eval.gameeval.models.VO.GroupOverviewVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.Project;
@@ -18,6 +19,7 @@ import com.eval.gameeval.models.entity.ProjectGroupInfo;
 import com.eval.gameeval.models.entity.ProjectScorer;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IGroupService;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
@@ -25,9 +27,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -52,6 +58,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Resource
     private ProjectCacheUtil projectCacheUtil;
+
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -84,6 +93,7 @@ public class GroupServiceImpl implements IGroupService {
             groupInfo.setUpdateTime(now);
 
             groupInfoMapper.insert(groupInfo);
+            clearGroupOverviewCache("createGroup");
             log.debug("创建小组信息记录: groupInfoId={}, name={}", groupInfo.getId(), request.getName());
 
             // 4. 构建响应
@@ -188,7 +198,6 @@ public class GroupServiceImpl implements IGroupService {
             for (ProjectScorer scorer : projectScorers) {
                 projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
             }
-
             // 10. 构建响应
             GroupVO responseVO = new GroupVO();
             responseVO.setId(groupInfo.getId());
@@ -199,6 +208,7 @@ public class GroupServiceImpl implements IGroupService {
             responseVO.setIsEnabled(groupInfo.getIsEnabled());
             responseVO.setCreateTime(groupInfo.getCreateTime());
             responseVO.setUpdateTime(groupInfo.getUpdateTime());
+            clearGroupOverviewCache("addGroupToProject");
 
             log.info("将小组关联到项目成功: groupId={}, projectId={}, relationId={}, operatorId={}",
                     request.getGroupId(), request.getProjectId(), relation.getId(), currentUserId);
@@ -280,6 +290,7 @@ public class GroupServiceImpl implements IGroupService {
                     projectCacheUtil.clearAuthorizedProjectsCache(scorer.getUserId());
                 }
             }
+            clearGroupOverviewCache("updateGroup");
 
             // 6. 构建响应
             GroupVO responseVO = new GroupVO();
@@ -445,5 +456,77 @@ public class GroupServiceImpl implements IGroupService {
             log.error("查询小组列表异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public ResponseVO<GroupOverviewVO> getGroupOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以查看小组概览");
+            }
+
+            Object cache = overviewCacheUtil.getGroupOverviewCache();
+            if (cache != null) {
+                GroupOverviewVO cachedOverview = (GroupOverviewVO) cache;
+                log.info("【缓存命中】查询小组概览: totalGroups={}", cachedOverview.getTotalGroups());
+                return ResponseVO.success("查询成功", cachedOverview);
+            }
+
+            Map<String, Object> overviewMap = groupInfoMapper.selectGroupOverview();
+            if (overviewMap == null) {
+                overviewMap = Collections.emptyMap();
+            }
+
+            Long totalGroups = toLong(overviewMap.get("totalGroups"));
+            Long totalMembers = toLong(overviewMap.get("totalMembers"));
+            BigDecimal avgGroupSize = BigDecimal.ZERO;
+            if (totalGroups != null && totalGroups > 0) {
+                avgGroupSize = BigDecimal.valueOf(totalMembers)
+                        .divide(BigDecimal.valueOf(totalGroups), 2, RoundingMode.HALF_UP);
+            }
+
+            GroupOverviewVO overviewVO = new GroupOverviewVO()
+                    .setTotalGroups(totalGroups)
+                    .setActiveGroups(toLong(overviewMap.get("activeGroups")))
+                    .setTotalMembers(totalMembers)
+                    .setAvgGroupSize(avgGroupSize);
+
+                overviewCacheUtil.cacheGroupOverview(overviewVO);
+
+            return ResponseVO.success("查询成功", overviewVO);
+        } catch (Exception e) {
+            log.error("查询小组概览异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            log.warn("统计字段转换失败: {}", value, e);
+            return 0L;
+        }
+    }
+
+    private void clearGroupOverviewCache(String scene) {
+        overviewCacheUtil.clearGroupOverviewCache();
+        log.debug("已清理小组概览缓存: scene={}", scene);
     }
 }

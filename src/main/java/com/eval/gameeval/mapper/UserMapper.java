@@ -163,6 +163,14 @@ public interface UserMapper extends BaseMapper<User> {
     );
 
     @Select("SELECT " +
+            "  COUNT(*) AS totalUsers, " +
+            "  COALESCE(SUM(CASE WHEN role IN ('super_admin', 'admin') THEN 1 ELSE 0 END), 0) AS adminUsers, " +
+            "  COALESCE(SUM(CASE WHEN role = 'scorer' THEN 1 ELSE 0 END), 0) AS scorerUsers, " +
+            "  COALESCE(SUM(CASE WHEN role = 'normal' THEN 1 ELSE 0 END), 0) AS normalUsers " +
+            "FROM sys_user WHERE is_deleted = 0")
+    Map<String, Object> selectUserOverview();
+
+    @Select("SELECT " +
             "id, username, password, name, role, " +
             "is_enabled AS isEnabled, " +
             "create_time AS createTime, " +

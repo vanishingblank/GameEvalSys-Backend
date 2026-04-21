@@ -16,6 +16,7 @@ import com.eval.gameeval.models.entity.ReviewerGroup;
 import com.eval.gameeval.models.entity.ReviewerGroupMember;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -30,6 +31,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +50,9 @@ public class UserServiceImpl implements IUserService {
     private RedisToken redisToken;
     @Resource
     private PasswordEncoder passwordEncoder;
+
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -186,11 +191,16 @@ public class UserServiceImpl implements IUserService {
             }
 
             if (!errors.isEmpty()) {
+                overviewCacheUtil.clearUserOverviewCache();
+                overviewCacheUtil.clearReviewerGroupOverviewCache();
                 return ResponseVO.success(
                         "部分用户创建成功，部分失败: " + String.join("; ", errors),
                         createdUsers
                 );
             }
+
+            overviewCacheUtil.clearUserOverviewCache();
+            overviewCacheUtil.clearReviewerGroupOverviewCache();
 
             return ResponseVO.success("创建成功", createdUsers);
 
@@ -284,6 +294,7 @@ public class UserServiceImpl implements IUserService {
                     log.info("用户被禁用: userId={}, operator={}", userId, currentUserId);
 //                    redisToken.deleteToken(token);
                 }
+                overviewCacheUtil.clearUserOverviewCache();
                 log.info("编辑用户成功: userId={}, operator={}", userId, currentUserId);
                 return ResponseVO.<Void>success("编辑成功",null);
             } else {
@@ -377,6 +388,7 @@ public class UserServiceImpl implements IUserService {
             if (rows > 0) {
                 log.info("逻辑删除用户成功: userId={}, operator={}", userId, currentUserId);
                 redisToken.deleteToken(token);
+                overviewCacheUtil.clearUserOverviewCache();
                 return ResponseVO.<Void>success("删除成功",null);
             } else {
                 return ResponseVO.error("删除失败：用户可能已被删除");
@@ -457,6 +469,7 @@ public class UserServiceImpl implements IUserService {
             String message = failedIds.isEmpty()
                     ? "批量" + actionText + "完成"
                     : "批量" + actionText + "完成，部分用户操作失败";
+                overviewCacheUtil.clearUserOverviewCache();
             return ResponseVO.success(message, result);
         } catch (Exception e) {
             log.error("批量修改用户状态异常", e);
@@ -524,6 +537,7 @@ public class UserServiceImpl implements IUserService {
             String message = failedIds.isEmpty()
                     ? "批量删除完成"
                     : "批量删除完成，部分用户删除失败";
+                overviewCacheUtil.clearUserOverviewCache();
             return ResponseVO.success(message, result);
         } catch (Exception e) {
             log.error("批量删除用户异常", e);
@@ -616,6 +630,50 @@ public class UserServiceImpl implements IUserService {
 
         } catch (Exception e) {
             log.error("查询用户列表异常", e);
+            return ResponseVO.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public ResponseVO<UserOverviewVO> getUserOverview(String token) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效，请重新登录");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以查看用户概览");
+            }
+
+            Object cache = overviewCacheUtil.getUserOverviewCache();
+            if (cache != null) {
+                UserOverviewVO cachedOverview = (UserOverviewVO) cache;
+                log.info("【缓存命中】查询用户概览: totalUsers={}", cachedOverview.getTotalUsers());
+                return ResponseVO.success("查询成功", cachedOverview);
+            }
+
+            Map<String, Object> overviewMap = userMapper.selectUserOverview();
+            if (overviewMap == null) {
+                overviewMap = Collections.emptyMap();
+            }
+
+            UserOverviewVO overviewVO = new UserOverviewVO()
+                    .setTotalUsers(toLong(overviewMap.get("totalUsers")))
+                    .setAdminUsers(toLong(overviewMap.get("adminUsers")))
+                    .setScorerUsers(toLong(overviewMap.get("scorerUsers")))
+                    .setNormalUsers(toLong(overviewMap.get("normalUsers")));
+
+                    overviewCacheUtil.cacheUserOverview(overviewVO);
+
+            return ResponseVO.success("查询成功", overviewVO);
+        } catch (Exception e) {
+            log.error("查询用户概览异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
@@ -763,5 +821,20 @@ public class UserServiceImpl implements IUserService {
         log.warn("不支持的isEnabled类型: type={}, value={}",
                 value.getClass().getName(), value);
         return null;
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            log.warn("统计字段转换失败: {}", value, e);
+            return 0L;
+        }
     }
 }

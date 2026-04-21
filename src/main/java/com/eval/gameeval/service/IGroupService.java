@@ -5,6 +5,7 @@ import com.eval.gameeval.models.DTO.Group.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupQueryDTO;
 import com.eval.gameeval.models.DTO.Group.GroupUpdateDTO;
 import com.eval.gameeval.models.VO.GroupPageVO;
+import com.eval.gameeval.models.VO.GroupOverviewVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 
@@ -52,4 +53,6 @@ public interface IGroupService {
      * @return 小组分页列表
      */
     ResponseVO<GroupPageVO> getAllGroups(String token, GroupQueryDTO query);
+
+    ResponseVO<GroupOverviewVO> getGroupOverview(String token);
 }

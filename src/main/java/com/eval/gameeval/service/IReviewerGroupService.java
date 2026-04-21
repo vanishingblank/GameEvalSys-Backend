@@ -4,10 +4,9 @@ import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupCreateDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupQueryDTO;
 import com.eval.gameeval.models.DTO.ReviewerGroup.ReviewerGroupUpdateDTO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.ReviewerGroupOverviewVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
-
-import java.util.List;
 
 /**
  * 评审组服务接口
@@ -37,4 +36,6 @@ public interface IReviewerGroupService {
      * @return 更新后的评审组详情
      */
     ResponseVO<ReviewerGroupVO> updateReviewerGroup(String token, Long groupId, ReviewerGroupUpdateDTO request);
+
+    ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(String token);
 }

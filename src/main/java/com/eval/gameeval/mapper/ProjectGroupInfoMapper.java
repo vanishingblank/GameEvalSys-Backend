@@ -4,6 +4,7 @@ import com.eval.gameeval.models.entity.ProjectGroupInfo;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 小组信息主表Mapper
@@ -91,4 +92,11 @@ public interface ProjectGroupInfoMapper {
             "</if>" +
             "</script>")
     Long countWithSearch(@Param("keyWords") String keyWords);
+
+        @Select("SELECT " +
+                        "  COUNT(*) AS totalGroups, " +
+                        "  COALESCE(SUM(CASE WHEN is_enabled = 1 THEN 1 ELSE 0 END), 0) AS activeGroups, " +
+                        "  (SELECT COUNT(*) FROM project_group) AS totalMembers " +
+                        "FROM project_group_info WHERE is_deleted = 0")
+        Map<String, Object> selectGroupOverview();
 }
