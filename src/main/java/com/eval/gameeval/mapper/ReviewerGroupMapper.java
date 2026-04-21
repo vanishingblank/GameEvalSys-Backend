@@ -12,12 +12,12 @@ public interface ReviewerGroupMapper {
     // ========== 查询 ==========
     @Select("SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
             "create_time AS createTime, update_time AS updateTime " +
-            "FROM reviewer_group WHERE id = #{id}")
+            "FROM reviewer_group WHERE id = #{id} AND is_deleted = 0")
     ReviewerGroup selectById(@Param("id") Long id);
 
     @Select("SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
             "create_time AS createTime, update_time AS updateTime " +
-            "FROM reviewer_group WHERE is_enabled = 1 ORDER BY create_time DESC")
+            "FROM reviewer_group WHERE is_enabled = 1 AND is_deleted = 0 ORDER BY create_time DESC")
     List<ReviewerGroup> selectAllEnabled();
 
     /**
@@ -27,7 +27,7 @@ public interface ReviewerGroupMapper {
             "SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
             "       create_time AS createTime, update_time AS updateTime " +
             "FROM reviewer_group " +
-            "WHERE is_enabled = 1 " +
+            "WHERE is_enabled = 1 AND is_deleted = 0 " +
             "<if test='keyWords != null and keyWords != \"\"'>" +
             "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
             "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
@@ -43,7 +43,7 @@ public interface ReviewerGroupMapper {
             "SELECT id, name, description, creator_id AS creatorId, is_enabled AS isEnabled, " +
             "       create_time AS createTime, update_time AS updateTime " +
             "FROM reviewer_group " +
-            "WHERE is_enabled = 1 " +
+            "WHERE is_enabled = 1 AND is_deleted = 0 " +
             "<if test='keyWords != null and keyWords != \"\"'>" +
             "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
             "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
@@ -61,7 +61,7 @@ public interface ReviewerGroupMapper {
      */
     @Select("<script>" +
             "SELECT COUNT(*) FROM reviewer_group " +
-            "WHERE is_enabled = 1 " +
+            "WHERE is_enabled = 1 AND is_deleted = 0 " +
             "<if test='keyWords != null and keyWords != \"\"'>" +
             "  AND (name LIKE CONCAT('%', #{keyWords}, '%') " +
             "       OR description LIKE CONCAT('%', #{keyWords}, '%')) " +
@@ -70,8 +70,8 @@ public interface ReviewerGroupMapper {
     Long countWithSearch(@Param("keyWords") String keyWords);
 
     // ========== 插入 ==========
-    @Insert("INSERT INTO reviewer_group(name, description, creator_id, is_enabled, create_time, update_time) " +
-            "VALUES(#{name}, #{description}, #{creatorId}, #{isEnabled}, #{createTime}, #{updateTime})")
+    @Insert("INSERT INTO reviewer_group(name, description, creator_id, is_enabled, is_deleted, create_time, update_time) " +
+            "VALUES(#{name}, #{description}, #{creatorId}, #{isEnabled}, 0, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ReviewerGroup group);
 
@@ -81,10 +81,10 @@ public interface ReviewerGroupMapper {
             "    description = #{description}, " +
             "    is_enabled = #{isEnabled}, " +
             "    update_time = #{updateTime} " +
-            "WHERE id = #{id}")
+            "WHERE id = #{id} AND is_deleted = 0")
     int updateById(ReviewerGroup group);
 
     // ========== 删除 ==========
-    @Delete("DELETE FROM reviewer_group WHERE id = #{id}")
-    int deleteById(@Param("id") Long id);
+    @Update("UPDATE reviewer_group SET is_deleted = 1, is_enabled = 0, update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
+    int deleteById(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
 }

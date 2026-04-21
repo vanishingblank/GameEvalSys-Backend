@@ -15,21 +15,21 @@ public interface ProjectGroupInfoMapper {
      * 根据ID查询小组信息
      */
     @Select("SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
-            "FROM project_group_info WHERE id = #{id}")
+            "FROM project_group_info WHERE id = #{id} AND is_deleted = 0")
     ProjectGroupInfo selectById(@Param("id") Long id);
 
     /**
      * 查询所有启用的小组信息
      */
     @Select("SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
-            "FROM project_group_info WHERE is_enabled = 1 ORDER BY create_time ASC")
+            "FROM project_group_info WHERE is_enabled = 1 AND is_deleted = 0 ORDER BY create_time ASC")
     List<ProjectGroupInfo> selectAll();
 
     /**
      * 按名称搜索小组信息
      */
     @Select("SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
-            "FROM project_group_info WHERE name LIKE CONCAT('%', #{keyWords}, '%') AND is_enabled = 1 " +
+            "FROM project_group_info WHERE name LIKE CONCAT('%', #{keyWords}, '%') AND is_enabled = 1 AND is_deleted = 0 " +
             "ORDER BY create_time ASC LIMIT #{offset}, #{limit}")
     List<ProjectGroupInfo> searchByName(
             @Param("keyWords") String keyWords,
@@ -40,14 +40,14 @@ public interface ProjectGroupInfoMapper {
     /**
      * 统计小组总数
      */
-    @Select("SELECT COUNT(*) FROM project_group_info WHERE is_enabled = 1")
+    @Select("SELECT COUNT(*) FROM project_group_info WHERE is_enabled = 1 AND is_deleted = 0")
     Long countAll();
 
     /**
      * 插入小组信息
      */
-    @Insert("INSERT INTO project_group_info(name, description, is_enabled, create_time, update_time) " +
-            "VALUES(#{name}, #{description}, #{isEnabled}, #{createTime}, #{updateTime})")
+    @Insert("INSERT INTO project_group_info(name, description, is_enabled, is_deleted, create_time, update_time) " +
+            "VALUES(#{name}, #{description}, #{isEnabled}, 0, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     void insert(ProjectGroupInfo groupInfo);
 
@@ -55,13 +55,13 @@ public interface ProjectGroupInfoMapper {
      * 更新小组信息
      */
     @Update("UPDATE project_group_info SET name = #{name}, description = #{description}, " +
-            "is_enabled = #{isEnabled}, update_time = #{updateTime} WHERE id = #{id}")
+            "is_enabled = #{isEnabled}, update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
     int update(ProjectGroupInfo groupInfo);
 
     /**
      * 禁用小组信息（软删除）
      */
-    @Update("UPDATE project_group_info SET is_enabled = 0, update_time = #{updateTime} WHERE id = #{id}")
+    @Update("UPDATE project_group_info SET is_deleted = 1, is_enabled = 0, update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
     int disable(@Param("id") Long id, @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
@@ -69,7 +69,7 @@ public interface ProjectGroupInfoMapper {
      */
     @Select("<script>" +
             "SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
-            "FROM project_group_info WHERE is_enabled = 1 " +
+            "FROM project_group_info WHERE is_enabled = 1 AND is_deleted = 0 " +
             "<if test='keyWords != null and keyWords != \"\"'> " +
             "AND name LIKE CONCAT('%', #{keyWords}, '%') " +
             "</if> " +
@@ -85,7 +85,7 @@ public interface ProjectGroupInfoMapper {
      * 统计小组总数（可选搜索关键词）
      */
     @Select("<script>" +
-            "SELECT COUNT(*) FROM project_group_info WHERE is_enabled = 1 " +
+            "SELECT COUNT(*) FROM project_group_info WHERE is_enabled = 1 AND is_deleted = 0 " +
             "<if test='keyWords != null and keyWords != \"\"'> " +
             "AND name LIKE CONCAT('%', #{keyWords}, '%') " +
             "</if>" +

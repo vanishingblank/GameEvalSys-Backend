@@ -23,6 +23,7 @@ public class ReviewerGroup implements Serializable {
     private String description;
     private Long creatorId;
     private Boolean isEnabled;
+    private Boolean isDeleted;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

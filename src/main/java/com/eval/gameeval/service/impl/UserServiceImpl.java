@@ -372,7 +372,7 @@ public class UserServiceImpl implements IUserService {
             }
 
             // 5. 执行逻辑删除
-            int rows = userMapper.disableById(userId, LocalDateTime.now());
+            int rows = userMapper.softDeleteById(userId, LocalDateTime.now());
 
             if (rows > 0) {
                 log.info("逻辑删除用户成功: userId={}, operator={}", userId, currentUserId);
@@ -498,12 +498,12 @@ public class UserServiceImpl implements IUserService {
                         continue;
                     }
 
-                    if (Boolean.FALSE.equals(targetUser.getIsEnabled())) {
+                    if (Boolean.TRUE.equals(targetUser.getIsDeleted())) {
                         successCount++;
                         continue;
                     }
 
-                    int rows = userMapper.disableById(userId, LocalDateTime.now());
+                    int rows = userMapper.softDeleteById(userId, LocalDateTime.now());
                     if (rows > 0) {
                         successCount++;
                     } else {
@@ -635,6 +635,7 @@ public class UserServiceImpl implements IUserService {
             // 3. 构建查询条件
             LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
             wrapper.in(User::getId, userIds);
+            wrapper.eq(User::getIsDeleted, false);
 
             if (!request.getIncludeDisabled()) {
                 wrapper.eq(User::getIsEnabled, true);

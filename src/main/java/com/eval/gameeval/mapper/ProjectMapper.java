@@ -13,7 +13,7 @@ public interface ProjectMapper {
     @Select("SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
             "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
-            "FROM project WHERE id = #{id}")
+            "FROM project WHERE id = #{id} AND is_deleted = 0")
     Project selectById(@Param("id") Long id);
 
     @Select("SELECT id FROM project " +
@@ -21,7 +21,8 @@ public interface ProjectMapper {
             "  WHEN #{now} < start_date THEN 'not_started' " +
             "  WHEN #{now} > end_date THEN 'ended' " +
             "  ELSE 'ongoing' " +
-            "END")
+            "END " +
+            "AND is_deleted = 0")
     List<Long> selectStatusMismatchProjectIds(@Param("now") LocalDateTime now);
 
     @Select("<script>" +
@@ -29,7 +30,7 @@ public interface ProjectMapper {
             "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
             "FROM project " +
-            "WHERE 1=1 " +
+            "WHERE 1=1 AND is_deleted = 0 " +
             "<if test='status != null and status != \"\"'>" +
             "  AND status = #{status} " +
             "</if>" +
@@ -52,7 +53,7 @@ public interface ProjectMapper {
 
     @Select("<script>" +
             "SELECT COUNT(*) FROM project " +
-            "WHERE 1=1 " +
+            "WHERE 1=1 AND is_deleted = 0 " +
             "<if test='status != null and status != \"\"'>" +
             "  AND status = #{status} " +
             "</if>" +
@@ -72,6 +73,7 @@ public interface ProjectMapper {
             "WHERE id IN (" +
             "  SELECT DISTINCT project_id FROM project_scorer WHERE user_id = #{userId}" +
             ") " +
+            "AND is_deleted = 0 " +
             "ORDER BY create_time DESC")
     List<Project> selectByScorerId(@Param("userId") Long userId);
 
@@ -83,6 +85,7 @@ public interface ProjectMapper {
             "WHERE id IN (" +
             "  SELECT DISTINCT project_id FROM project_scorer WHERE user_id = #{userId}" +
             ") " +
+            "AND is_deleted = 0 " +
             "<if test='status != null and status != \"\"'>" +
             "  AND status = #{status} " +
             "</if>" +
@@ -108,6 +111,7 @@ public interface ProjectMapper {
             "SELECT COUNT(DISTINCT project_id) FROM project_scorer ps " +
             "JOIN project p ON p.id = ps.project_id " +
             "WHERE ps.user_id = #{userId} " +
+            "AND p.is_deleted = 0 " +
             "<if test='status != null and status != \"\"'>" +
             "  AND p.status = #{status} " +
             "</if>" +
@@ -137,7 +141,7 @@ public interface ProjectMapper {
             "  FROM project_scorer " +
             "  WHERE user_id = #{userId}" +
             ") ap " +
-            "JOIN project p ON p.id = ap.projectId " +
+            "JOIN project p ON p.id = ap.projectId AND p.is_deleted = 0 " +
             "LEFT JOIN (" +
             "  SELECT project_id AS projectId, COUNT(DISTINCT group_info_id) AS groupCount " +
             "  FROM project_group " +
@@ -154,7 +158,7 @@ public interface ProjectMapper {
     /**
      * 统计某天之前的累计项目总数（用于构建累计趋势基线）
      */
-    @Select("SELECT COUNT(*) FROM project WHERE create_time < #{startTime}")
+    @Select("SELECT COUNT(*) FROM project WHERE create_time < #{startTime} AND is_deleted = 0")
     Long countProjectsBefore(@Param("startTime") LocalDateTime startTime);
 
     /**
@@ -162,7 +166,7 @@ public interface ProjectMapper {
      */
     @Select("SELECT DATE(create_time) AS statDate, COUNT(*) AS cnt " +
             "FROM project " +
-            "WHERE create_time >= #{startTime} AND create_time < #{endTime} " +
+            "WHERE create_time >= #{startTime} AND create_time < #{endTime} AND is_deleted = 0 " +
             "GROUP BY DATE(create_time)")
     List<Map<String, Object>> selectDailyProjectCount(
             @Param("startTime") LocalDateTime startTime,
@@ -194,9 +198,9 @@ public interface ProjectMapper {
     );
 
     // ========== 插入 ==========
-    @Insert("INSERT INTO project(name, description, start_date, end_date, status, is_enabled, " +
+    @Insert("INSERT INTO project(name, description, start_date, end_date, status, is_enabled, is_deleted, " +
             "standard_id, creator_id, create_time, update_time) " +
-            "VALUES(#{name}, #{description}, #{startDate}, #{endDate}, #{status}, #{isEnabled}, " +
+            "VALUES(#{name}, #{description}, #{startDate}, #{endDate}, #{status}, #{isEnabled}, 0, " +
             "#{standardId}, #{creatorId}, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Project project);
@@ -211,10 +215,10 @@ public interface ProjectMapper {
             "    is_enabled = #{isEnabled}, " +
             "    standard_id = #{standardId}, " +
             "    update_time = #{updateTime} " +
-            "WHERE id = #{id}")
+            "WHERE id = #{id} AND is_deleted = 0")
     int updateById(Project project);
 
-    @Update("UPDATE project SET status = 'ended', update_time = #{updateTime} WHERE id = #{id}")
+    @Update("UPDATE project SET status = 'ended', update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
     int endProject(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
 
     @Update("UPDATE project " +
@@ -228,10 +232,11 @@ public interface ProjectMapper {
             "  WHEN #{now} < start_date THEN 'not_started' " +
             "  WHEN #{now} > end_date THEN 'ended' " +
             "  ELSE 'ongoing' " +
-            "END")
+            "END " +
+            "AND is_deleted = 0")
     int syncStatusByNow(@Param("now") LocalDateTime now);
 
     // ========== 删除 ==========
-    @Delete("DELETE FROM project WHERE id = #{id}")
-    int deleteById(@Param("id") Long id);
+    @Update("UPDATE project SET is_deleted = 1, is_enabled = 0, update_time = #{updateTime} WHERE id = #{id} AND is_deleted = 0")
+    int deleteById(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
 }

@@ -61,7 +61,7 @@ public interface ProjectGroupMapper {
             "  pg.create_time AS createTime, " +
             "  pg.update_time AS updateTime " +
             "FROM project_group pg " +
-            "INNER JOIN project_group_info pgi ON pg.group_info_id = pgi.id " +
+            "INNER JOIN project_group_info pgi ON pg.group_info_id = pgi.id AND pgi.is_deleted = 0 " +
             "WHERE 1=1 " +
             "<if test='projectIds != null and projectIds.size() > 0'>" +
             "  AND pg.project_id IN " +
@@ -87,7 +87,7 @@ public interface ProjectGroupMapper {
      */
     @Select("<script>" +
             "SELECT COUNT(*) FROM project_group pg " +
-            "INNER JOIN project_group_info pgi ON pg.group_info_id = pgi.id " +
+            "INNER JOIN project_group_info pgi ON pg.group_info_id = pgi.id AND pgi.is_deleted = 0 " +
             "WHERE 1=1 " +
             "<if test='projectIds != null and projectIds.size() > 0'>" +
             "  AND pg.project_id IN " +

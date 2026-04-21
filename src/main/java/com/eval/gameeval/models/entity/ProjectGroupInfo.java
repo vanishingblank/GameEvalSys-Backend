@@ -36,6 +36,10 @@ public class ProjectGroupInfo implements Serializable {
      * 是否启用：1-是 0-否
      */
     private Integer isEnabled;
+    /**
+     * 是否软删除：1-是 0-否
+     */
+    private Integer isDeleted;
 
     /**
      * 创建时间

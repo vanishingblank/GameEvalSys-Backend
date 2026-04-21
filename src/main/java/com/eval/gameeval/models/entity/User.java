@@ -19,6 +19,10 @@ public class User {
     private String name;
     private String role;
     private Boolean isEnabled;
+    private Boolean isDeleted;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime deletedTime;
+    private Long deleteToken;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

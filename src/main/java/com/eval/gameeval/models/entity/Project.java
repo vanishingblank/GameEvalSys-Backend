@@ -20,6 +20,7 @@ public class Project implements Serializable {
     private LocalDateTime endDate;
     private String status;
     private Boolean isEnabled;
+    private Boolean isDeleted;
     private Long standardId;
     private Long creatorId;
     private LocalDateTime createTime;
