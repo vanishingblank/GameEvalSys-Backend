@@ -6,9 +6,11 @@ import com.eval.gameeval.mapper.ProjectMapper;
 import com.eval.gameeval.mapper.ProjectScorerMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.Group.GroupAddToProjectDTO;
+import com.eval.gameeval.models.DTO.Group.GroupBatchCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupQueryDTO;
 import com.eval.gameeval.models.DTO.Group.GroupUpdateDTO;
+import com.eval.gameeval.models.VO.GroupBatchCreateVO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupOverviewVO;
 import com.eval.gameeval.models.VO.GroupVO;
@@ -28,6 +30,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -114,6 +117,74 @@ public class GroupServiceImpl implements IGroupService {
 
         } catch (Exception e) {
             log.error("创建小组异常", e);
+            return ResponseVO.error("创建失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ResponseVO<GroupBatchCreateVO> batchCreateGroups(String token, GroupBatchCreateDTO request) {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
+
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+
+            if (!"super_admin".equals(currentUser.getRole()) && !"admin".equals(currentUser.getRole())) {
+                return ResponseVO.forbidden("权限不足，只有管理员可以创建小组");
+            }
+
+            int startIndex = Integer.parseInt(request.getStartIndex());
+            int endIndex = StringUtils.hasText(request.getEndIndex())
+                    ? Integer.parseInt(request.getEndIndex())
+                    : startIndex;
+
+            if (endIndex < startIndex) {
+                return ResponseVO.badRequest("小组数字结束下标不能小于开始下标");
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+            Integer isEnabled = request.getIsEnabled() != null ? request.getIsEnabled() : 1;
+            String prefixName = request.getPrefixName().trim();
+            String name = request.getName().trim();
+
+            List<GroupBatchCreateVO.GroupItemVO> createdGroups = new ArrayList<>();
+            for (int i = startIndex; i <= endIndex; i++) {
+                ProjectGroupInfo groupInfo = new ProjectGroupInfo();
+                groupInfo.setName(prefixName + name + i);
+                groupInfo.setDescription(request.getDescription());
+                groupInfo.setIsEnabled(isEnabled);
+                groupInfo.setCreateTime(now);
+                groupInfo.setUpdateTime(now);
+
+                groupInfoMapper.insert(groupInfo);
+
+                GroupBatchCreateVO.GroupItemVO itemVO = new GroupBatchCreateVO.GroupItemVO();
+                itemVO.setId(groupInfo.getId());
+                itemVO.setName(groupInfo.getName());
+                itemVO.setDescription(groupInfo.getDescription());
+                itemVO.setIsEnabled(groupInfo.getIsEnabled());
+                itemVO.setCreateTime(groupInfo.getCreateTime());
+                itemVO.setUpdateTime(groupInfo.getUpdateTime());
+                createdGroups.add(itemVO);
+            }
+
+            clearGroupOverviewCache("batchCreateGroups");
+
+            GroupBatchCreateVO responseVO = new GroupBatchCreateVO();
+            responseVO.setList(createdGroups);
+
+            log.info("批量创建小组成功: count={}, range=[{}, {}], operatorId={}",
+                    createdGroups.size(), startIndex, endIndex, currentUserId);
+
+            return ResponseVO.success("创建成功", responseVO);
+        } catch (Exception e) {
+            log.error("批量创建小组异常", e);
             return ResponseVO.error("创建失败: " + e.getMessage());
         }
     }

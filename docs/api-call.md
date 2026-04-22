@@ -775,6 +775,52 @@
 - 创建小组时不关联任何项目
 - 返回的响应中不包含 projectId 和 relationId
 
+### 5.1.1 批量创建小组
+
+- **接口地址**：`/groups/batch-create`
+- **请求方式**：POST
+- **请求头**：`Authorization: Bearer {token}`
+- **请求参数**：
+  | 参数名 | 类型 | 必需 | 说明 |
+  |------|------|------|------|
+  | prefixName | String | 是 |小组名称前缀 |
+  | name | String | 是 | 小组名称，不能为空 |
+  | startIndex | String | 是 | 小组数字开始下标 |
+  | endIndex | String | 否 | 小组数字结束下标 |
+  | description | String | 否 | 小组描述 |
+  | isEnabled | Integer | 否 | 是否启用，默认为 1（启用）。0=禁用，1=启用 |
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "创建成功",
+    "data": {
+      "list": [
+        {
+          "id": 1,
+          "name": "计算机学院小组1",
+          "description": "小组描述",
+          "isEnabled": 1,
+          "createTime": "2026-03-20 10:30:00",
+          "updateTime": "2026-03-20 10:30:00"
+        },
+        {
+          "id": 2,
+          "name": "计算机学院小组2",
+          "description": "小组描述",
+          "isEnabled": 1,
+          "createTime": "2026-03-20 10:30:00",
+          "updateTime": "2026-03-20 10:30:00"
+        }
+      ]
+    }
+  }
+  ```
+- **注意**
+- 只有管理员（super_admin、admin）可以创建小组
+- 创建小组时不关联任何项目
+- 返回的响应中不包含 projectId 和 relationId
+
 ### 5.2 将小组关联到项目
 
 - **接口地址**：`/groups/{groupId}/add-to-project`
