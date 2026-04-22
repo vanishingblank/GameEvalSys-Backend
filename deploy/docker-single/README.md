@@ -30,14 +30,16 @@ docker pull  maven:3.9.9-eclipse-temurin-17
 ## 代码更改后docker镜像操作
 - 修改了src 或 pom.xml
 - 需要：重新 build
+- 在`deploy/docker-single/`路径下
 ~~~ shell
-docker compose -f deploy/docker-single/docker-compose.yml up -d --build backend
+docker compose -f docker-compose.yml up -d --build backend
 ~~~
 
 ## 若只更改spring boot配置文件
 - 不需要 build
-~~~shell
-docker compose -f deploy/docker-single/docker-compose.yml restart backend
+- 在`deploy/docker-single/`路径下
+~~~ shell
+docker compose -f docker-compose.yml restart backend
 ~~~
 
 
