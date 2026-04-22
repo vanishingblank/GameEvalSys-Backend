@@ -21,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -122,6 +124,22 @@ public class ProjectServiceImpl implements IProjectService {
             }
             resolvedScorerIds = resolvedScorerIds.stream().distinct().collect(Collectors.toList());
 
+            // 5.1 预先校验打分用户，避免项目创建后再失败
+            List<Long> validatedScorerIds = new ArrayList<>();
+            for (Long scorerId : resolvedScorerIds) {
+                if (scorerId == null || scorerId <= 0) {
+                    return ResponseVO.badRequest("打分用户ID必须大于0");
+                }
+                User scorer = userMapper.selectById(scorerId);
+                if (scorer == null) {
+                    return ResponseVO.badRequest("打分用户ID " + scorerId + " 不存在");
+                }
+                if (!"scorer".equals(scorer.getRole()) && !"admin".equals(scorer.getRole()) && !"super_admin".equals(scorer.getRole())) {
+                    return ResponseVO.badRequest("用户 " + scorerId + " 不是打分用户");
+                }
+                validatedScorerIds.add(scorerId);
+            }
+
             // 6. 创建项目
             Project project = new Project();
             project.setName(request.getName());
@@ -169,19 +187,7 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 8. 创建打分用户关联
             List<ProjectScorer> scorers = new ArrayList<>();
-            for (Long scorerId : resolvedScorerIds) {
-                if (scorerId == null || scorerId <= 0) {
-                    return ResponseVO.badRequest("打分用户ID必须大于0");
-                }
-                // 验证打分用户是否存在
-                User scorer = userMapper.selectById(scorerId);
-                if (scorer == null) {
-                    return ResponseVO.badRequest("打分用户ID " + scorerId + " 不存在");
-                }
-                if (!"scorer".equals(scorer.getRole()) && !"admin".equals(scorer.getRole()) && !"super_admin".equals(scorer.getRole())) {
-                    return ResponseVO.badRequest("用户 " + scorerId + " 不是打分用户");
-                }
-
+            for (Long scorerId : validatedScorerIds) {
                 ProjectScorer scorerRel = new ProjectScorer();
                 scorerRel.setProjectId(project.getId());
                 scorerRel.setUserId(scorerId);
@@ -192,6 +198,7 @@ public class ProjectServiceImpl implements IProjectService {
                 scorerMapper.insertBatch(scorers);
             }
 
+
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
@@ -200,15 +207,16 @@ public class ProjectServiceImpl implements IProjectService {
             overviewCacheUtil.clearGroupOverviewCache();
             
             // 清除所有打分用户的授权项目缓存，确保他们能立即看到新项目
-            clearUserProjectCaches(resolvedScorerIds, project.getId(), "createProject");
+            clearUserProjectCaches(validatedScorerIds, project.getId(), "createProject");
             log.info("创建项目成功并触发缓存清除: projectId={}", project.getId());
 
             // 10. 构建响应
             ProjectCreateVO responseVO = new ProjectCreateVO();
             BeanUtils.copyProperties(project, responseVO);
             responseVO.setGroupIds(resolvedGroupInfoIds);
-            responseVO.setScorerIds(resolvedScorerIds);
+            responseVO.setScorerIds(validatedScorerIds);
             responseVO.setReviewerGroupId(request.getReviewerGroupId());
+
 
             log.info("创建项目成功: projectId={}, creatorId={}", project.getId(), currentUserId);
 
@@ -216,8 +224,10 @@ public class ProjectServiceImpl implements IProjectService {
 
         } catch (Exception e) {
             log.error("创建项目异常", e);
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return ResponseVO.error("创建失败: " + e.getMessage());
         }
+
     }
 
     @Override
