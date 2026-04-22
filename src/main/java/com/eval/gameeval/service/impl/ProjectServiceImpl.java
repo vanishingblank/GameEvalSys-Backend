@@ -27,8 +27,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 
 @Slf4j
 @Service
@@ -654,20 +656,11 @@ public class ProjectServiceImpl implements IProjectService {
                 return ResponseVO.success("查询成功", cachedOverview);
             }
 
-            java.util.Map<String, Object> overviewMap = projectMapper.selectProjectOverview();
-            if (overviewMap == null) {
-                overviewMap = java.util.Collections.emptyMap();
-            }
-
-            ProjectOverviewVO overviewVO = new ProjectOverviewVO()
-                    .setTotalProjects(toLong(overviewMap.get("totalProjects")))
-                    .setNotStartedProjects(toLong(overviewMap.get("notStartedProjects")))
-                    .setOngoingProjects(toLong(overviewMap.get("ongoingProjects")))
-                    .setEndedProjects(toLong(overviewMap.get("endedProjects")));
-
-                overviewCacheUtil.cacheProjectOverview(overviewVO);
+            ProjectOverviewVO overviewVO = loadProjectOverview();
+            overviewCacheUtil.cacheProjectOverview(overviewVO);
 
             return ResponseVO.success("查询成功", overviewVO);
+
         } catch (Exception e) {
             log.error("查询项目概览异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
@@ -748,10 +741,41 @@ public class ProjectServiceImpl implements IProjectService {
         }
     }
 
+    public void warmupProjectOverviewCache() {
+        try {
+            if (overviewCacheUtil.getProjectOverviewCache() != null) {
+                return;
+            }
+
+            ProjectOverviewVO overviewVO = loadProjectOverview();
+            overviewCacheUtil.cacheProjectOverview(overviewVO);
+
+            log.info("全局概览预热完成: key={}, totalProjects={}",
+                    RedisKeyUtil.PROJECT_OVERVIEW_KEY, overviewVO.getTotalProjects());
+        } catch (Exception e) {
+            log.error("全局概览预热异常: key={}", RedisKeyUtil.PROJECT_OVERVIEW_KEY, e);
+        }
+    }
+
+    private ProjectOverviewVO loadProjectOverview() {
+        Map<String, Object> overviewMap = projectMapper.selectProjectOverview();
+        if (overviewMap == null) {
+            overviewMap = Collections.emptyMap();
+        }
+
+        return new ProjectOverviewVO()
+                .setTotalProjects(toLong(overviewMap.get("totalProjects")))
+                .setNotStartedProjects(toLong(overviewMap.get("notStartedProjects")))
+                .setOngoingProjects(toLong(overviewMap.get("ongoingProjects")))
+                .setEndedProjects(toLong(overviewMap.get("endedProjects")));
+    }
+
     /**
      * 兜底同步项目状态并补齐缓存失效闭环：project list/detail、authorized、overview、platform。
      */
     private void reconcileProjectStatuses(String scene) {
+
+
         try {
             LocalDateTime now = LocalDateTime.now();
             List<Long> mismatchProjectIds = projectMapper.selectStatusMismatchProjectIds(now);

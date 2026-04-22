@@ -21,7 +21,9 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.ProjectCacheUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
+
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -482,35 +484,57 @@ public class GroupServiceImpl implements IGroupService {
                 return ResponseVO.success("查询成功", cachedOverview);
             }
 
-            Map<String, Object> overviewMap = groupInfoMapper.selectGroupOverview();
-            if (overviewMap == null) {
-                overviewMap = Collections.emptyMap();
-            }
-
-            Long totalGroups = toLong(overviewMap.get("totalGroups"));
-            Long totalMembers = toLong(overviewMap.get("totalMembers"));
-            BigDecimal avgGroupSize = BigDecimal.ZERO;
-            if (totalGroups != null && totalGroups > 0) {
-                avgGroupSize = BigDecimal.valueOf(totalMembers)
-                        .divide(BigDecimal.valueOf(totalGroups), 2, RoundingMode.HALF_UP);
-            }
-
-            GroupOverviewVO overviewVO = new GroupOverviewVO()
-                    .setTotalGroups(totalGroups)
-                    .setActiveGroups(toLong(overviewMap.get("activeGroups")))
-                    .setTotalMembers(totalMembers)
-                    .setAvgGroupSize(avgGroupSize);
-
-                overviewCacheUtil.cacheGroupOverview(overviewVO);
+            GroupOverviewVO overviewVO = loadGroupOverview();
+            overviewCacheUtil.cacheGroupOverview(overviewVO);
 
             return ResponseVO.success("查询成功", overviewVO);
+
         } catch (Exception e) {
             log.error("查询小组概览异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
+    public void warmupGroupOverviewCache() {
+        try {
+            if (overviewCacheUtil.getGroupOverviewCache() != null) {
+                return;
+            }
+
+            GroupOverviewVO overviewVO = loadGroupOverview();
+            overviewCacheUtil.cacheGroupOverview(overviewVO);
+
+            log.info("全局概览预热完成: key={}, totalGroups={}",
+                    RedisKeyUtil.GROUP_OVERVIEW_KEY, overviewVO.getTotalGroups());
+        } catch (Exception e) {
+            log.error("全局概览预热异常: key={}", RedisKeyUtil.GROUP_OVERVIEW_KEY, e);
+        }
+    }
+
+    private GroupOverviewVO loadGroupOverview() {
+        Map<String, Object> overviewMap = groupInfoMapper.selectGroupOverview();
+        if (overviewMap == null) {
+            overviewMap = Collections.emptyMap();
+        }
+
+        Long totalGroups = toLong(overviewMap.get("totalGroups"));
+        Long totalMembers = toLong(overviewMap.get("totalMembers"));
+        BigDecimal avgGroupSize = BigDecimal.ZERO;
+        if (totalGroups != null && totalGroups > 0) {
+            avgGroupSize = BigDecimal.valueOf(totalMembers)
+                    .divide(BigDecimal.valueOf(totalGroups), 2, RoundingMode.HALF_UP);
+        }
+
+        return new GroupOverviewVO()
+                .setTotalGroups(totalGroups)
+                .setActiveGroups(toLong(overviewMap.get("activeGroups")))
+                .setTotalMembers(totalMembers)
+                .setAvgGroupSize(avgGroupSize);
+    }
+
     private Long toLong(Object value) {
+
+
         if (value == null) {
             return 0L;
         }
