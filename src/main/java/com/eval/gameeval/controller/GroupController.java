@@ -2,9 +2,11 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.Group.GroupAddToProjectDTO;
+import com.eval.gameeval.models.DTO.Group.GroupBatchCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupCreateDTO;
 import com.eval.gameeval.models.DTO.Group.GroupQueryDTO;
 import com.eval.gameeval.models.DTO.Group.GroupUpdateDTO;
+import com.eval.gameeval.models.VO.GroupBatchCreateVO;
 import com.eval.gameeval.models.VO.GroupOverviewVO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
@@ -39,6 +41,20 @@ public class GroupController {
 
         String token = TokenUtil.extractToken(authorization);
         ResponseVO<GroupVO> response = groupService.createGroup(token, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 批量创建小组（仅包含基本信息，不关联项目）
+     */
+    @PostMapping("/batch-create")
+    @LogRecord(value = "批量创建小组", module = "Group")
+    public ResponseEntity<ResponseVO<GroupBatchCreateVO>> batchCreateGroups(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody GroupBatchCreateDTO request) {
+
+        String token = TokenUtil.extractToken(authorization);
+        ResponseVO<GroupBatchCreateVO> response = groupService.batchCreateGroups(token, request);
         return ResponseEntity.ok(response);
     }
 
