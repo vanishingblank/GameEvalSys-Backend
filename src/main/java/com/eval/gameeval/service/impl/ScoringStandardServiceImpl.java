@@ -17,8 +17,10 @@ import com.eval.gameeval.models.entity.ScoringStandard;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IScoringStandardService;
 import com.eval.gameeval.util.OverviewCacheUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.StandardCacheUtil;
+
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -412,25 +414,47 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
                 return ResponseVO.success("查询成功", cachedOverview);
             }
 
-            Map<String, Object> overviewMap = standardMapper.selectStandardOverview();
-            if (overviewMap == null) {
-                overviewMap = new HashMap<>();
-            }
-
-            ScoringStandardOverviewVO overviewVO = new ScoringStandardOverviewVO()
-                    .setTotalStandards(toLong(overviewMap.get("totalStandards")))
-                    .setEnabledStandards(toLong(overviewMap.get("enabledStandards")));
-
-                overviewCacheUtil.cacheStandardOverview(overviewVO);
+            ScoringStandardOverviewVO overviewVO = loadStandardOverview();
+            overviewCacheUtil.cacheStandardOverview(overviewVO);
 
             return ResponseVO.success("查询成功", overviewVO);
+
         } catch (Exception e) {
             log.error("查询打分标准概览异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
+    public void warmupStandardOverviewCache() {
+        try {
+            if (overviewCacheUtil.getStandardOverviewCache() != null) {
+                return;
+            }
+
+            ScoringStandardOverviewVO overviewVO = loadStandardOverview();
+            overviewCacheUtil.cacheStandardOverview(overviewVO);
+
+            log.info("全局概览预热完成: key={}, totalStandards={}",
+                    RedisKeyUtil.STANDARD_OVERVIEW_KEY, overviewVO.getTotalStandards());
+        } catch (Exception e) {
+            log.error("全局概览预热异常: key={}", RedisKeyUtil.STANDARD_OVERVIEW_KEY, e);
+        }
+    }
+
+    private ScoringStandardOverviewVO loadStandardOverview() {
+        Map<String, Object> overviewMap = standardMapper.selectStandardOverview();
+        if (overviewMap == null) {
+            overviewMap = new HashMap<>();
+        }
+
+        return new ScoringStandardOverviewVO()
+                .setTotalStandards(toLong(overviewMap.get("totalStandards")))
+                .setEnabledStandards(toLong(overviewMap.get("enabledStandards")));
+    }
+
     private List<ScoringStandardCreateDTO.CategoryDTO> buildCreateCategories(ScoringStandardCreateDTO request) {
+
+
         if (request.getCategories() != null && !request.getCategories().isEmpty()) {
             return request.getCategories();
         }

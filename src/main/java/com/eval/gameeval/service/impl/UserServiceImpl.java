@@ -17,7 +17,9 @@ import com.eval.gameeval.models.entity.ReviewerGroupMember;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.OverviewCacheUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
+
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -658,28 +660,50 @@ public class UserServiceImpl implements IUserService {
                 return ResponseVO.success("查询成功", cachedOverview);
             }
 
-            Map<String, Object> overviewMap = userMapper.selectUserOverview();
-            if (overviewMap == null) {
-                overviewMap = Collections.emptyMap();
-            }
-
-            UserOverviewVO overviewVO = new UserOverviewVO()
-                    .setTotalUsers(toLong(overviewMap.get("totalUsers")))
-                    .setAdminUsers(toLong(overviewMap.get("adminUsers")))
-                    .setScorerUsers(toLong(overviewMap.get("scorerUsers")))
-                    .setNormalUsers(toLong(overviewMap.get("normalUsers")));
-
-                    overviewCacheUtil.cacheUserOverview(overviewVO);
+            UserOverviewVO overviewVO = loadUserOverview();
+            overviewCacheUtil.cacheUserOverview(overviewVO);
 
             return ResponseVO.success("查询成功", overviewVO);
+
         } catch (Exception e) {
             log.error("查询用户概览异常", e);
             return ResponseVO.error("查询失败: " + e.getMessage());
         }
     }
 
+    public void warmupUserOverviewCache() {
+        try {
+            if (overviewCacheUtil.getUserOverviewCache() != null) {
+                return;
+            }
+
+            UserOverviewVO overviewVO = loadUserOverview();
+            overviewCacheUtil.cacheUserOverview(overviewVO);
+
+            log.info("全局概览预热完成: key={}, totalUsers={}",
+                    RedisKeyUtil.USER_OVERVIEW_KEY, overviewVO.getTotalUsers());
+        } catch (Exception e) {
+            log.error("全局概览预热异常: key={}", RedisKeyUtil.USER_OVERVIEW_KEY, e);
+        }
+    }
+
+    private UserOverviewVO loadUserOverview() {
+        Map<String, Object> overviewMap = userMapper.selectUserOverview();
+        if (overviewMap == null) {
+            overviewMap = Collections.emptyMap();
+        }
+
+        return new UserOverviewVO()
+                .setTotalUsers(toLong(overviewMap.get("totalUsers")))
+                .setAdminUsers(toLong(overviewMap.get("adminUsers")))
+                .setScorerUsers(toLong(overviewMap.get("scorerUsers")))
+                .setNormalUsers(toLong(overviewMap.get("normalUsers")));
+    }
+
     @Override
     public ResponseVO<List<UserDetailVO>> batchQueryUsers(String token, UserBatchQueryDTO request) {
+
+
         try {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);

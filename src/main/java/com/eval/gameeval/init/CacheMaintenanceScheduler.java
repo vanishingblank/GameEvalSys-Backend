@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+
 @Slf4j
 @Component
 public class CacheMaintenanceScheduler {
@@ -15,6 +16,7 @@ public class CacheMaintenanceScheduler {
     private final ProjectServiceImpl projectService;
     private final ScoringStandardServiceImpl scoringStandardService;
     private final ProjectStatisticsServiceImpl projectStatisticsService;
+    private final OverviewWarmupService overviewWarmupService;
 
     @Value("${app.cache.scheduler.enabled:true}")
     private boolean schedulerEnabled;
@@ -27,11 +29,14 @@ public class CacheMaintenanceScheduler {
 
     public CacheMaintenanceScheduler(ProjectServiceImpl projectService,
                                      ScoringStandardServiceImpl scoringStandardService,
-                                     ProjectStatisticsServiceImpl projectStatisticsService) {
+                                     ProjectStatisticsServiceImpl projectStatisticsService,
+                                     OverviewWarmupService overviewWarmupService) {
         this.projectService = projectService;
         this.scoringStandardService = scoringStandardService;
         this.projectStatisticsService = projectStatisticsService;
+        this.overviewWarmupService = overviewWarmupService;
     }
+
 
     @Scheduled(
             fixedDelayString = "${app.cache.scheduler.reconcile.fixed-delay-ms:120000}",
@@ -73,5 +78,13 @@ public class CacheMaintenanceScheduler {
         } catch (Exception e) {
             log.error("定时任务异常: 预热平台统计缓存", e);
         }
+
+        try {
+            overviewWarmupService.warmupOverviewCaches();
+        } catch (Exception e) {
+            log.error("定时任务异常: 预热概览缓存", e);
+        }
     }
 }
+
+
