@@ -587,10 +587,14 @@
   | endDate | string | 是 | 结束日期（yyyy-MM-dd HH:mm） |
   | isEnabled | boolean | 否 | 是否启用（默认true） |
   | standardId | number | 是 | 关联打分标准ID |
+  | maliciousRuleType | string | 否 | 恶意判定规则：`AUTO`/`THRESHOLD`，默认 `AUTO` |
+  | maliciousScoreLower | number | 否 | 恶意总分阈值下限（仅 `THRESHOLD` 生效） |
+  | maliciousScoreUpper | number | 否 | 恶意总分阈值上限（仅 `THRESHOLD` 生效） |
   | groupIds | array | 是 | 关联小组ID列表 |
   | reviewerGroupId | number | 是 | 评审组ID，后端将自动绑定该评审组成员为打分用户 |
 - **参数规则**：
   - 创建项目时不再接收 `scorerIds`，打分用户统一由 `reviewerGroupId` 推导。
+  - 当 `maliciousRuleType=THRESHOLD` 时，`maliciousScoreLower` 与 `maliciousScoreUpper` 必须同时传入，且 `lower <= upper`。
 - **响应示例**：
   ```json
   {
@@ -605,6 +609,9 @@
       "status": "not_started",
       "isEnabled": true,
       "standardId": 1,
+      "maliciousRuleType": "AUTO",
+      "maliciousScoreLower": null,
+      "maliciousScoreUpper": null,
       "groupIds": [1, 2],
       "scorerIds": [2, 3],
       "reviewerGroupId": 9,
@@ -629,8 +636,13 @@
   | endDate | string | 否 | 结束日期（yyyy-MM-dd HH:mm） |
   | isEnabled | boolean | 否 | 是否启用 |
   | standardId | number | 否 | 关联打分标准ID |
+  | maliciousRuleType | string | 否 | 恶意判定规则：`AUTO`/`THRESHOLD` |
+  | maliciousScoreLower | number | 否 | 恶意总分阈值下限（仅 `THRESHOLD` 生效） |
+  | maliciousScoreUpper | number | 否 | 恶意总分阈值上限（仅 `THRESHOLD` 生效） |
   | groupIds | array | 否 | 关联小组ID列表 |
   | scorerIds | array | 否 | 手动调整可参与打分的用户ID列表 |
+- **参数规则**：
+  - 当 `maliciousRuleType=THRESHOLD` 时，`maliciousScoreLower` 与 `maliciousScoreUpper` 必须同时有效，且 `lower <= upper`。
 - **响应示例**：
   ```json
   {
@@ -680,6 +692,9 @@
           "name": "2026中期答辩",
           "status": "not_started",
           "isEnabled": true,
+          "maliciousRuleType": "AUTO",
+          "maliciousScoreLower": null,
+          "maliciousScoreUpper": null,
           "startDate": "2026-03-01 08:10",
           "endDate": "2026-03-15 10:59"
         }
@@ -710,6 +725,9 @@
   |--------|------|------|------|
   | page | number | 否 | 页码（默认1） |
   | size | number | 否 | 每页条数（默认10） |
+  | status | string | 否 | 项目状态（not_started/ongoing/ended） |
+  | isEnabled | boolean | 否 | 是否启用 |
+  | keyWords | string | 否 | 模糊查询关键字 |
 - **响应示例**：同上（列表格式）
 
 ### 4.7 获取项目概览统计
@@ -1031,6 +1049,7 @@
       "projectId": 1,
       "groupId": 1,
       "userId": 2,
+      "isMalicious": 0,
       "scores": [
         {
           "indicatorId": 1,
@@ -1070,6 +1089,7 @@
   |--------|------|------|------|
   | page | number | 否 | 页码（默认1） |
   | size | number | 否 | 每页条数（默认10） |
+  | isMalicious | number | 否 | 恶意标记筛选：`0`=非恶意，`1`=恶意；不传表示全部 |
 - **响应示例**：
 
   ```json
@@ -1083,6 +1103,7 @@
           "projectId": 1,
           "groupId": 1,
           "userId": 2,
+          "isMalicious": 0,
           "scores": [
             {
               "indicatorId": 1,
@@ -1102,6 +1123,7 @@
           "projectId": 1,
           "groupId": 1,
           "userId": 2,
+          "isMalicious": 1,
           "scores": [
             {
               "indicatorId": 1,
@@ -1164,6 +1186,7 @@
 - **请求方式**：GET
 - **请求头**：`Authorization: Bearer {token}`
 - **路径参数**：`projectId` - 项目ID
+- **说明**：该接口现已支持**评委标准化 + 异常检测 + 原始/处理后双展示**。其中 `averageScore` 为兼容旧前端保留字段，语义等同于 `processedAverageScore`。
 - **响应示例**：
   ```json
   {
@@ -1174,27 +1197,76 @@
         {
           "groupId": 1,
           "groupName": "第一小组",
-          "averageScore": 4.5
+          "averageScore": 4.63,
+          "rawAverageScore": 4.41,
+          "normalizedAverageScore": 4.58,
+          "processedAverageScore": 4.63,
+          "abnormalCount": 1,
+          "sampleSize": 6,
+          "validSampleSize": 5
         }
       ],
       "indicatorAverage": [
         {
           "indicatorId": 1,
           "indicatorName": "复杂程度",
-          "averageScore": 4.2
+          "averageScore": 4.27,
+          "rawAverageScore": 4.08,
+          "normalizedAverageScore": 4.21,
+          "processedAverageScore": 4.27,
+          "abnormalCount": 1,
+          "sampleSize": 6,
+          "validSampleSize": 5
         }
       ],
       "scorerDistribution": [
         {
           "userId": 2,
           "userName": "打分员01",
-          "scoreRange": "4-5分",
+          "scoreRange": "4-6分",
           "count": 3
         }
       ]
     }
   }
   ```
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | groupAverage | array | 小组维度统计结果，按处理后均分倒序返回 |
+  | groupAverage[].groupId | number | 小组ID |
+  | groupAverage[].groupName | string | 小组名称 |
+  | groupAverage[].averageScore | number | 兼容字段，等于 `processedAverageScore` |
+  | groupAverage[].rawAverageScore | number | 原始平均分，未做标准化和异常剔除 |
+  | groupAverage[].normalizedAverageScore | number | 标准化后平均分，已消除评委整体偏严/偏松影响，但未剔除异常值 |
+  | groupAverage[].processedAverageScore | number | 处理后平均分，基于标准化结果剔除恶意评分后计算 |
+  | groupAverage[].abnormalCount | number | 判定为恶意评分的条数（按项目规则） |
+  | groupAverage[].sampleSize | number | 原始样本总数 |
+  | groupAverage[].validSampleSize | number | 剔除异常值后的有效样本数 |
+  | indicatorAverage | array | 指标维度统计结果，按处理后均分倒序返回 |
+  | indicatorAverage[].indicatorId | number | 指标ID |
+  | indicatorAverage[].indicatorName | string | 指标名称 |
+  | indicatorAverage[].averageScore | number | 兼容字段，等于 `processedAverageScore` |
+  | indicatorAverage[].rawAverageScore | number | 原始平均分，未做标准化和异常剔除 |
+  | indicatorAverage[].normalizedAverageScore | number | 标准化后平均分，已消除评委整体偏严/偏松影响，但未剔除异常值 |
+  | indicatorAverage[].processedAverageScore | number | 处理后平均分，基于标准化结果剔除恶意评分后计算 |
+  | indicatorAverage[].abnormalCount | number | 判定为恶意评分的条数（按项目规则） |
+  | indicatorAverage[].sampleSize | number | 原始样本总数 |
+  | indicatorAverage[].validSampleSize | number | 剔除异常值后的有效样本数 |
+  | scorerDistribution | array | 打分用户分布统计 |
+  | scorerDistribution[].userId | number | 打分用户ID |
+  | scorerDistribution[].userName | string | 打分用户名称 |
+  | scorerDistribution[].scoreRange | string | 总分区间，当前可能值为 `0-2分`、`2-4分`、`4-6分`、`6-8分`、`8-10分`、`其他` |
+  | scorerDistribution[].count | number | 该用户落在当前分值区间的记录数 |
+- **统计逻辑说明**：
+  - **原始平均分**：直接基于原始打分求平均。
+  - **标准化平均分**：按评委在当前统计范围内的整体均值做中心化处理，公式为 `adjusted = raw - scorerMean + overallMean`。
+  - **恶意判定规则**（项目级）：
+    - `AUTO`：使用 MAD 低分单侧规则 `x < median - 3 × 1.4826 × MAD` 标记恶意评分。
+    - `THRESHOLD`：使用项目配置阈值区间，`x < lower` 或 `x > upper` 标记恶意评分。
+  - **处理后平均分**：先按项目规则标记恶意评分，再在**非恶意样本**上计算标准化后的平均值。
+  - **降级策略**：`AUTO` 模式在样本量过少时会跳过异常检测，仅保留标准化结果。
+
 
 ### 7.1.1 获取项目内指定小组的指标平均得分明细
 
@@ -1336,6 +1408,48 @@
 
 ```http
 GET /projects/114514/export/group-indicator-items?format=excel
+```
+
+### 7.5 导出项目异常打分记录（方案 B）
+
+- **接口地址**：`/projects/{projectId}/export/abnormal-scores`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **路径参数**：
+  | 参数名 | 类型 | 必填 | 说明 |
+  |--------|------|------|------|
+  | projectId | number | 是 | 项目ID |
+- **请求参数**：无
+- **响应**：Excel 文件流（直接下载）
+- **说明**：
+  - 仅导出被判定为异常的打分记录。
+  - 判定规则与统计接口保持一致，按项目策略执行：
+    - `AUTO`：`x < median - 3 × 1.4826 × MAD`
+    - `THRESHOLD`：`x < lower` 或 `x > upper`
+  - 当项目不存在异常记录时，返回错误提示：`当前项目暂无被标记为异常的打分记录`。
+  - 文件名格式：`项目名_异常打分记录_{时间戳}.xlsx`。
+
+- **导出数据列说明**
+
+| 列名         | 说明 |
+| ------------ | ---- |
+| 项目名称     | 当前项目名称 |
+| 记录ID       | 打分记录ID（`scoring_record.id`） |
+| 小组ID       | 被评分小组ID |
+| 小组名称     | 被评分小组名称 |
+| 评委ID       | 打分用户ID |
+| 评委姓名     | 打分用户姓名 |
+| 原始总分     | 打分记录原始总分（未标准化） |
+| 标准化后分数 | 按评委偏严/偏松校正后的分数 |
+| 偏差绝对值   | `AUTO` 模式为 `|原始总分 - 中位数|`；`THRESHOLD` 模式为 `-` |
+| 异常阈值     | `AUTO` 模式为 MAD 距离阈值；`THRESHOLD` 模式为 `-` |
+| 打分时间     | 打分记录创建时间 |
+| 异常规则     | 具体触发规则文本（AUTO 或 THRESHOLD） |
+
+- **请求示例**
+
+```http
+GET /projects/114514/export/abnormal-scores
 ```
 
 ## 8. 评审组管理模块（管理员）
@@ -1529,6 +1643,7 @@ GET /projects/114514/export/group-indicator-items?format=excel
 │  │ - 调用 API：GET /projects/{projectId}/statistics │ │
 │  │ - 展示：小组成绩、指标分析、评分分布             │ │
 │  │ - 支持数据导出：GET /projects/{projectId}/export │ │
+│  │ - 异常记录导出：GET /projects/{projectId}/export/abnormal-scores │ │
 │  ├───────────────────────────────────────────────────┤ │
 │  │ ✓ 小组统计：各小组平均得分、评分进度            │ │
 │  │ ✓ 指标分析：各评分指标的平均得分                │ │
@@ -1556,6 +1671,7 @@ GET /api/v1/statistics/platform
 2. GET /api/v1/projects/{projectId}/statistics    # 获取该项目统计
 3. GET /api/v1/projects/{projectId}/statistics/groups/{groupId}  # 可选：查看小组指标平均分明细
 4. GET /api/v1/projects/{projectId}/export        # 可选：导出数据
+5. GET /api/v1/projects/{projectId}/export/abnormal-scores  # 可选：导出异常打分记录
 ```
 
 ### 前端页面路由对应关系
@@ -1567,6 +1683,7 @@ GET /api/v1/statistics/platform
 | 项目统计详情 | `/admin/project/statistic/:projectId` | `GET /projects/{projectId}/statistics`                  | 单项目详细统计         |
 | 小组得分明细 | （在详情页内弹窗）                    | `GET /projects/{projectId}/statistics/groups/{groupId}` | 查看单小组按指标平均分 |
 | 数据导出     | （在详情页内）                        | `GET /projects/{projectId}/export`                      | 导出项目统计数据       |
+| 异常导出     | （在详情页内）                        | `GET /projects/{projectId}/export/abnormal-scores`      | 导出异常打分记录       |
 
 ### 实现建议
 
@@ -1587,6 +1704,10 @@ GET /api/v1/statistics/platform
 4. ✅ **导出功能** - `GET /projects/{projectId}/export`（需完善）
    - 支持 Excel/CSV 格式
    - 返回文件流供客户端下载
+
+5. ✅ **异常打分导出（方案 B）** - `GET /projects/{projectId}/export/abnormal-scores`
+  - 导出 MAD 规则标记的异常记录
+  - 返回 Excel 文件流供客户端下载
 
 ---
 
