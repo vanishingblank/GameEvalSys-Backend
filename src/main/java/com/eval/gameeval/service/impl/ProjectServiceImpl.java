@@ -24,12 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,6 +40,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ProjectServiceImpl implements IProjectService {
+    private static final String MALICIOUS_RULE_AUTO = "AUTO";
+    private static final String MALICIOUS_RULE_THRESHOLD = "THRESHOLD";
+
     @Resource
     private ProjectMapper projectMapper;
 
@@ -51,6 +57,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Resource
     private ScoringStandardMapper standardMapper;
+
+    @Resource
+    private ScoringRecordMapper recordMapper;
 
     @Resource
     private UserMapper userMapper;
@@ -97,6 +106,24 @@ public class ProjectServiceImpl implements IProjectService {
             // 3. 验证日期
             if (request.getStartDate().isAfter(request.getEndDate())) {
                 return ResponseVO.badRequest("起始日期不能晚于结束日期");
+            }
+
+            String maliciousRuleType = normalizeMaliciousRuleType(request.getMaliciousRuleType());
+            if (maliciousRuleType == null) {
+                return ResponseVO.badRequest("恶意判定规则类型不正确，仅支持 AUTO 或 THRESHOLD");
+            }
+            BigDecimal maliciousScoreLower = request.getMaliciousScoreLower();
+            BigDecimal maliciousScoreUpper = request.getMaliciousScoreUpper();
+            if (MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType)) {
+                if (maliciousScoreLower == null || maliciousScoreUpper == null) {
+                    return ResponseVO.badRequest("阈值模式下必须同时设置最低分和最高分");
+                }
+                if (maliciousScoreLower.compareTo(maliciousScoreUpper) > 0) {
+                    return ResponseVO.badRequest("最低分阈值不能大于最高分阈值");
+                }
+            } else {
+                maliciousScoreLower = null;
+                maliciousScoreUpper = null;
             }
 
             // 4. 解析小组来源（仅支持 groupIds）
@@ -165,6 +192,9 @@ public class ProjectServiceImpl implements IProjectService {
             log.info("项目状态 "+status);
             project.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : true);
             project.setStandardId(request.getStandardId());
+            project.setMaliciousRuleType(maliciousRuleType);
+            project.setMaliciousScoreLower(maliciousScoreLower);
+            project.setMaliciousScoreUpper(maliciousScoreUpper);
             project.setCreatorId(currentUserId);
             project.setCreateTime(LocalDateTime.now());
             project.setUpdateTime(LocalDateTime.now());
@@ -271,6 +301,32 @@ public class ProjectServiceImpl implements IProjectService {
             updateProject.setEndDate(effectiveEndDate);
             updateProject.setIsEnabled(request.getIsEnabled() != null ? request.getIsEnabled() : project.getIsEnabled());
             updateProject.setStandardId(request.getStandardId() != null ? request.getStandardId() : project.getStandardId());
+            String effectiveRuleType = normalizeMaliciousRuleType(
+                    request.getMaliciousRuleType() != null ? request.getMaliciousRuleType() : project.getMaliciousRuleType()
+            );
+            if (effectiveRuleType == null) {
+                return ResponseVO.badRequest("恶意判定规则类型不正确，仅支持 AUTO 或 THRESHOLD");
+            }
+            BigDecimal effectiveScoreLower = request.getMaliciousScoreLower() != null
+                    ? request.getMaliciousScoreLower()
+                    : project.getMaliciousScoreLower();
+            BigDecimal effectiveScoreUpper = request.getMaliciousScoreUpper() != null
+                    ? request.getMaliciousScoreUpper()
+                    : project.getMaliciousScoreUpper();
+            if (MALICIOUS_RULE_THRESHOLD.equals(effectiveRuleType)) {
+                if (effectiveScoreLower == null || effectiveScoreUpper == null) {
+                    return ResponseVO.badRequest("阈值模式下必须同时设置最低分和最高分");
+                }
+                if (effectiveScoreLower.compareTo(effectiveScoreUpper) > 0) {
+                    return ResponseVO.badRequest("最低分阈值不能大于最高分阈值");
+                }
+            } else {
+                effectiveScoreLower = null;
+                effectiveScoreUpper = null;
+            }
+            updateProject.setMaliciousRuleType(effectiveRuleType);
+            updateProject.setMaliciousScoreLower(effectiveScoreLower);
+            updateProject.setMaliciousScoreUpper(effectiveScoreUpper);
             // 根据当前时间与项目时间范围的关系设置状态
 
             LocalDateTime now = LocalDateTime.now();
@@ -325,6 +381,12 @@ public class ProjectServiceImpl implements IProjectService {
                 if (!scorers.isEmpty()) {
                     scorerMapper.insertBatch(scorers);
                 }
+            }
+
+            if (!Objects.equals(project.getMaliciousRuleType(), effectiveRuleType)
+                    || !Objects.equals(project.getMaliciousScoreLower(), effectiveScoreLower)
+                    || !Objects.equals(project.getMaliciousScoreUpper(), effectiveScoreUpper)) {
+                refreshProjectMaliciousFlags(projectId, effectiveRuleType, effectiveScoreLower, effectiveScoreUpper);
             }
 
             projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
@@ -870,6 +932,109 @@ public class ProjectServiceImpl implements IProjectService {
             expectedStatus = "ongoing";
         }
         return expectedStatus.equals(cachedStatus);
+    }
+
+    private String normalizeMaliciousRuleType(String ruleType) {
+        if (ruleType == null || ruleType.isBlank()) {
+            return MALICIOUS_RULE_AUTO;
+        }
+        String normalized = ruleType.trim().toUpperCase();
+        if (!MALICIOUS_RULE_AUTO.equals(normalized) && !MALICIOUS_RULE_THRESHOLD.equals(normalized)) {
+            return null;
+        }
+        return normalized;
+    }
+
+    private void refreshProjectMaliciousFlags(Long projectId, String ruleType, BigDecimal scoreLower, BigDecimal scoreUpper) {
+        if (projectId == null) {
+            return;
+        }
+        if (MALICIOUS_RULE_THRESHOLD.equals(ruleType)) {
+            if (scoreLower == null || scoreUpper == null) {
+                log.warn("阈值模式配置不完整，跳过恶意标记重算: projectId={}", projectId);
+                return;
+            }
+            recordMapper.markMaliciousByThreshold(projectId, scoreLower, scoreUpper);
+            return;
+        }
+
+        List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
+        recordMapper.clearMaliciousFlagByProjectId(projectId);
+        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
+            return;
+        }
+
+        Map<Long, List<Map<String, Object>>> groupRowsMap = groupScoreRows.stream()
+                .collect(Collectors.groupingBy(row -> toLong(row.get("groupId")), LinkedHashMap::new, Collectors.toList()));
+
+        Set<Long> maliciousRecordIds = new HashSet<>();
+        for (List<Map<String, Object>> rows : groupRowsMap.values()) {
+            if (rows == null || rows.isEmpty()) {
+                continue;
+            }
+            List<BigDecimal> rawScores = rows.stream()
+                    .map(row -> new BigDecimal(String.valueOf(row.get("totalScore"))))
+                    .collect(Collectors.toList());
+            Set<Integer> abnormalIndexes = detectOutlierIndexes(rawScores);
+            for (Integer abnormalIndex : abnormalIndexes) {
+                if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= rows.size()) {
+                    continue;
+                }
+                Long recordId = toLong(rows.get(abnormalIndex).get("recordId"));
+                if (recordId != null && recordId > 0) {
+                    maliciousRecordIds.add(recordId);
+                }
+            }
+        }
+
+        if (!maliciousRecordIds.isEmpty()) {
+            recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
+        }
+    }
+
+    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
+        if (scores == null || scores.size() < 4) {
+            return Collections.emptySet();
+        }
+        BigDecimal median = calculateMedian(scores);
+        List<BigDecimal> deviations = scores.stream()
+                .map(score -> score.subtract(median).abs())
+                .collect(Collectors.toList());
+        BigDecimal mad = calculateMedian(deviations);
+
+        BigDecimal threshold = mad.multiply(new BigDecimal("1.4826")).multiply(BigDecimal.valueOf(3L));
+        BigDecimal thresholdFloor = median.abs().multiply(new BigDecimal("0.05"));
+        if (thresholdFloor.compareTo(new BigDecimal("0.50")) < 0) {
+            thresholdFloor = new BigDecimal("0.50");
+        }
+        if (threshold.compareTo(thresholdFloor) < 0) {
+            threshold = thresholdFloor;
+        }
+
+        BigDecimal lowerBound = median.subtract(threshold);
+        Set<Integer> abnormalIndexes = new HashSet<>();
+        for (int i = 0; i < scores.size(); i++) {
+            if (scores.get(i).compareTo(lowerBound) < 0) {
+                abnormalIndexes.add(i);
+            }
+        }
+        return abnormalIndexes;
+    }
+
+    private BigDecimal calculateMedian(List<BigDecimal> scores) {
+        if (scores == null || scores.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        List<BigDecimal> sortedScores = scores.stream()
+                .sorted(BigDecimal::compareTo)
+                .collect(Collectors.toList());
+        int middle = sortedScores.size() / 2;
+        if (sortedScores.size() % 2 == 0) {
+            return sortedScores.get(middle - 1)
+                    .add(sortedScores.get(middle))
+                    .divide(BigDecimal.valueOf(2L), 6, java.math.RoundingMode.HALF_UP);
+        }
+        return sortedScores.get(middle);
     }
 
     private Long toLong(Object value) {

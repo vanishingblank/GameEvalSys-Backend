@@ -80,5 +80,18 @@ public class ProjectStatisticsController {
         projectStatisticsService.exportProjectGroupIndicatorItemScores(token, projectId, format, response);
     }
 
+    /**
+     * 导出项目内被判定为异常的打分记录（方案B）
+     */
+    @GetMapping("/{projectId}/export/abnormal-scores")
+    public void exportAbnormalScoringRecords(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long projectId,
+            HttpServletResponse response) throws IOException {
+
+        String token = TokenUtil.extractToken(authorization);
+        projectStatisticsService.exportAbnormalScoringRecords(token, projectId, response);
+    }
+
 
 }

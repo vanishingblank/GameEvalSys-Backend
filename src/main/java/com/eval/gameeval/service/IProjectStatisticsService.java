@@ -64,4 +64,13 @@ public interface IProjectStatisticsService {
      * @throws IOException IO异常
      */
     void exportProjectGroupIndicatorItemScores(String token, Long projectId, String format, HttpServletResponse response) throws IOException;
+
+    /**
+     * 导出项目内被判定为异常的打分记录（方案B）
+     * @param token 认证Token
+     * @param projectId 项目ID
+     * @param response HTTP响应
+     * @throws IOException IO异常
+     */
+    void exportAbnormalScoringRecords(String token, Long projectId, HttpServletResponse response) throws IOException;
 }
