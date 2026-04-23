@@ -12,17 +12,17 @@ public interface ScoringRecordMapper {
 
     // ========== 查询 ==========
     @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
-            "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
+            "total_score AS totalScore, is_malicious AS isMalicious, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE id = #{id}")
     ScoringRecord selectById(@Param("id") Long id);
 
     @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
-            "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
+            "total_score AS totalScore, is_malicious AS isMalicious, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record WHERE project_id = #{projectId} ORDER BY create_time DESC")
     List<ScoringRecord> selectByProjectId(@Param("projectId") Long projectId);
 
     @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
-            "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
+            "total_score AS totalScore, is_malicious AS isMalicious, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record " +
             "WHERE project_id = #{projectId} AND group_info_id = #{groupInfoId} AND user_id = #{userId} " +
             "LIMIT 1")
@@ -32,21 +32,35 @@ public interface ScoringRecordMapper {
             @Param("userId") Long userId
     );
 
-    @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
-            "total_score AS totalScore, create_time AS createTime, update_time AS updateTime " +
+    @Select("<script>" +
+            "SELECT id, project_id AS projectId, group_info_id AS groupInfoId, user_id AS userId, " +
+            "total_score AS totalScore, is_malicious AS isMalicious, create_time AS createTime, update_time AS updateTime " +
             "FROM scoring_record " +
             "WHERE project_id = #{projectId} AND user_id = #{userId} " +
+            "<if test='isMalicious != null'>" +
+            "  AND is_malicious = #{isMalicious} " +
+            "</if>" +
             "ORDER BY update_time DESC " +
-            "LIMIT #{offset}, #{limit}")
+            "LIMIT #{offset}, #{limit}" +
+            "</script>")
     List<ScoringRecord> selectPageByProjectAndUser(
             @Param("projectId") Long projectId,
             @Param("userId") Long userId,
             @Param("offset") int offset,
-            @Param("limit") int limit
+            @Param("limit") int limit,
+            @Param("isMalicious") Integer isMalicious
     );
 
-    @Select("SELECT COUNT(*) FROM scoring_record WHERE project_id = #{projectId} AND user_id = #{userId}")
-    Long countByProjectAndUser(@Param("projectId") Long projectId, @Param("userId") Long userId);
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM scoring_record " +
+            "WHERE project_id = #{projectId} AND user_id = #{userId} " +
+            "<if test='isMalicious != null'>" +
+            "  AND is_malicious = #{isMalicious} " +
+            "</if>" +
+            "</script>")
+    Long countByProjectAndUser(@Param("projectId") Long projectId,
+                               @Param("userId") Long userId,
+                               @Param("isMalicious") Integer isMalicious);
 
     /**
      * 查询小组平均分
@@ -76,6 +90,56 @@ public interface ScoringRecordMapper {
             "GROUP BY si.id, si.name " +
             "ORDER BY averageScore DESC")
     List<Map<String, Object>> selectIndicatorAverage(@Param("projectId") Long projectId);
+
+    /**
+     * 查询项目下所有小组原始总分明细，用于服务层做标准化与异常检测
+     */
+    @Select("SELECT " +
+            "  sr.id AS recordId, " +
+            "  pgi.id AS groupId, " +
+            "  pgi.name AS groupName, " +
+            "  sr.user_id AS userId, " +
+            "  sr.total_score AS totalScore, " +
+            "  sr.is_malicious AS isMalicious, " +
+            "  sr.create_time AS scoreTime " +
+            "FROM scoring_record sr " +
+            "JOIN project_group_info pgi ON sr.group_info_id = pgi.id " +
+            "WHERE sr.project_id = #{projectId} " +
+            "ORDER BY pgi.id ASC, sr.user_id ASC")
+    List<Map<String, Object>> selectGroupScoreDetails(@Param("projectId") Long projectId);
+
+    @Select("SELECT " +
+            "  sr.id AS recordId, " +
+            "  pgi.id AS groupId, " +
+            "  pgi.name AS groupName, " +
+            "  sr.user_id AS userId, " +
+            "  sr.total_score AS totalScore, " +
+            "  sr.is_malicious AS isMalicious, " +
+            "  sr.create_time AS scoreTime " +
+            "FROM scoring_record sr " +
+            "JOIN project_group_info pgi ON sr.group_info_id = pgi.id " +
+            "WHERE sr.project_id = #{projectId} AND sr.group_info_id = #{groupId} " +
+            "ORDER BY sr.user_id ASC")
+    List<Map<String, Object>> selectGroupScoreDetailsByProjectAndGroup(@Param("projectId") Long projectId,
+                                                                        @Param("groupId") Long groupId);
+
+    /**
+     * 查询项目下所有指标原始分明细，用于服务层做标准化与异常检测
+     */
+    @Select("SELECT " +
+            "  si.id AS indicatorId, " +
+            "  si.name AS indicatorName, " +
+            "  sr.group_info_id AS groupId, " +
+            "  sr.user_id AS userId, " +
+            "  sr.is_malicious AS isMalicious, " +
+            "  srd.score AS score " +
+            "FROM scoring_record_detail srd " +
+            "JOIN scoring_record sr ON srd.record_id = sr.id " +
+            "JOIN scoring_indicator si ON srd.indicator_id = si.id " +
+            "WHERE sr.project_id = #{projectId} " +
+            "ORDER BY si.id ASC, sr.user_id ASC, sr.group_info_id ASC")
+    List<Map<String, Object>> selectIndicatorScoreDetails(@Param("projectId") Long projectId);
+
 
     /**
      * 查询打分用户分布
@@ -118,16 +182,37 @@ public interface ScoringRecordMapper {
     );
 
     // ========== 插入 ==========
-    @Insert("INSERT INTO scoring_record(project_id, group_info_id, user_id, total_score, create_time, update_time) " +
-            "VALUES(#{projectId}, #{groupInfoId}, #{userId}, #{totalScore}, #{createTime}, #{updateTime})")
+    @Insert("INSERT INTO scoring_record(project_id, group_info_id, user_id, total_score, is_malicious, create_time, update_time) " +
+            "VALUES(#{projectId}, #{groupInfoId}, #{userId}, #{totalScore}, #{isMalicious}, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScoringRecord record);
 
     // ========== 更新 ==========
     @Update("UPDATE scoring_record " +
-            "SET total_score = #{totalScore}, update_time = #{updateTime} " +
+            "SET total_score = #{totalScore}, is_malicious = #{isMalicious}, update_time = #{updateTime} " +
             "WHERE id = #{id}")
     int updateById(ScoringRecord record);
+
+    @Update("UPDATE scoring_record SET is_malicious = 0 WHERE project_id = #{projectId}")
+    int clearMaliciousFlagByProjectId(@Param("projectId") Long projectId);
+
+    @Update("UPDATE scoring_record SET is_malicious = 0 WHERE project_id = #{projectId} AND group_info_id = #{groupId}")
+    int clearMaliciousFlagByProjectAndGroup(@Param("projectId") Long projectId, @Param("groupId") Long groupId);
+
+    @Update("<script>" +
+            "UPDATE scoring_record SET is_malicious = 1 WHERE id IN " +
+            "<foreach collection='recordIds' item='recordId' open='(' separator=',' close=')'>" +
+            "  #{recordId}" +
+            "</foreach>" +
+            "</script>")
+    int markMaliciousByRecordIds(@Param("recordIds") List<Long> recordIds);
+
+    @Update("UPDATE scoring_record " +
+            "SET is_malicious = CASE WHEN total_score < #{lower} OR total_score > #{upper} THEN 1 ELSE 0 END " +
+            "WHERE project_id = #{projectId}")
+    int markMaliciousByThreshold(@Param("projectId") Long projectId,
+                                 @Param("lower") java.math.BigDecimal lower,
+                                 @Param("upper") java.math.BigDecimal upper);
 
     // ========== 删除 ==========
     @Delete("DELETE FROM scoring_record WHERE id = #{id}")

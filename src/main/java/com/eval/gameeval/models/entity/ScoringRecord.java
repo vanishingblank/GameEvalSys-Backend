@@ -19,6 +19,7 @@ public class ScoringRecord implements Serializable {
     private Long groupInfoId;
     private Long userId;
     private BigDecimal totalScore;
+    private Integer isMalicious;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
