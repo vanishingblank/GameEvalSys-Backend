@@ -2,9 +2,14 @@ package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
+import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.models.VO.SessionInfoVO;
 import com.eval.gameeval.models.entity.User;
+import com.eval.gameeval.security.AuthSessionStore;
+import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
@@ -14,7 +19,11 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -26,6 +35,10 @@ public class AuthServiceImpl implements IAuthService{
     private RedisToken redisToken;
     @Resource
     private TokenUtil tokenUtil;
+    @Resource
+    private JwtTokenService jwtTokenService;
+    @Resource
+    private AuthSessionStore authSessionStore;
     @Resource
     private PasswordEncoder passwordEncoder;
     @Override
@@ -55,16 +68,34 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.unauthorized("用户名或密码错误");
             }
 
-            // 3. 生成Token
-            String token = tokenUtil.generateToken();
+                // 3. 生成Access/Refresh Token
+                String sid = tokenUtil.generateToken();
+                String jti = tokenUtil.generateToken();
+                String refreshToken = tokenUtil.generateToken();
+                String refreshTokenId = tokenUtil.generateToken();
 
-            // 4. 保存Token到Redis
-            redisToken.saveToken(token, user.getId());
+                Map<String, Object> claims = new HashMap<>();
+                claims.put("username", user.getUsername());
+                claims.put("role", user.getRole());
+                claims.put("sid", sid);
+                claims.put("type", "access");
+                String accessToken = jwtTokenService.generateAccessToken(
+                    claims,
+                    String.valueOf(user.getId()),
+                    jti
+                );
 
-            // 5. 构建响应
+                // 4. 保存会话到Redis
+                authSessionStore.saveSession(sid, user.getId(), user.getUsername(), user.getRole());
+                authSessionStore.addUserSession(user.getId(), sid);
+                authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
+
+                // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
-            responseVO.setToken(token);
-            responseVO.setExpireTime(LocalDateTime.now().plusHours(2));
+                responseVO.setToken(accessToken);
+                responseVO.setRefreshToken(refreshToken);
+                responseVO.setSid(sid);
+                responseVO.setExpireTime(jwtTokenService.getAccessExpireTime());
 
             LoginResponseVO.UserInfoVO userInfoVO = new LoginResponseVO.UserInfoVO();
             BeanUtils.copyProperties(user, userInfoVO);
@@ -88,8 +119,11 @@ public class AuthServiceImpl implements IAuthService{
 
             // 1. 从Token中获取用户ID
             Long userId = redisToken.getUserIdByToken(token);
+            if (userId == null) {
+                return ResponseVO.unauthorized("Token无效");
+            }
 
-            // 2. 删除Redis中的Token
+            // 2. 删除Redis中的会话并拉黑当前Access Token
             redisToken.deleteToken(token);
 
             log.info("用户退出成功: userId={}", userId);
@@ -99,6 +133,89 @@ public class AuthServiceImpl implements IAuthService{
         } catch (Exception e) {
             log.error("退出登录异常", e);
             return ResponseVO.error("退出失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<RefreshResponseVO> refresh(RefreshRequestDTO request) {
+        try {
+            if (request == null || request.getSid() == null || request.getRefreshToken() == null) {
+                return ResponseVO.badRequest("参数不能为空");
+            }
+
+            String sid = request.getSid();
+            String refreshToken = request.getRefreshToken();
+
+            if (!authSessionStore.matchRefreshToken(sid, refreshToken)) {
+                authSessionStore.deleteSession(sid);
+                authSessionStore.deleteRefresh(sid);
+                return ResponseVO.unauthorized("Refresh Token无效");
+            }
+
+            Map<Object, Object> session = authSessionStore.getSession(sid);
+            if (session == null || session.isEmpty()) {
+                return ResponseVO.unauthorized("会话已失效");
+            }
+
+            Long userId = Long.parseLong(session.get("userId").toString());
+            String username = String.valueOf(session.get("username"));
+            String role = String.valueOf(session.get("role"));
+
+            String jti = tokenUtil.generateToken();
+            Map<String, Object> claims = new HashMap<>();
+            claims.put("username", username);
+            claims.put("role", role);
+            claims.put("sid", sid);
+            claims.put("type", "access");
+
+            String accessToken = jwtTokenService.generateAccessToken(
+                    claims,
+                    String.valueOf(userId),
+                    jti
+            );
+
+            String newRefreshToken = tokenUtil.generateToken();
+            String newRefreshTokenId = tokenUtil.generateToken();
+            authSessionStore.saveRefresh(sid, newRefreshToken, newRefreshTokenId);
+            authSessionStore.refreshSessionTtl(sid);
+            authSessionStore.refreshUserSessionsTtl(userId);
+
+            RefreshResponseVO response = new RefreshResponseVO();
+            response.setToken(accessToken);
+            response.setRefreshToken(newRefreshToken);
+            response.setSid(sid);
+            response.setExpireTime(jwtTokenService.getAccessExpireTime());
+
+            return ResponseVO.success("刷新成功", response);
+        } catch (Exception e) {
+            log.error("刷新Token异常", e);
+            return ResponseVO.error("刷新失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<List<SessionInfoVO>> getMySessions(Long userId) {
+        try {
+            if (userId == null) {
+                return ResponseVO.unauthorized("未登录");
+            }
+            Set<String> sids = authSessionStore.getUserSessions(userId);
+                List<SessionInfoVO> sessions = sids.stream()
+                    .map(sid -> Map.entry(sid, authSessionStore.getSession(sid)))
+                    .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
+                    .map(entry -> new SessionInfoVO()
+                        .setSid(entry.getKey())
+                        .setUsername(String.valueOf(entry.getValue().get("username")))
+                        .setRole(String.valueOf(entry.getValue().get("role")))
+                        .setLoginAt(String.valueOf(entry.getValue().get("loginAt")))
+                        .setLastActiveAt(String.valueOf(entry.getValue().get("lastActiveAt")))
+                        .setStatus(String.valueOf(entry.getValue().get("status"))))
+                    .collect(Collectors.toList());
+
+            return ResponseVO.success("查询成功", sessions);
+        } catch (Exception e) {
+            log.error("查询会话异常", e);
+            return ResponseVO.error("查询失败");
         }
     }
 }
