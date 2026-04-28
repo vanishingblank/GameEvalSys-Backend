@@ -4,11 +4,10 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     #linux with docker
     # url: jdbc:mysql://localhost:3314/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
-    #windows with wsl mariadb docker container
-    #url: jdbc:mysql://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
-    url: jdbc:mysql://localhost:10306/gameeval_test?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
+    #windows with local mysql
+    url: jdbc:mysql://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
-    password: root123456
+    password: 123456
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
