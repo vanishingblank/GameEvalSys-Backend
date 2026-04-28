@@ -49,6 +49,7 @@ public class RedisToken {
         if (tokenVersion != currentVersion) {
             return null;
         }
+        authSessionStore.updateLastActiveIfStale(sid);
         return userId;
     }
 

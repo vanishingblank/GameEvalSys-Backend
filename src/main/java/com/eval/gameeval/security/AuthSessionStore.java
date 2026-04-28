@@ -8,9 +8,13 @@ import jakarta.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.List;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
@@ -28,6 +32,12 @@ public class AuthSessionStore {
 
     @Value("${jwt.refresh-seconds:604800}")
     private long refreshSeconds;
+
+    @Value("${jwt.last-active-refresh-seconds:300}")
+    private long lastActiveRefreshSeconds;
+
+    @Value("${jwt.max-sessions-per-user:10}")
+    private int maxSessionsPerUser;
 
     public void saveSession(String sid, Long userId, String username, String role) {
         String key = SESSION_PREFIX + sid;
@@ -85,6 +95,52 @@ public class AuthSessionStore {
     public void removeUserSession(Long userId, String sid) {
         String key = USER_SESSIONS_PREFIX + userId;
         redisTemplate.opsForSet().remove(key, sid);
+    }
+
+    public void enforceSessionLimit(Long userId) {
+        if (userId == null || maxSessionsPerUser <= 0) {
+            return;
+        }
+        Set<String> sids = getUserSessions(userId);
+        int over = sids.size() - maxSessionsPerUser;
+        if (over <= 0) {
+            return;
+        }
+
+        List<SessionSnapshot> snapshots = new ArrayList<>();
+        for (String sid : sids) {
+            Map<Object, Object> session = getSession(sid);
+            snapshots.add(new SessionSnapshot(sid, parseLoginAt(session)));
+        }
+
+        snapshots.sort(Comparator.comparing(snapshot -> snapshot.loginAt));
+        for (int i = 0; i < over && i < snapshots.size(); i++) {
+            String sid = snapshots.get(i).sid;
+            deleteSession(sid);
+            deleteRefresh(sid);
+            removeUserSession(userId, sid);
+        }
+    }
+
+    public void updateLastActiveIfStale(String sid) {
+        if (sid == null || sid.trim().isEmpty()) {
+            return;
+        }
+        String key = SESSION_PREFIX + sid;
+        Object raw = redisTemplate.opsForHash().get(key, "lastActiveAt");
+        Instant now = Instant.now();
+        if (raw == null) {
+            redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+            return;
+        }
+        try {
+            Instant last = Instant.parse(raw.toString());
+            if (now.minusSeconds(lastActiveRefreshSeconds).isAfter(last)) {
+                redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+            }
+        } catch (DateTimeParseException e) {
+            redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+        }
     }
 
     public long getTokenVersion(Long userId) {
@@ -168,6 +224,31 @@ public class AuthSessionStore {
             return builder.toString();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to hash refresh token", e);
+        }
+    }
+
+    private Instant parseLoginAt(Map<Object, Object> session) {
+        if (session == null) {
+            return Instant.EPOCH;
+        }
+        Object raw = session.get("loginAt");
+        if (raw == null) {
+            return Instant.EPOCH;
+        }
+        try {
+            return Instant.parse(raw.toString());
+        } catch (DateTimeParseException e) {
+            return Instant.EPOCH;
+        }
+    }
+
+    private static final class SessionSnapshot {
+        private final String sid;
+        private final Instant loginAt;
+
+        private SessionSnapshot(String sid, Instant loginAt) {
+            this.sid = sid;
+            this.loginAt = loginAt;
         }
     }
 }

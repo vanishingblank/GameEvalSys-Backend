@@ -90,4 +90,6 @@ jwt:
   issuer: ${JWT_ISSUER:gameeval}
   access-seconds: 14400
   refresh-seconds: 604800
+  last-active-refresh-seconds: 300
+  max-sessions-per-user: 10
 

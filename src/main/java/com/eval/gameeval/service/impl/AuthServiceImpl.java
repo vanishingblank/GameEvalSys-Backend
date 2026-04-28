@@ -91,6 +91,7 @@ public class AuthServiceImpl implements IAuthService{
                 authSessionStore.saveSession(sid, user.getId(), user.getUsername(), user.getRole());
                 authSessionStore.addUserSession(user.getId(), sid);
                 authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
+                authSessionStore.enforceSessionLimit(user.getId());
 
                 // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
