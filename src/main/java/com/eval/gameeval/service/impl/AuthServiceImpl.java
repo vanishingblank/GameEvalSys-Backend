@@ -200,22 +200,124 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.unauthorized("未登录");
             }
             Set<String> sids = authSessionStore.getUserSessions(userId);
-                List<SessionInfoVO> sessions = sids.stream()
-                    .map(sid -> Map.entry(sid, authSessionStore.getSession(sid)))
-                    .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
-                    .map(entry -> new SessionInfoVO()
-                        .setSid(entry.getKey())
-                        .setUsername(String.valueOf(entry.getValue().get("username")))
-                        .setRole(String.valueOf(entry.getValue().get("role")))
-                        .setLoginAt(String.valueOf(entry.getValue().get("loginAt")))
-                        .setLastActiveAt(String.valueOf(entry.getValue().get("lastActiveAt")))
-                        .setStatus(String.valueOf(entry.getValue().get("status"))))
-                    .collect(Collectors.toList());
+            List<SessionInfoVO> sessions = buildSessionInfos(sids);
 
             return ResponseVO.success("查询成功", sessions);
         } catch (Exception e) {
             log.error("查询会话异常", e);
             return ResponseVO.error("查询失败");
         }
+    }
+
+    @Override
+    public ResponseVO<List<SessionInfoVO>> getUserSessions(Long currentUserId, Long targetUserId) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+            User targetUser = userMapper.selectById(targetUserId);
+            if (targetUser == null) {
+                return ResponseVO.notFound("用户不存在");
+            }
+            Set<String> sids = authSessionStore.getUserSessions(targetUserId);
+            List<SessionInfoVO> sessions = buildSessionInfos(sids);
+            return ResponseVO.success("查询成功", sessions);
+        } catch (Exception e) {
+            log.error("管理员查询会话异常", e);
+            return ResponseVO.error("查询失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<Void> kickSession(Long currentUserId, String sid) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+            if (sid == null || sid.isBlank()) {
+                return ResponseVO.badRequest("sid不能为空");
+            }
+
+            Long targetUserId = authSessionStore.getSessionUserId(sid);
+            if (targetUserId == null) {
+                return ResponseVO.notFound("会话不存在");
+            }
+
+            authSessionStore.deleteSession(sid);
+            authSessionStore.deleteRefresh(sid);
+            authSessionStore.removeUserSession(targetUserId, sid);
+
+            log.info("管理员踢下线: adminId={}, targetUserId={}, sid={}", currentUserId, targetUserId, sid);
+            return ResponseVO.success("踢下线成功", null);
+        } catch (Exception e) {
+            log.error("管理员踢下线异常", e);
+            return ResponseVO.error("踢下线失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<Void> kickAllSessions(Long currentUserId, Long targetUserId) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+            User targetUser = userMapper.selectById(targetUserId);
+            if (targetUser == null) {
+                return ResponseVO.notFound("用户不存在");
+            }
+
+            Set<String> sids = authSessionStore.getUserSessions(targetUserId);
+            for (String sid : sids) {
+                authSessionStore.deleteSession(sid);
+                authSessionStore.deleteRefresh(sid);
+                authSessionStore.removeUserSession(targetUserId, sid);
+            }
+
+            log.info("管理员踢全端: adminId={}, targetUserId={}", currentUserId, targetUserId);
+            return ResponseVO.success("踢下线成功", null);
+        } catch (Exception e) {
+            log.error("管理员踢全端异常", e);
+            return ResponseVO.error("踢下线失败");
+        }
+    }
+
+    private List<SessionInfoVO> buildSessionInfos(Set<String> sids) {
+        return sids.stream()
+                .map(sid -> Map.entry(sid, authSessionStore.getSession(sid)))
+                .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
+                .map(entry -> new SessionInfoVO()
+                        .setSid(entry.getKey())
+                        .setUsername(String.valueOf(entry.getValue().get("username")))
+                        .setRole(String.valueOf(entry.getValue().get("role")))
+                        .setLoginAt(String.valueOf(entry.getValue().get("loginAt")))
+                        .setLastActiveAt(String.valueOf(entry.getValue().get("lastActiveAt")))
+                        .setStatus(String.valueOf(entry.getValue().get("status"))))
+                .collect(Collectors.toList());
+    }
+
+    private User getCurrentUser(Long currentUserId) {
+        if (currentUserId == null) {
+            return null;
+        }
+        return userMapper.selectById(currentUserId);
+    }
+
+    private boolean isAdmin(User user) {
+        if (user == null) {
+            return false;
+        }
+        return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
     }
 }

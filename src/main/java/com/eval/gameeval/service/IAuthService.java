@@ -18,4 +18,10 @@ public interface IAuthService {
     ResponseVO<RefreshResponseVO> refresh(@Valid RefreshRequestDTO request);
 
     ResponseVO<List<SessionInfoVO>> getMySessions(Long userId);
+
+    ResponseVO<List<SessionInfoVO>> getUserSessions(Long currentUserId, Long targetUserId);
+
+    ResponseVO<Void> kickSession(Long currentUserId, String sid);
+
+    ResponseVO<Void> kickAllSessions(Long currentUserId, Long targetUserId);
 }
