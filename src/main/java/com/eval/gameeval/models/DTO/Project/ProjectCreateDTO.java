@@ -7,6 +7,7 @@ import lombok.experimental.Accessors;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -43,4 +44,11 @@ public class ProjectCreateDTO implements Serializable {
     @NotNull(message = "评审组ID不能为空")
     @Min(value = 1, message = "评审组ID必须大于0")
     private Long reviewerGroupId;
+
+    @Pattern(regexp = "^(AUTO|THRESHOLD)$", message = "恶意判定规则类型不正确，仅支持 AUTO 或 THRESHOLD")
+    private String maliciousRuleType = "AUTO";
+
+    private BigDecimal maliciousScoreLower;
+
+    private BigDecimal maliciousScoreUpper;
 }

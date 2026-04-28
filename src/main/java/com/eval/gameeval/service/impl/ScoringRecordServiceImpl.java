@@ -25,11 +25,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class ScoringRecordServiceImpl implements IScoringRecordService {
+    private static final String MALICIOUS_RULE_AUTO = "AUTO";
+    private static final String MALICIOUS_RULE_THRESHOLD = "THRESHOLD";
 
     @Autowired
     private ScoringRecordMapper recordMapper;
@@ -161,6 +164,11 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             }
 
             // 8. 检查是否已存在打分记录（修改）
+            String maliciousRuleType = normalizeMaliciousRuleType(project.getMaliciousRuleType());
+            Integer maliciousFlag = MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType)
+                    ? (isScoreMaliciousByThreshold(totalScore, project.getMaliciousScoreLower(), project.getMaliciousScoreUpper()) ? 1 : 0)
+                    : 0;
+
             ScoringRecord existingRecord = recordMapper.selectByUniqueKey(
                     request.getProjectId(),
                     request.getGroupId(),
@@ -172,6 +180,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 // 修改已有记录
                 record = existingRecord;
                 record.setTotalScore(totalScore);
+                record.setIsMalicious(maliciousFlag);
                 record.setUpdateTime(LocalDateTime.now());
                 recordMapper.updateById(record);
 
@@ -184,6 +193,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 record.setGroupInfoId(request.getGroupId());
                 record.setUserId(currentUserId);
                 record.setTotalScore(totalScore);
+                record.setIsMalicious(maliciousFlag);
                 record.setCreateTime(LocalDateTime.now());
                 record.setUpdateTime(LocalDateTime.now());
                 recordMapper.insert(record);
@@ -195,6 +205,14 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             }
             if (!details.isEmpty()) {
                 detailMapper.insertBatch(details);
+            }
+
+            if (MALICIOUS_RULE_AUTO.equals(maliciousRuleType)) {
+                refreshMaliciousFlagsForProjectGroup(request.getProjectId(), request.getGroupId());
+                ScoringRecord refreshedRecord = recordMapper.selectById(record.getId());
+                if (refreshedRecord != null) {
+                    record = refreshedRecord;
+                }
             }
 
             // 10. 构建响应
@@ -296,23 +314,24 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             // 4. 分页参数
             int page = query != null && query.getPage() != null ? query.getPage() : 1;
             int size = query != null && query.getSize() != null ? query.getSize() : 10;
+            Integer isMalicious = query != null ? query.getIsMalicious() : null;
             page = Math.max(page, 1);
             size = Math.max(size, 1);
             int offset = (page - 1) * size;
 
             // 5. 读取缓存
-            String cacheKey = RedisKeyUtil.buildScoringRecordPageKey(projectId, currentUserId, page, size);
+            String cacheKey = RedisKeyUtil.buildScoringRecordPageKey(projectId, currentUserId, isMalicious, page, size);
             Object cache = scoringRecordCacheUtil.getUserProjectRecordsCache(cacheKey);
             if (cache != null) {
                 ScoringRecordPageVO cachedPage = (ScoringRecordPageVO) cache;
-                log.info("【缓存命中】获取用户项目打分页记录: projectId={}, userId={}, page={}, size={}, total={}",
-                        projectId, currentUserId, page, size, cachedPage.getTotal());
+                log.info("【缓存命中】获取用户项目打分页记录: projectId={}, userId={}, isMalicious={}, page={}, size={}, total={}",
+                        projectId, currentUserId, isMalicious, page, size, cachedPage.getTotal());
                 return ResponseVO.success("获取成功", cachedPage);
             }
 
             // 6. 查询记录与总数
-            List<ScoringRecord> records = recordMapper.selectPageByProjectAndUser(projectId, currentUserId, offset, size);
-            Long total = recordMapper.countByProjectAndUser(projectId, currentUserId);
+            List<ScoringRecord> records = recordMapper.selectPageByProjectAndUser(projectId, currentUserId, offset, size, isMalicious);
+            Long total = recordMapper.countByProjectAndUser(projectId, currentUserId, isMalicious);
 
             // 7. 批量查询明细并构建VO
             List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
@@ -336,13 +355,125 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             // 8. 写入缓存
             scoringRecordCacheUtil.cacheUserProjectRecords(cacheKey, pageVO);
 
-            log.info("获取用户项目打分页记录成功: projectId={}, userId={}, page={}, size={}, count={}, total={}",
-                    projectId, currentUserId, page, size, recordVOList.size(), total);
+            log.info("获取用户项目打分页记录成功: projectId={}, userId={}, isMalicious={}, page={}, size={}, count={}, total={}",
+                    projectId, currentUserId, isMalicious, page, size, recordVOList.size(), total);
             return ResponseVO.success("获取成功", pageVO);
         } catch (Exception e) {
             log.error("获取用户项目打分页记录异常: projectId={}", projectId, e);
             return ResponseVO.error("获取失败: " + e.getMessage());
         }
+    }
+
+    private String normalizeMaliciousRuleType(String ruleType) {
+        if (ruleType == null || ruleType.isBlank()) {
+            return MALICIOUS_RULE_AUTO;
+        }
+        String normalized = ruleType.trim().toUpperCase();
+        if (!MALICIOUS_RULE_THRESHOLD.equals(normalized)) {
+            return MALICIOUS_RULE_AUTO;
+        }
+        return normalized;
+    }
+
+    private boolean isScoreMaliciousByThreshold(BigDecimal totalScore, BigDecimal scoreLower, BigDecimal scoreUpper) {
+        if (totalScore == null || scoreLower == null || scoreUpper == null) {
+            return false;
+        }
+        return totalScore.compareTo(scoreLower) < 0 || totalScore.compareTo(scoreUpper) > 0;
+    }
+
+    private void refreshMaliciousFlagsForProjectGroup(Long projectId, Long groupId) {
+        List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetailsByProjectAndGroup(projectId, groupId);
+        recordMapper.clearMaliciousFlagByProjectAndGroup(projectId, groupId);
+        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
+            return;
+        }
+
+        List<BigDecimal> rawScores = groupScoreRows.stream()
+                .map(row -> convertToBigDecimal(row.get("totalScore")))
+                .collect(Collectors.toList());
+        Set<Integer> abnormalIndexes = detectOutlierIndexes(rawScores);
+        if (abnormalIndexes.isEmpty()) {
+            return;
+        }
+
+        List<Long> maliciousRecordIds = abnormalIndexes.stream()
+                .filter(index -> index != null && index >= 0 && index < groupScoreRows.size())
+                .map(index -> toLong(groupScoreRows.get(index).get("recordId")))
+                .filter(recordId -> recordId != null && recordId > 0)
+                .distinct()
+                .collect(Collectors.toList());
+        if (!maliciousRecordIds.isEmpty()) {
+            recordMapper.markMaliciousByRecordIds(maliciousRecordIds);
+        }
+    }
+
+    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
+        if (scores == null || scores.size() < 4) {
+            return Collections.emptySet();
+        }
+        BigDecimal median = calculateMedian(scores);
+        List<BigDecimal> deviations = scores.stream()
+                .map(score -> score.subtract(median).abs())
+                .collect(Collectors.toList());
+        BigDecimal mad = calculateMedian(deviations);
+
+        BigDecimal threshold = mad.multiply(new BigDecimal("1.4826")).multiply(BigDecimal.valueOf(3L));
+        BigDecimal thresholdFloor = median.abs().multiply(new BigDecimal("0.05"));
+        if (thresholdFloor.compareTo(new BigDecimal("0.50")) < 0) {
+            thresholdFloor = new BigDecimal("0.50");
+        }
+        if (threshold.compareTo(thresholdFloor) < 0) {
+            threshold = thresholdFloor;
+        }
+
+        BigDecimal lowerBound = median.subtract(threshold);
+        Set<Integer> abnormalIndexes = new java.util.HashSet<>();
+        for (int i = 0; i < scores.size(); i++) {
+            if (scores.get(i).compareTo(lowerBound) < 0) {
+                abnormalIndexes.add(i);
+            }
+        }
+        return abnormalIndexes;
+    }
+
+    private BigDecimal calculateMedian(List<BigDecimal> scores) {
+        if (scores == null || scores.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        List<BigDecimal> sortedScores = scores.stream()
+                .sorted(BigDecimal::compareTo)
+                .collect(Collectors.toList());
+        int middle = sortedScores.size() / 2;
+        if (sortedScores.size() % 2 == 0) {
+            return sortedScores.get(middle - 1)
+                    .add(sortedScores.get(middle))
+                    .divide(BigDecimal.valueOf(2L), 6, java.math.RoundingMode.HALF_UP);
+        }
+        return sortedScores.get(middle);
+    }
+
+    private BigDecimal convertToBigDecimal(Object obj) {
+        if (obj == null) {
+            return BigDecimal.ZERO;
+        }
+        if (obj instanceof BigDecimal bigDecimal) {
+            return bigDecimal;
+        }
+        if (obj instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        return new BigDecimal(obj.toString());
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(value.toString());
     }
 
     private ScoringRecordVO buildScoringRecordVO(ScoringRecord record, List<ScoringRecordDetail> details) {

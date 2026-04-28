@@ -1,11 +1,13 @@
 package com.eval.gameeval.models.DTO.Project;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -31,4 +33,11 @@ public class ProjectUpdateDTO implements Serializable {
     private List<Long> groupIds;
 
     private List<Long> scorerIds;
+
+    @Pattern(regexp = "^(AUTO|THRESHOLD)$", message = "恶意判定规则类型不正确，仅支持 AUTO 或 THRESHOLD")
+    private String maliciousRuleType;
+
+    private BigDecimal maliciousScoreLower;
+
+    private BigDecimal maliciousScoreUpper;
 }

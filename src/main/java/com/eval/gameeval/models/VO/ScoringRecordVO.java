@@ -27,6 +27,7 @@ public class ScoringRecordVO implements Serializable {
 
     private List<ScoreVO> scores;
     private BigDecimal totalScore;
+    private Integer isMalicious;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

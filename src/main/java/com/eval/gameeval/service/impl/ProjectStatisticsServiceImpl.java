@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
+    private static final String MALICIOUS_RULE_AUTO = "AUTO";
+    private static final String MALICIOUS_RULE_THRESHOLD = "THRESHOLD";
 
     @Resource
     private ScoringRecordMapper recordMapper;
@@ -85,31 +87,18 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 查询小组平均分
-            List<Map<String, Object>> groupAvgList = recordMapper.selectGroupAverage(projectId);
-            List<ProjectStatisticsVO.GroupAverageVO> groupAverage = groupAvgList.stream()
-                    .map(map -> {
-                        ProjectStatisticsVO.GroupAverageVO vo = new ProjectStatisticsVO.GroupAverageVO();
-                        vo.setGroupId(((Number) map.get("groupId")).longValue());
-                        vo.setGroupName((String) map.get("groupName"));
-                        vo.setAverageScore(convertToBigDecimal(map.get("averageScore")));
-                        return vo;
-                    })
-                    .collect(Collectors.toList());
+            // 3. 查询小组评分明细，并在服务层完成评委标准化与异常检测
+            List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
+            refreshMaliciousFlags(project, groupScoreList);
+            groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
+            List<ProjectStatisticsVO.GroupAverageVO> groupAverage = buildGroupAverageStatistics(groupScoreList);
 
-            // 4. 查询指标平均分
-            List<Map<String, Object>> indicatorAvgList = recordMapper.selectIndicatorAverage(projectId);
-            List<ProjectStatisticsVO.IndicatorAverageVO> indicatorAverage = indicatorAvgList.stream()
-                    .map(map -> {
-                        ProjectStatisticsVO.IndicatorAverageVO vo = new ProjectStatisticsVO.IndicatorAverageVO();
-                        vo.setIndicatorId(((Number) map.get("indicatorId")).longValue());
-                        vo.setIndicatorName((String) map.get("indicatorName"));
-                        vo.setAverageScore(convertToBigDecimal(map.get("averageScore")));
-                        return vo;
-                    })
-                    .collect(Collectors.toList());
+            // 4. 查询指标评分明细，并在服务层完成评委标准化与异常检测
+            List<Map<String, Object>> indicatorScoreList = recordMapper.selectIndicatorScoreDetails(projectId);
+            List<ProjectStatisticsVO.IndicatorAverageVO> indicatorAverage = buildIndicatorAverageStatistics(indicatorScoreList);
 
             // 5. 查询打分用户分布
+
             List<Map<String, Object>> scorerDistList = recordMapper.selectScorerDistribution(projectId);
             List<ProjectStatisticsVO.ScorerDistributionVO> scorerDistribution = scorerDistList.stream()
                     .map(map -> {
@@ -587,6 +576,150 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         }
     }
 
+    @Override
+    public void exportAbnormalScoringRecords(String token, Long projectId, HttpServletResponse response) throws IOException {
+        try {
+            Long currentUserId = redisToken.getUserIdByToken(token);
+            if (currentUserId == null) {
+                throw new RuntimeException("Token无效");
+            }
+
+            Project project = projectMapper.selectById(projectId);
+            if (project == null) {
+                throw new RuntimeException("项目不存在");
+            }
+
+            List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
+            if (groupScoreRows == null || groupScoreRows.isEmpty()) {
+                throw new RuntimeException("该项目暂无打分数据");
+            }
+            refreshMaliciousFlags(project, groupScoreRows);
+            groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
+
+            BigDecimal projectMean = calculateAverage(groupScoreRows.stream()
+                    .map(row -> convertToBigDecimal(row.get("totalScore")))
+                    .collect(Collectors.toList()));
+            Map<Long, NormalizationStats> scorerStats = buildScorerStats(groupScoreRows, "userId", "totalScore");
+
+            Map<Long, List<NormalizedScoreEntry>> groupedScores = new LinkedHashMap<>();
+            for (Map<String, Object> row : groupScoreRows) {
+                Long recordId = toLong(row.get("recordId"));
+                Long groupId = toLong(row.get("groupId"));
+                String groupName = row.get("groupName") != null ? row.get("groupName").toString() : "-";
+                Long userId = toLong(row.get("userId"));
+                BigDecimal rawScore = convertToBigDecimal(row.get("totalScore"));
+                BigDecimal normalizedScore = normalizeScore(rawScore, scorerStats.get(userId), projectMean);
+                LocalDateTime scoreTime = parseToLocalDateTime(row.get("scoreTime"));
+                groupedScores.computeIfAbsent(groupId, key -> new ArrayList<>())
+                        .add(new NormalizedScoreEntry(recordId, groupId, groupName, userId, rawScore, normalizedScore, scoreTime));
+            }
+
+            String maliciousRuleType = normalizeMaliciousRuleType(project.getMaliciousRuleType());
+            String thresholdRule = buildThresholdRuleDesc(project);
+            Map<Long, BigDecimal> autoDeviationMap = new HashMap<>();
+            Map<Long, BigDecimal> autoThresholdMap = new HashMap<>();
+            if (MALICIOUS_RULE_AUTO.equals(maliciousRuleType)) {
+                for (List<NormalizedScoreEntry> entries : groupedScores.values()) {
+                    if (entries == null || entries.isEmpty()) {
+                        continue;
+                    }
+                    List<BigDecimal> rawScores = entries.stream()
+                            .map(NormalizedScoreEntry::getRawScore)
+                            .collect(Collectors.toList());
+                    OutlierDetectionResult detectionResult = detectOutlierResult(rawScores);
+                    for (Integer abnormalIndex : detectionResult.getAbnormalIndexes()) {
+                        if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= entries.size()) {
+                            continue;
+                        }
+                        NormalizedScoreEntry entry = entries.get(abnormalIndex);
+                        BigDecimal deviation = detectionResult.getMedian().subtract(entry.getRawScore()).abs();
+                        autoDeviationMap.put(entry.getRecordId(), scaleScore(deviation));
+                        autoThresholdMap.put(entry.getRecordId(), scaleScore(detectionResult.getThreshold()));
+                    }
+                }
+            }
+            Map<Long, Integer> maliciousMap = groupScoreRows.stream()
+                    .collect(Collectors.toMap(
+                            row -> toLong(row.get("recordId")),
+                            row -> {
+                                Integer value = toInteger(row.get("isMalicious"));
+                                return value == null ? 0 : value;
+                            },
+                            (a, b) -> b
+                    ));
+            List<AbnormalExportEntry> abnormalEntries = groupedScores.values().stream()
+                    .flatMap(Collection::stream)
+                    .filter(entry -> Objects.equals(maliciousMap.getOrDefault(entry.getRecordId(), 0), 1))
+                    .map(entry -> new AbnormalExportEntry(
+                            entry.getRecordId(),
+                            entry.getSubjectId(),
+                            entry.getSubjectName(),
+                            entry.getScorerId(),
+                            entry.getRawScore(),
+                            entry.getNormalizedScore(),
+                            autoDeviationMap.get(entry.getRecordId()),
+                            autoThresholdMap.get(entry.getRecordId()),
+                            entry.getScoreTime(),
+                            MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType) ? thresholdRule : "x < median - 3*1.4826*MAD"
+                    ))
+                    .collect(Collectors.toList());
+
+            if (abnormalEntries.isEmpty()) {
+                throw new RuntimeException("当前项目暂无被标记为异常的打分记录");
+            }
+
+            abnormalEntries.sort(Comparator.comparing(AbnormalExportEntry::getGroupId)
+                    .thenComparing(AbnormalExportEntry::getScoreTime, Comparator.nullsLast(LocalDateTime::compareTo)));
+
+            Map<Long, String> userNameCache = new HashMap<>();
+            List<List<Object>> rows = new ArrayList<>();
+
+            List<Object> header = new ArrayList<>();
+            header.add("项目名称");
+            header.add("记录ID");
+            header.add("小组ID");
+            header.add("小组名称");
+            header.add("评委ID");
+            header.add("评委姓名");
+            header.add("原始总分");
+            header.add("标准化后分数");
+            header.add("偏差绝对值");
+            header.add("异常阈值");
+            header.add("打分时间");
+            header.add("异常规则");
+            rows.add(header);
+
+            for (AbnormalExportEntry entry : abnormalEntries) {
+                List<Object> row = new ArrayList<>();
+                row.add(project.getName());
+                row.add(entry.getRecordId());
+                row.add(entry.getGroupId());
+                row.add(entry.getGroupName());
+                row.add(entry.getUserId());
+                String userName = userNameCache.computeIfAbsent(entry.getUserId(), userId -> {
+                    User user = userMapper.selectById(userId);
+                    return user != null ? user.getName() : "未知";
+                });
+                row.add(userName);
+                row.add(formatDecimal(entry.getRawScore()));
+                row.add(formatDecimal(entry.getNormalizedScore()));
+                row.add(formatDecimal(entry.getDeviation()));
+                row.add(formatDecimal(entry.getThreshold()));
+                row.add(entry.getScoreTime() != null ? DateUtil.format(entry.getScoreTime(), "yyyy-MM-dd HH:mm:ss") : "-");
+                row.add(entry.getRuleDesc());
+                rows.add(row);
+            }
+
+            String fileName = project.getName() + "_异常打分记录_" + DateUtil.format(new Date(), "yyyyMMddHHmmss");
+            exportExcel(response, fileName, rows);
+
+            log.info("导出项目异常打分记录成功: projectId={}, abnormalCount={}", projectId, abnormalEntries.size());
+        } catch (Exception e) {
+            log.error("导出项目异常打分记录异常: projectId={}", projectId, e);
+            throw new IOException("导出失败: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * 导出Excel
      */
@@ -641,6 +774,275 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         response.getWriter().write(csv.toString());
     }
 
+    private List<ProjectStatisticsVO.GroupAverageVO> buildGroupAverageStatistics(List<Map<String, Object>> groupScoreRows) {
+        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        BigDecimal projectMean = calculateAverage(groupScoreRows.stream()
+                .map(row -> convertToBigDecimal(row.get("totalScore")))
+                .collect(Collectors.toList()));
+        Map<Long, NormalizationStats> scorerStats = buildScorerStats(groupScoreRows, "userId", "totalScore");
+
+        Map<Long, List<NormalizedScoreEntry>> groupedScores = new LinkedHashMap<>();
+        for (Map<String, Object> row : groupScoreRows) {
+            Long groupId = toLong(row.get("groupId"));
+            String groupName = row.get("groupName") != null ? row.get("groupName").toString() : "-";
+            Long userId = toLong(row.get("userId"));
+            BigDecimal rawScore = convertToBigDecimal(row.get("totalScore"));
+            BigDecimal normalizedScore = normalizeScore(rawScore, scorerStats.get(userId), projectMean);
+            Integer isMalicious = toInteger(row.get("isMalicious"));
+            groupedScores.computeIfAbsent(groupId, key -> new ArrayList<>())
+                    .add(new NormalizedScoreEntry(groupId, groupName, userId, rawScore, normalizedScore)
+                            .setAbnormal(isMalicious != null && isMalicious == 1));
+        }
+
+        return groupedScores.values().stream()
+                .map(entries -> {
+                    NormalizedScoreEntry first = entries.get(0);
+                    RobustScoreSummary summary = summarizeScores(entries);
+                    return new ProjectStatisticsVO.GroupAverageVO()
+                            .setGroupId(first.getSubjectId())
+                            .setGroupName(first.getSubjectName())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize());
+                })
+                .sorted(Comparator.comparing(ProjectStatisticsVO.GroupAverageVO::getAverageScore,
+                        Comparator.nullsLast(BigDecimal::compareTo)).reversed())
+                .collect(Collectors.toList());
+    }
+
+    private List<ProjectStatisticsVO.IndicatorAverageVO> buildIndicatorAverageStatistics(List<Map<String, Object>> indicatorScoreRows) {
+        if (indicatorScoreRows == null || indicatorScoreRows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, List<Map<String, Object>>> indicatorGroups = indicatorScoreRows.stream()
+                .collect(Collectors.groupingBy(row -> toLong(row.get("indicatorId")), LinkedHashMap::new, Collectors.toList()));
+
+        return indicatorGroups.values().stream()
+                .map(rows -> {
+                    BigDecimal indicatorMean = calculateAverage(rows.stream()
+                            .map(row -> convertToBigDecimal(row.get("score")))
+                            .collect(Collectors.toList()));
+                    Map<Long, NormalizationStats> scorerStats = buildScorerStats(rows, "userId", "score");
+                    List<NormalizedScoreEntry> entries = rows.stream()
+                            .map(row -> {
+                                Long indicatorId = toLong(row.get("indicatorId"));
+                                String indicatorName = row.get("indicatorName") != null ? row.get("indicatorName").toString() : "-";
+                                Long userId = toLong(row.get("userId"));
+                                BigDecimal rawScore = convertToBigDecimal(row.get("score"));
+                                BigDecimal normalizedScore = normalizeScore(rawScore, scorerStats.get(userId), indicatorMean);
+                                Integer isMalicious = toInteger(row.get("isMalicious"));
+                                return new NormalizedScoreEntry(indicatorId, indicatorName, userId, rawScore, normalizedScore)
+                                        .setAbnormal(isMalicious != null && isMalicious == 1);
+                            })
+                            .collect(Collectors.toList());
+
+                    RobustScoreSummary summary = summarizeScores(entries);
+                    NormalizedScoreEntry first = entries.get(0);
+                    return new ProjectStatisticsVO.IndicatorAverageVO()
+                            .setIndicatorId(first.getSubjectId())
+                            .setIndicatorName(first.getSubjectName())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize());
+                })
+                .sorted(Comparator.comparing(ProjectStatisticsVO.IndicatorAverageVO::getAverageScore,
+                        Comparator.nullsLast(BigDecimal::compareTo)).reversed())
+                .collect(Collectors.toList());
+    }
+
+    private Map<Long, NormalizationStats> buildScorerStats(List<Map<String, Object>> rows, String userKey, String scoreKey) {
+        Map<Long, List<BigDecimal>> scorerScoreMap = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long userId = toLong(row.get(userKey));
+            scorerScoreMap.computeIfAbsent(userId, key -> new ArrayList<>())
+                    .add(convertToBigDecimal(row.get(scoreKey)));
+        }
+
+        Map<Long, NormalizationStats> scorerStats = new HashMap<>();
+        for (Map.Entry<Long, List<BigDecimal>> entry : scorerScoreMap.entrySet()) {
+            scorerStats.put(entry.getKey(), new NormalizationStats(calculateAverage(entry.getValue()), entry.getValue().size()));
+        }
+        return scorerStats;
+    }
+
+    private RobustScoreSummary summarizeScores(List<NormalizedScoreEntry> entries) {
+        List<BigDecimal> rawScores = entries.stream()
+                .map(NormalizedScoreEntry::getRawScore)
+                .collect(Collectors.toList());
+        List<BigDecimal> normalizedScores = entries.stream()
+                .map(NormalizedScoreEntry::getNormalizedScore)
+                .collect(Collectors.toList());
+
+        List<BigDecimal> validScores = entries.stream()
+                .filter(entry -> !entry.isAbnormal())
+                .map(NormalizedScoreEntry::getNormalizedScore)
+                .collect(Collectors.toList());
+        int abnormalCount = (int) entries.stream().filter(NormalizedScoreEntry::isAbnormal).count();
+
+        BigDecimal rawAverage = calculateAverage(rawScores);
+        BigDecimal normalizedAverage = calculateAverage(normalizedScores);
+        BigDecimal processedAverage = validScores.isEmpty() ? normalizedAverage : calculateAverage(validScores);
+
+        return new RobustScoreSummary(
+                scaleScore(rawAverage),
+                scaleScore(normalizedAverage),
+                scaleScore(processedAverage),
+                abnormalCount,
+                entries.size(),
+                validScores.size()
+        );
+    }
+
+    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
+        return detectOutlierResult(scores).getAbnormalIndexes();
+    }
+
+    private void refreshMaliciousFlags(Project project, List<Map<String, Object>> groupScoreRows) {
+        if (project == null || project.getId() == null) {
+            return;
+        }
+        String maliciousRuleType = normalizeMaliciousRuleType(project.getMaliciousRuleType());
+        Long projectId = project.getId();
+        if (MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType)) {
+            BigDecimal lower = project.getMaliciousScoreLower();
+            BigDecimal upper = project.getMaliciousScoreUpper();
+            if (lower == null || upper == null || lower.compareTo(upper) > 0) {
+                log.warn("项目阈值模式配置异常，回退AUTO算法: projectId={}, lower={}, upper={}",
+                        projectId, lower, upper);
+            } else {
+                recordMapper.markMaliciousByThreshold(projectId, lower, upper);
+                return;
+            }
+        }
+
+        recordMapper.clearMaliciousFlagByProjectId(projectId);
+        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
+            return;
+        }
+
+        Map<Long, List<Map<String, Object>>> groupRowsMap = groupScoreRows.stream()
+                .collect(Collectors.groupingBy(row -> toLong(row.get("groupId")), LinkedHashMap::new, Collectors.toList()));
+
+        Set<Long> maliciousRecordIds = new LinkedHashSet<>();
+        for (List<Map<String, Object>> rows : groupRowsMap.values()) {
+            if (rows == null || rows.isEmpty()) {
+                continue;
+            }
+            List<BigDecimal> rawScores = rows.stream()
+                    .map(row -> convertToBigDecimal(row.get("totalScore")))
+                    .collect(Collectors.toList());
+            OutlierDetectionResult detectionResult = detectOutlierResult(rawScores);
+            for (Integer abnormalIndex : detectionResult.getAbnormalIndexes()) {
+                if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= rows.size()) {
+                    continue;
+                }
+                Long recordId = toLong(rows.get(abnormalIndex).get("recordId"));
+                if (recordId != null && recordId > 0) {
+                    maliciousRecordIds.add(recordId);
+                }
+            }
+        }
+
+        if (!maliciousRecordIds.isEmpty()) {
+            recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
+        }
+    }
+
+    private String normalizeMaliciousRuleType(String ruleType) {
+        if (ruleType == null || ruleType.isBlank()) {
+            return MALICIOUS_RULE_AUTO;
+        }
+        String normalized = ruleType.trim().toUpperCase();
+        if (!MALICIOUS_RULE_THRESHOLD.equals(normalized)) {
+            return MALICIOUS_RULE_AUTO;
+        }
+        return normalized;
+    }
+
+    private OutlierDetectionResult detectOutlierResult(List<BigDecimal> scores) {
+        if (scores == null || scores.size() < 4) {
+            return new OutlierDetectionResult(Collections.emptySet(), BigDecimal.ZERO, BigDecimal.ZERO);
+        }
+
+        BigDecimal median = calculateMedian(scores);
+        List<BigDecimal> deviations = scores.stream()
+                .map(score -> score.subtract(median).abs())
+                .collect(Collectors.toList());
+        BigDecimal mad = calculateMedian(deviations);
+
+        BigDecimal threshold = mad.multiply(new BigDecimal("1.4826")).multiply(BigDecimal.valueOf(3L));
+        BigDecimal thresholdFloor = median.abs().multiply(new BigDecimal("0.05"));
+        if (thresholdFloor.compareTo(new BigDecimal("0.50")) < 0) {
+            thresholdFloor = new BigDecimal("0.50");
+        }
+        if (threshold.compareTo(thresholdFloor) < 0) {
+            threshold = thresholdFloor;
+        }
+
+        // 低分单侧异常：优先识别恶意压分，避免高分或中间分被对称规则误伤
+        BigDecimal lowerBound = median.subtract(threshold);
+        Set<Integer> abnormalIndexes = new HashSet<>();
+        for (int i = 0; i < scores.size(); i++) {
+            if (scores.get(i).compareTo(lowerBound) < 0) {
+                abnormalIndexes.add(i);
+            }
+        }
+        return new OutlierDetectionResult(abnormalIndexes, median, threshold);
+    }
+
+    private BigDecimal normalizeScore(BigDecimal rawScore, NormalizationStats scorerStats, BigDecimal projectMean) {
+        if (rawScore == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (scorerStats == null || scorerStats.getSampleSize() < 2 || scorerStats.getMeanScore() == null || projectMean == null) {
+            return scaleScore(rawScore);
+        }
+        return scaleScore(rawScore.subtract(scorerStats.getMeanScore()).add(projectMean));
+    }
+
+    private BigDecimal calculateAverage(List<BigDecimal> scores) {
+        if (scores == null || scores.isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal sum = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(BigDecimal.valueOf(scores.size()), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateMedian(List<BigDecimal> scores) {
+        if (scores == null || scores.isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        List<BigDecimal> sortedScores = scores.stream()
+                .sorted(BigDecimal::compareTo)
+                .collect(Collectors.toList());
+        int middle = sortedScores.size() / 2;
+        if (sortedScores.size() % 2 == 0) {
+            return sortedScores.get(middle - 1)
+                    .add(sortedScores.get(middle))
+                    .divide(BigDecimal.valueOf(2L), 6, RoundingMode.HALF_UP);
+        }
+        return sortedScores.get(middle);
+    }
+
+    private BigDecimal scaleScore(BigDecimal score) {
+        if (score == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
     /**
      * 转换为BigDecimal
      */
@@ -650,6 +1052,231 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         if (obj instanceof Number) return BigDecimal.valueOf(((Number) obj).doubleValue());
         return new BigDecimal(obj.toString());
     }
+
+    private static class NormalizationStats {
+        private final BigDecimal meanScore;
+        private final int sampleSize;
+
+        private NormalizationStats(BigDecimal meanScore, int sampleSize) {
+            this.meanScore = meanScore;
+            this.sampleSize = sampleSize;
+        }
+
+        public BigDecimal getMeanScore() {
+            return meanScore;
+        }
+
+        public int getSampleSize() {
+            return sampleSize;
+        }
+    }
+
+    private static class NormalizedScoreEntry {
+        private final Long recordId;
+        private final Long subjectId;
+        private final String subjectName;
+        private final Long scorerId;
+        private final BigDecimal rawScore;
+        private final BigDecimal normalizedScore;
+        private final LocalDateTime scoreTime;
+        private boolean abnormal;
+
+        private NormalizedScoreEntry(Long subjectId, String subjectName, Long scorerId, BigDecimal rawScore, BigDecimal normalizedScore) {
+            this.recordId = null;
+            this.subjectId = subjectId;
+            this.subjectName = subjectName;
+            this.scorerId = scorerId;
+            this.rawScore = rawScore;
+            this.normalizedScore = normalizedScore;
+            this.scoreTime = null;
+        }
+
+        private NormalizedScoreEntry(Long recordId, Long subjectId, String subjectName, Long scorerId,
+                                     BigDecimal rawScore, BigDecimal normalizedScore, LocalDateTime scoreTime) {
+            this.recordId = recordId;
+            this.subjectId = subjectId;
+            this.subjectName = subjectName;
+            this.scorerId = scorerId;
+            this.rawScore = rawScore;
+            this.normalizedScore = normalizedScore;
+            this.scoreTime = scoreTime;
+        }
+
+        public Long getRecordId() {
+            return recordId;
+        }
+
+        public Long getSubjectId() {
+            return subjectId;
+        }
+
+        public String getSubjectName() {
+            return subjectName;
+        }
+
+        public Long getScorerId() {
+            return scorerId;
+        }
+
+        public BigDecimal getRawScore() {
+            return rawScore;
+        }
+
+        public BigDecimal getNormalizedScore() {
+            return normalizedScore;
+        }
+
+        public LocalDateTime getScoreTime() {
+            return scoreTime;
+        }
+
+        public boolean isAbnormal() {
+            return abnormal;
+        }
+
+        public NormalizedScoreEntry setAbnormal(boolean abnormal) {
+            this.abnormal = abnormal;
+            return this;
+        }
+    }
+
+    private static class RobustScoreSummary {
+        private final BigDecimal rawAverageScore;
+        private final BigDecimal normalizedAverageScore;
+        private final BigDecimal processedAverageScore;
+        private final int abnormalCount;
+        private final int sampleSize;
+        private final int validSampleSize;
+
+        private RobustScoreSummary(BigDecimal rawAverageScore, BigDecimal normalizedAverageScore,
+                                   BigDecimal processedAverageScore, int abnormalCount,
+                                   int sampleSize, int validSampleSize) {
+            this.rawAverageScore = rawAverageScore;
+            this.normalizedAverageScore = normalizedAverageScore;
+            this.processedAverageScore = processedAverageScore;
+            this.abnormalCount = abnormalCount;
+            this.sampleSize = sampleSize;
+            this.validSampleSize = validSampleSize;
+        }
+
+        public BigDecimal getRawAverageScore() {
+            return rawAverageScore;
+        }
+
+        public BigDecimal getNormalizedAverageScore() {
+            return normalizedAverageScore;
+        }
+
+        public BigDecimal getProcessedAverageScore() {
+            return processedAverageScore;
+        }
+
+        public int getAbnormalCount() {
+            return abnormalCount;
+        }
+
+        public int getSampleSize() {
+            return sampleSize;
+        }
+
+        public int getValidSampleSize() {
+            return validSampleSize;
+        }
+    }
+
+    private static class OutlierDetectionResult {
+        private final Set<Integer> abnormalIndexes;
+        private final BigDecimal median;
+        private final BigDecimal threshold;
+
+        private OutlierDetectionResult(Set<Integer> abnormalIndexes, BigDecimal median, BigDecimal threshold) {
+            this.abnormalIndexes = abnormalIndexes;
+            this.median = median;
+            this.threshold = threshold;
+        }
+
+        public Set<Integer> getAbnormalIndexes() {
+            return abnormalIndexes;
+        }
+
+        public BigDecimal getMedian() {
+            return median;
+        }
+
+        public BigDecimal getThreshold() {
+            return threshold;
+        }
+    }
+
+    private static class AbnormalExportEntry {
+        private final Long recordId;
+        private final Long groupId;
+        private final String groupName;
+        private final Long userId;
+        private final BigDecimal rawScore;
+        private final BigDecimal normalizedScore;
+        private final BigDecimal deviation;
+        private final BigDecimal threshold;
+        private final LocalDateTime scoreTime;
+        private final String ruleDesc;
+
+        private AbnormalExportEntry(Long recordId, Long groupId, String groupName, Long userId,
+                                    BigDecimal rawScore, BigDecimal normalizedScore,
+                                    BigDecimal deviation, BigDecimal threshold, LocalDateTime scoreTime,
+                                    String ruleDesc) {
+            this.recordId = recordId;
+            this.groupId = groupId;
+            this.groupName = groupName;
+            this.userId = userId;
+            this.rawScore = rawScore;
+            this.normalizedScore = normalizedScore;
+            this.deviation = deviation;
+            this.threshold = threshold;
+            this.scoreTime = scoreTime;
+            this.ruleDesc = ruleDesc;
+        }
+
+        public Long getRecordId() {
+            return recordId;
+        }
+
+        public Long getGroupId() {
+            return groupId;
+        }
+
+        public String getGroupName() {
+            return groupName;
+        }
+
+        public Long getUserId() {
+            return userId;
+        }
+
+        public BigDecimal getRawScore() {
+            return rawScore;
+        }
+
+        public BigDecimal getNormalizedScore() {
+            return normalizedScore;
+        }
+
+        public BigDecimal getDeviation() {
+            return deviation;
+        }
+
+        public BigDecimal getThreshold() {
+            return threshold;
+        }
+
+        public LocalDateTime getScoreTime() {
+            return scoreTime;
+        }
+
+        public String getRuleDesc() {
+            return ruleDesc;
+        }
+    }
+
 
     private List<ScoringIndicator> getProjectIndicators(Project project) {
         if (project.getStandardId() == null) {
@@ -675,6 +1302,17 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         return normalized.scale() < 0 ? normalized.setScale(0).toPlainString() : normalized.toPlainString();
     }
 
+    private String buildThresholdRuleDesc(Project project) {
+        if (project == null) {
+            return "阈值模式";
+        }
+        if (project.getMaliciousScoreLower() == null || project.getMaliciousScoreUpper() == null) {
+            return "阈值模式";
+        }
+        return "x < " + formatDecimal(project.getMaliciousScoreLower()) +
+                " 或 x > " + formatDecimal(project.getMaliciousScoreUpper());
+    }
+
     private Long toLong(Object value) {
         if (value == null) {
             return 0L;
@@ -683,6 +1321,20 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             return number.longValue();
         }
         return Long.parseLong(value.toString());
+    }
+
+    private Integer toInteger(Object value) {
+        log.info("TRANSFORMing {}",value);
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof Boolean bool) {
+            return bool ? 1 : 0; // true=1，false=0
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(value.toString());
     }
 
     private BigDecimal toScaledBigDecimal(Object value) {
@@ -797,5 +1449,21 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             return utilDate.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
         }
         return LocalDate.parse(dateObj.toString());
+    }
+
+    private LocalDateTime parseToLocalDateTime(Object dateObj) {
+        if (dateObj == null) {
+            return null;
+        }
+        if (dateObj instanceof LocalDateTime localDateTime) {
+            return localDateTime;
+        }
+        if (dateObj instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+        if (dateObj instanceof java.util.Date utilDate) {
+            return utilDate.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        }
+        return LocalDateTime.parse(dateObj.toString().replace(" ", "T"));
     }
 }

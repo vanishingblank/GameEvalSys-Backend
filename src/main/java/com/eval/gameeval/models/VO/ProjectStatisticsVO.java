@@ -45,8 +45,36 @@ public class ProjectStatisticsVO implements Serializable {
 
         private Long groupId;
         private String groupName;
+        /**
+         * 兼容旧字段，等于处理后平均分
+         */
         private BigDecimal averageScore;
+        /**
+         * 原始平均分
+         */
+        private BigDecimal rawAverageScore;
+        /**
+         * 标准化后平均分（异常剔除前）
+         */
+        private BigDecimal normalizedAverageScore;
+        /**
+         * 处理后平均分（标准化 + 异常剔除）
+         */
+        private BigDecimal processedAverageScore;
+        /**
+         * 判定为异常的评分数
+         */
+        private Integer abnormalCount;
+        /**
+         * 总样本数
+         */
+        private Integer sampleSize;
+        /**
+         * 有效样本数
+         */
+        private Integer validSampleSize;
     }
+
 
     /**
      * 指标平均分VO
@@ -60,8 +88,36 @@ public class ProjectStatisticsVO implements Serializable {
 
         private Long indicatorId;
         private String indicatorName;
+        /**
+         * 兼容旧字段，等于处理后平均分
+         */
         private BigDecimal averageScore;
+        /**
+         * 原始平均分
+         */
+        private BigDecimal rawAverageScore;
+        /**
+         * 标准化后平均分（异常剔除前）
+         */
+        private BigDecimal normalizedAverageScore;
+        /**
+         * 处理后平均分（标准化 + 异常剔除）
+         */
+        private BigDecimal processedAverageScore;
+        /**
+         * 判定为异常的评分数
+         */
+        private Integer abnormalCount;
+        /**
+         * 总样本数
+         */
+        private Integer sampleSize;
+        /**
+         * 有效样本数
+         */
+        private Integer validSampleSize;
     }
+
 
     /**
      * 打分用户分布VO

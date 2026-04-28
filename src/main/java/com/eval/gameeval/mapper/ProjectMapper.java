@@ -11,7 +11,9 @@ import java.util.Map;
 public interface ProjectMapper {
     // ========== 查询 ==========
     @Select("SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
-            "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
+            "status, is_enabled AS isEnabled, standard_id AS standardId, " +
+            "malicious_rule_type AS maliciousRuleType, malicious_score_lower AS maliciousScoreLower, malicious_score_upper AS maliciousScoreUpper, " +
+            "creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
             "FROM project WHERE id = #{id} AND is_deleted = 0")
     Project selectById(@Param("id") Long id);
@@ -27,7 +29,9 @@ public interface ProjectMapper {
 
     @Select("<script>" +
             "SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
-            "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
+            "status, is_enabled AS isEnabled, standard_id AS standardId, " +
+            "malicious_rule_type AS maliciousRuleType, malicious_score_lower AS maliciousScoreLower, malicious_score_upper AS maliciousScoreUpper, " +
+            "creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
             "FROM project " +
             "WHERE 1=1 AND is_deleted = 0 " +
@@ -67,7 +71,9 @@ public interface ProjectMapper {
     Long countTotal(@Param("status") String status, @Param("isEnabled") Boolean isEnabled, @Param("keyWords") String keyWords);
 
     @Select("SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
-            "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
+            "status, is_enabled AS isEnabled, standard_id AS standardId, " +
+            "malicious_rule_type AS maliciousRuleType, malicious_score_lower AS maliciousScoreLower, malicious_score_upper AS maliciousScoreUpper, " +
+            "creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
             "FROM project " +
             "WHERE id IN (" +
@@ -79,7 +85,9 @@ public interface ProjectMapper {
 
     @Select("<script>" +
             "SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
-            "status, is_enabled AS isEnabled, standard_id AS standardId, creator_id AS creatorId, " +
+            "status, is_enabled AS isEnabled, standard_id AS standardId, " +
+            "malicious_rule_type AS maliciousRuleType, malicious_score_lower AS maliciousScoreLower, malicious_score_upper AS maliciousScoreUpper, " +
+            "creator_id AS creatorId, " +
             "create_time AS createTime, update_time AS updateTime " +
             "FROM project " +
             "WHERE id IN (" +
@@ -207,9 +215,9 @@ public interface ProjectMapper {
 
     // ========== 插入 ==========
     @Insert("INSERT INTO project(name, description, start_date, end_date, status, is_enabled, is_deleted, " +
-            "standard_id, creator_id, create_time, update_time) " +
+            "standard_id, malicious_rule_type, malicious_score_lower, malicious_score_upper, creator_id, create_time, update_time) " +
             "VALUES(#{name}, #{description}, #{startDate}, #{endDate}, #{status}, #{isEnabled}, 0, " +
-            "#{standardId}, #{creatorId}, #{createTime}, #{updateTime})")
+            "#{standardId}, #{maliciousRuleType}, #{maliciousScoreLower}, #{maliciousScoreUpper}, #{creatorId}, #{createTime}, #{updateTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Project project);
 
@@ -222,6 +230,9 @@ public interface ProjectMapper {
             "    status = #{status}, " +
             "    is_enabled = #{isEnabled}, " +
             "    standard_id = #{standardId}, " +
+            "    malicious_rule_type = #{maliciousRuleType}, " +
+            "    malicious_score_lower = #{maliciousScoreLower}, " +
+            "    malicious_score_upper = #{maliciousScoreUpper}, " +
             "    update_time = #{updateTime} " +
             "WHERE id = #{id} AND is_deleted = 0")
     int updateById(Project project);

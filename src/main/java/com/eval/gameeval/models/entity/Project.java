@@ -6,6 +6,7 @@ import lombok.experimental.Accessors;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -22,6 +23,9 @@ public class Project implements Serializable {
     private Boolean isEnabled;
     private Boolean isDeleted;
     private Long standardId;
+    private String maliciousRuleType;
+    private BigDecimal maliciousScoreLower;
+    private BigDecimal maliciousScoreUpper;
     private Long creatorId;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

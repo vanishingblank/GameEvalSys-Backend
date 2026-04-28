@@ -147,10 +147,11 @@ public final class RedisKeyUtil {
 
     /**
      * 构建用户项目打分页缓存键
-     * 格式: scoring:record:page:{projectId}:{userId}:{page}:{size}
+     * 格式: scoring:record:page:{projectId}:{userId}:{isMalicious}:{page}:{size}
      */
-    public static String buildScoringRecordPageKey(Long projectId, Long userId, int page, int size) {
-        return SCORING_RECORD_PAGE_KEY_PREFIX + projectId + ":" + userId + ":" + page + ":" + size;
+    public static String buildScoringRecordPageKey(Long projectId, Long userId, Integer isMalicious, int page, int size) {
+        String maliciousKey = isMalicious == null ? "all" : isMalicious.toString();
+        return SCORING_RECORD_PAGE_KEY_PREFIX + projectId + ":" + userId + ":" + maliciousKey + ":" + page + ":" + size;
     }
 
     /**

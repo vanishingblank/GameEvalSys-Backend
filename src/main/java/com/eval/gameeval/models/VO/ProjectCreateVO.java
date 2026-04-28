@@ -6,6 +6,7 @@ import lombok.experimental.Accessors;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,6 +30,9 @@ public class ProjectCreateVO implements Serializable {
     private String status;
     private Boolean isEnabled;
     private Long standardId;
+    private String maliciousRuleType;
+    private BigDecimal maliciousScoreLower;
+    private BigDecimal maliciousScoreUpper;
     private List<Long> groupIds;
     private List<Long> scorerIds;
     private Long reviewerGroupId;
