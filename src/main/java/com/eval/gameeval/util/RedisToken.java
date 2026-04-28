@@ -44,6 +44,11 @@ public class RedisToken {
         if (!String.valueOf(userId).equals(claims.getSubject())) {
             return null;
         }
+        long tokenVersion = readTokenVersion(claims);
+        long currentVersion = authSessionStore.getTokenVersion(userId);
+        if (tokenVersion != currentVersion) {
+            return null;
+        }
         return userId;
     }
 
@@ -94,6 +99,21 @@ public class RedisToken {
             return claims;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private long readTokenVersion(Claims claims) {
+        Object value = claims.get("tokenVersion");
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return 0L;
         }
     }
 

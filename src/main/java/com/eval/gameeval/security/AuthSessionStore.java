@@ -21,6 +21,7 @@ public class AuthSessionStore {
     private static final String USER_SESSIONS_PREFIX = "auth:user:sessions:";
     private static final String REFRESH_PREFIX = "auth:refresh:";
     private static final String BLACKLIST_PREFIX = "auth:blacklist:access:";
+    private static final String TOKEN_VERSION_PREFIX = "auth:user:tokenVersion:";
 
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
@@ -84,6 +85,35 @@ public class AuthSessionStore {
     public void removeUserSession(Long userId, String sid) {
         String key = USER_SESSIONS_PREFIX + userId;
         redisTemplate.opsForSet().remove(key, sid);
+    }
+
+    public long getTokenVersion(Long userId) {
+        Object value = redisTemplate.opsForValue().get(TOKEN_VERSION_PREFIX + userId);
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    public long bumpTokenVersion(Long userId) {
+        Long updated = redisTemplate.opsForValue().increment(TOKEN_VERSION_PREFIX + userId);
+        return updated == null ? getTokenVersion(userId) : updated;
+    }
+
+    public void clearUserSessions(Long userId) {
+        Set<String> sids = getUserSessions(userId);
+        for (String sid : sids) {
+            deleteSession(sid);
+            deleteRefresh(sid);
+        }
+        redisTemplate.delete(USER_SESSIONS_PREFIX + userId);
     }
 
     public void saveRefresh(String sid, String refreshToken, String tokenId) {
