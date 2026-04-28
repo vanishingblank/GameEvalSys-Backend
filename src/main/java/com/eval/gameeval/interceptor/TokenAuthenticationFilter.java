@@ -85,10 +85,10 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
             if (userId != null) {
                 setAuthentication(userId);
             } else {
-                log.warn("User ID not found for token: {}", token);
+                log.warn("User ID not found for token");
             }
         } else {
-            log.debug("Invalid token: {}", token);
+            log.debug("Invalid token");
         }
     }
 

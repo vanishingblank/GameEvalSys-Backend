@@ -21,6 +21,16 @@ public class LoginResponseVO implements Serializable {
      */
     private String Token;
 
+    /**
+     * 刷新令牌（Refresh Token）
+     */
+    private String refreshToken;
+
+    /**
+     * 会话ID
+     */
+    private String sid;
+
 
 
 
