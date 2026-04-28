@@ -27,6 +27,11 @@
 - **Session Registry（Redis）**：维护在线会话（sid 维度），支持会话查询、踢下线
 - **Access 黑名单（Redis，按 jti）**：解决 access token 未过期但被主动失效的问题
 
+传输与使用约定：
+
+- 前端通过 `Authorization: Bearer <accessToken>` 传递，不使用 Cookie
+- 当前仅单系统认证，无跨系统 `aud` 兼容需求
+
 这样可以同时满足：
 
 - JWT 的标准化与可扩展性
@@ -48,14 +53,17 @@
 - `jti`：JWT ID（唯一，用于黑名单）
 - `type`：`access`
 - `iat`：签发时间
-- `exp`：过期时间（建议 15~30 分钟）
-- `iss`：签发方（可选）
+- `exp`：过期时间（实际配置：4 小时）
+- `iss`：签发方（单系统固定值，建议强校验）
 
 ## 3.2 Refresh Token 建议
 
 - 可使用随机高强度字符串（或 JWT refresh）
 - 服务端 Redis 保存 refresh 元数据并绑定 `sid`
 - 有效期建议 7~30 天（按业务风险调整）
+- 实际配置：7 天
+- 建议存储 refresh 的摘要（如 `SHA-256(refreshToken)`），避免明文落库
+- 建议启用 refresh 复用检测：旧 refresh 被再次使用即判定为泄漏并踢下线
 
 ## 3.3 Redis Key 设计（核心）
 
@@ -67,12 +75,19 @@
   - 值：该用户当前所有 `sid` 集合（Set）
 
 - `auth:refresh:{sid}`
-  - 值：refresh token 摘要或 refresh 映射信息
+  - 值：refresh token 摘要 + `tokenId` + 绑定信息（device/ip/ua）
   - TTL：refresh 有效期
 
 - `auth:blacklist:access:{jti}`
   - 值：1
   - TTL：`access_token_expire - now`
+
+扩展键（可选，支撑更大规模与强一致控制）：
+
+- `auth:user:tokenVersion:{userId}`
+  - 值：整数版本号
+  - 用途：密码修改/角色变更/封禁时递增，强制旧 token 失效
+  - TTL：可不设（持久）
 
 ---
 
@@ -82,11 +97,14 @@
 
 1. 从 `Authorization: Bearer <accessToken>` 提取 JWT
 2. 校验 JWT 签名、`exp`、`type=access`
+  - 明确算法白名单，仅允许指定算法
+  - 校验 `iss` 固定值，拒绝其他签发方
 3. 读取 `sid/jti/sub`
 4. 校验 `jti` 不在黑名单
 5. 校验 `auth:session:{sid}` 存在且状态有效
 6. 校验 session 的 `userId` 与 `sub` 一致
-7. 通过后写入 `SecurityContext`
+7. 如启用 `tokenVersion`，校验 token 版本与 `auth:user:tokenVersion:{userId}` 一致
+8. 通过后写入 `SecurityContext`
 
 > 关键点：**JWT 通过并不代表最终有效**，必须同时通过 Redis 会话校验。
 
@@ -105,10 +123,10 @@
 
 ## 5.2 刷新 `/auth/refresh`
 
-- 校验 refresh token 与 `sid` 关系
+- 校验 refresh token 与 `sid` 关系 + 绑定信息（device/ip/ua）
 - 通过后签发新 access JWT（新 jti）
-- 可选：refresh 轮换（rotate）
-- 若 refresh 异常，删除 session 并要求重新登录
+- 建议：refresh 轮换（rotate）并记录 `tokenId`
+- 若 refresh 复用或异常，删除 session 并要求重新登录
 
 ## 5.3 主动登出 `/auth/logout`
 
@@ -121,6 +139,7 @@
 
 - **踢单端**：按 `sid` 删除会话 + 拉黑当前 access jti（如可获取）
 - **踢全端**：遍历 `auth:user:sessions:{userId}` 下所有 sid，逐个删除
+- **密码修改/角色变更/封禁**：递增 `auth:user:tokenVersion:{userId}` 并清理会话
 
 ---
 
@@ -171,6 +190,7 @@
 - 限制 refresh 重放（启用 rotate + 旧 refresh 立即失效）
 - 关键接口增加风控：限流、失败次数控制、异常告警
 - 管理员踢下线动作记录审计日志
+- 日志与监控脱敏：严禁输出完整 token
 
 ---
 
@@ -186,6 +206,7 @@
 - Redis key 迁移与 TTL 策略需统一，避免“幽灵在线”
 - 多实例部署时要保证时钟同步与密钥一致
 - 踢下线后短时间内可能存在并发请求窗口（通过 jti 黑名单可缓解）
+- 大并发下黑名单与会话读写压力上升，需评估 Redis QPS 与内存
 
 ---
 
@@ -206,4 +227,70 @@
 2. 再补会话查询与管理员踢下线接口
 3. 最后做审计、风控、灰度开关与监控告警
 
-该顺序可在最短时间内先交付“可用且安全”的认证升级，再迭代完善运维与治理能力。
+---
+
+## 12. 扩展与规模化建议
+
+- 会话规模：当前约 150 活跃用户，按 10x~100x 规模设计 Redis 容量与 QPS
+- `auth:session:{sid}` 可拆成 Hash，降低字段更新成本
+- `lastActiveAt` 建议采用滑动窗口更新（例如每 5~10 分钟一次），避免高频写
+- 黑名单仅用于“主动失效”场景，常规访问以 `auth:session:{sid}` 为准
+- 设定单用户会话上限（如 5~10），超限踢最旧会话
+
+### 12.1 Redis 容量估算公式
+
+定义：
+
+- `U`: 活跃用户数（预计 10,000）
+- `S`: 人均在线会话数（例如 1.2）
+- `K_s`: 单个 session 记录平均大小（字节），含 key + value + 结构开销
+- `K_r`: 单个 refresh 记录平均大小（字节）
+- `K_j`: 单个 jti 黑名单平均大小（字节）
+- `J`: 平均每会话产生的黑名单条目数（通常 0~1）
+- `K_index`: 单个用户会话索引平均大小（字节）
+- `M`: Redis 内存冗余系数（建议 1.5~2）
+
+估算：
+
+- 会话数 `N = U * S`
+- Session 内存 `Mem_session = N * K_s`
+- Refresh 内存 `Mem_refresh = N * K_r`
+- 黑名单内存 `Mem_black = N * J * K_j`
+- 额外结构（用户会话 Set 等）`Mem_index = U * K_index`
+
+总内存：
+
+$$
+Mem_{total} = (Mem_{session} + Mem_{refresh} + Mem_{black} + Mem_{index}) * M
+$$
+
+参考取值（仅做量级估算，需压测校准）：
+
+- `K_s` 0.6~1.2 KB（Hash 8~12 个字段）
+- `K_r` 0.3~0.8 KB
+- `K_j` 0.1~0.3 KB
+
+示例（10,000 活跃用户，`S=1.2`，`J=0.2`，`M=1.8`）：
+
+- `N = 12,000`
+- `Mem_session` ~ 7.2~14.4 MB
+- `Mem_refresh` ~ 3.6~9.6 MB
+- `Mem_black` ~ 0.2~0.7 MB
+- `Mem_index` ~ 1~3 MB
+- `Mem_total` 约 25~50 MB（实际按 2x 预留更稳妥）
+
+### 12.2 QPS 预估表（10,000 活跃用户）
+
+假设：
+
+- 高峰并发请求中，约 80% 为带 token 的业务请求
+- 每次请求会读取 session，黑名单查询可选（仅在主动失效时或开关打开）
+- `lastActiveAt` 采用 5~10 分钟滑动更新
+
+| 场景 | 假设 | Redis 读 QPS | Redis 写 QPS |
+| --- | --- | --- | --- |
+| 业务请求认证 | 500 RPS | 500 (session) + 0~500 (blacklist) | 0~10 (lastActiveAt 滑动更新) |
+| 登录/刷新/登出 | 50 RPS | 50~150 | 100~250 |
+| 高峰合计 | 550 RPS | 600~1,200 | 100~260 |
+
+注：以上为估算范围，最终以压测结果为准。建议对 Redis 读写分离或集群扩容预留 2x 余量。
