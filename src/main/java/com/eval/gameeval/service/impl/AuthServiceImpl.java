@@ -1,9 +1,12 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
+import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.OnlineUserPageVO;
+import com.eval.gameeval.models.VO.OnlineUserVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
@@ -21,8 +24,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -298,6 +304,65 @@ public class AuthServiceImpl implements IAuthService{
         }
     }
 
+    @Override
+    public ResponseVO<OnlineUserPageVO> getOnlineUsers(Long currentUserId, AdminOnlineUserQueryDTO query) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+
+            int page = query != null && query.getPage() != null ? query.getPage() : 1;
+            int size = query != null && query.getSize() != null ? query.getSize() : 10;
+            int offset = (page - 1) * size;
+
+            String role = query != null ? query.getRole() : null;
+            String keyWords = query != null ? query.getKeyWords() : null;
+            Boolean isEnabled = query != null ? query.getIsEnabled() : null;
+
+            List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
+                    offset,
+                    size,
+                    role,
+                    keyWords,
+                    isEnabled
+            );
+            Long total = userMapper.countTotal(role, keyWords, isEnabled);
+
+            List<OnlineUserVO> onlineUsers = new ArrayList<>();
+            for (Map<String, Object> userMap : userList) {
+                Long userId = toLong(userMap.get("id"));
+                OnlineUserVO vo = new OnlineUserVO();
+                vo.setId(userId);
+                vo.setUsername((String) userMap.get("username"));
+                vo.setName((String) userMap.get("name"));
+                vo.setRole((String) userMap.get("role"));
+                vo.setIsEnabled(toBoolean(userMap.get("isEnabled")));
+
+                SessionSummary summary = buildSessionSummary(userId);
+                vo.setOnlineCount(summary.onlineCount);
+                vo.setLastActiveAt(summary.lastActiveAt);
+                vo.setLastLoginAt(summary.lastLoginAt);
+
+                onlineUsers.add(vo);
+            }
+
+            OnlineUserPageVO pageVO = new OnlineUserPageVO();
+            pageVO.setList(onlineUsers);
+            pageVO.setTotal(total);
+            pageVO.setPage(page);
+            pageVO.setSize(size);
+
+            return ResponseVO.success("查询成功", pageVO);
+        } catch (Exception e) {
+            log.error("查询在线用户异常", e);
+            return ResponseVO.error("查询失败");
+        }
+    }
+
     private List<SessionInfoVO> buildSessionInfos(Set<String> sids) {
         return sids.stream()
             .map(sid -> new java.util.AbstractMap.SimpleEntry<>(sid, authSessionStore.getSession(sid)))
@@ -319,10 +384,99 @@ public class AuthServiceImpl implements IAuthService{
         return userMapper.selectById(currentUserId);
     }
 
+    private SessionSummary buildSessionSummary(Long userId) {
+        Set<String> sids = authSessionStore.getUserSessions(userId);
+        int onlineCount = 0;
+        Instant latestActive = null;
+        Instant latestLogin = null;
+        String latestActiveText = null;
+        String latestLoginText = null;
+
+        for (String sid : sids) {
+            Map<Object, Object> session = authSessionStore.getSession(sid);
+            if (session == null || session.isEmpty()) {
+                continue;
+            }
+            onlineCount++;
+            Instant active = parseInstant(session.get("lastActiveAt"));
+            if (active != null && (latestActive == null || active.isAfter(latestActive))) {
+                latestActive = active;
+                latestActiveText = session.get("lastActiveAt") != null ? session.get("lastActiveAt").toString() : null;
+            }
+            Instant login = parseInstant(session.get("loginAt"));
+            if (login != null && (latestLogin == null || login.isAfter(latestLogin))) {
+                latestLogin = login;
+                latestLoginText = session.get("loginAt") != null ? session.get("loginAt").toString() : null;
+            }
+        }
+
+        return new SessionSummary(onlineCount, latestActiveText, latestLoginText);
+    }
+
+    private Instant parseInstant(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(value.toString());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
     private boolean isAdmin(User user) {
         if (user == null) {
             return false;
         }
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Boolean toBoolean(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue() != 0;
+        }
+        if (value instanceof String) {
+            String text = ((String) value).trim();
+            if ("1".equals(text)) {
+                return true;
+            }
+            if ("0".equals(text)) {
+                return false;
+            }
+            return Boolean.parseBoolean(text);
+        }
+        return null;
+    }
+
+    private static final class SessionSummary {
+        private final int onlineCount;
+        private final String lastActiveAt;
+        private final String lastLoginAt;
+
+        private SessionSummary(int onlineCount, String lastActiveAt, String lastLoginAt) {
+            this.onlineCount = onlineCount;
+            this.lastActiveAt = lastActiveAt;
+            this.lastLoginAt = lastLoginAt;
+        }
     }
 }

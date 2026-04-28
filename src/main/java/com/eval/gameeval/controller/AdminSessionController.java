@@ -2,6 +2,8 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
+import com.eval.gameeval.models.VO.OnlineUserPageVO;
+import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.service.IAuthService;
 import jakarta.annotation.Resource;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,13 @@ public class AdminSessionController {
     public ResponseEntity<ResponseVO<List<SessionInfoVO>>> getUserSessions(@RequestParam("userId") Long userId) {
         Long currentUserId = resolveUserId();
         ResponseVO<List<SessionInfoVO>> response = authService.getUserSessions(currentUserId, userId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/online-users")
+    public ResponseEntity<ResponseVO<OnlineUserPageVO>> getOnlineUsers(AdminOnlineUserQueryDTO query) {
+        Long currentUserId = resolveUserId();
+        ResponseVO<OnlineUserPageVO> response = authService.getOnlineUsers(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 

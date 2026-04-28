@@ -876,13 +876,13 @@ public class UserServiceImpl implements IUserService {
             log.warn("统计字段转换失败: {}", value, e);
             return 0L;
         }
+    }
 
-        private void revokeUserSessions(Long userId) {
-            if (userId == null) {
-                return;
-            }
-            authSessionStore.bumpTokenVersion(userId);
-            authSessionStore.clearUserSessions(userId);
+    private void revokeUserSessions(Long userId) {
+        if (userId == null) {
+            return;
         }
+        authSessionStore.bumpTokenVersion(userId);
+        authSessionStore.clearUserSessions(userId);
     }
 }
