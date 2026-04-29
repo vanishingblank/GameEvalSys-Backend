@@ -290,19 +290,22 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             // 1. 验证Token
             Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                return;
             }
 
             // 2. 验证项目是否存在
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             // 3. 查询所有打分记录
             List<ScoringRecord> records = recordMapper.selectByProjectId(projectId);
             if (records == null || records.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
 
             // 4. 查询所有明细（批量）
@@ -401,7 +404,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
         } catch (Exception e) {
             log.error("导出项目数据异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
     }
 
@@ -410,27 +414,32 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         try {
             Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                return;
             }
 
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             List<ProjectGroup> projectGroups = groupMapper.selectByProjectId(projectId);
             if (projectGroups == null || projectGroups.isEmpty()) {
-                throw new RuntimeException("该项目暂无小组数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无小组数据");
+                return;
             }
 
             List<ScoringRecord> records = recordMapper.selectByProjectId(projectId);
             if (records == null || records.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
 
             List<ScoringIndicator> indicators = getProjectIndicators(project);
             if (indicators.isEmpty()) {
-                throw new RuntimeException("该项目未配置评分项");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目未配置评分项");
+                return;
             }
 
             List<ScoringIndicatorCategory> categories = project.getStandardId() == null
@@ -572,7 +581,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             log.info("导出项目小组评分汇总成功: projectId={}, format={}", projectId, format);
         } catch (Exception e) {
             log.error("导出项目小组评分汇总异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
     }
 
@@ -581,17 +591,20 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         try {
             Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                return;
             }
 
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
             if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
             refreshMaliciousFlags(project, groupScoreRows);
             groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
@@ -665,7 +678,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     .collect(Collectors.toList());
 
             if (abnormalEntries.isEmpty()) {
-                throw new RuntimeException("当前项目暂无被标记为异常的打分记录");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND,
+                        "当前项目暂无被标记为异常的打分记录");
+                return;
             }
 
             abnormalEntries.sort(Comparator.comparing(AbnormalExportEntry::getGroupId)
@@ -716,8 +731,47 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             log.info("导出项目异常打分记录成功: projectId={}, abnormalCount={}", projectId, abnormalEntries.size());
         } catch (Exception e) {
             log.error("导出项目异常打分记录异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
+    }
+
+    private void writeExportError(HttpServletResponse response, int status, String message) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+        response.resetBuffer();
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"code\":" + status + ",\"message\":\""
+                + escapeJson(message) + "\",\"data\":null}");
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '"' || ch == '\\') {
+                builder.append('\\');
+            }
+            if (ch == '\n') {
+                builder.append("\\n");
+                continue;
+            }
+            if (ch == '\r') {
+                builder.append("\\r");
+                continue;
+            }
+            if (ch == '\t') {
+                builder.append("\\t");
+                continue;
+            }
+            builder.append(ch);
+        }
+        return builder.toString();
     }
 
     /**
