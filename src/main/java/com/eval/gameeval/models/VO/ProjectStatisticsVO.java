@@ -109,6 +109,10 @@ public class ProjectStatisticsVO implements Serializable {
          */
         private Integer abnormalCount;
         /**
+         * 总恶意评分数（沿用原统计口径）
+         */
+        private Integer totalAbnormalCount;
+        /**
          * 总样本数
          */
         private Integer sampleSize;

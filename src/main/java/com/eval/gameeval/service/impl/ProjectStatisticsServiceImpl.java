@@ -880,7 +880,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 .collect(Collectors.groupingBy(row -> toLong(row.get("indicatorId")), LinkedHashMap::new, Collectors.toList()));
 
         return indicatorGroups.values().stream()
-                .map(rows -> {
+                .map((List<Map<String, Object>> rows) -> {
                     BigDecimal indicatorMean = calculateAverage(rows.stream()
                             .map(row -> convertToBigDecimal(row.get("score")))
                             .collect(Collectors.toList()));
@@ -899,17 +899,21 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                             .collect(Collectors.toList());
 
                     RobustScoreSummary summary = summarizeScores(entries);
+                int indicatorAbnormalCount = summary.getAbnormalCount();
+                BigDecimal indicatorProcessedAverage = summary.getProcessedAverageScore();
+                int indicatorValidSampleSize = summary.getValidSampleSize();
                     NormalizedScoreEntry first = entries.get(0);
                     return new ProjectStatisticsVO.IndicatorAverageVO()
                             .setIndicatorId(first.getSubjectId())
                             .setIndicatorName(first.getSubjectName())
-                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(indicatorProcessedAverage)
                             .setRawAverageScore(summary.getRawAverageScore())
                             .setNormalizedAverageScore(summary.getNormalizedAverageScore())
-                            .setProcessedAverageScore(summary.getProcessedAverageScore())
-                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setProcessedAverageScore(indicatorProcessedAverage)
+                            .setAbnormalCount(indicatorAbnormalCount)
+                            .setTotalAbnormalCount(summary.getAbnormalCount())
                             .setSampleSize(summary.getSampleSize())
-                            .setValidSampleSize(summary.getValidSampleSize());
+                            .setValidSampleSize(indicatorValidSampleSize);
                 })
                 .sorted(Comparator.comparing(ProjectStatisticsVO.IndicatorAverageVO::getAverageScore,
                         Comparator.nullsLast(BigDecimal::compareTo)).reversed())
@@ -957,10 +961,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 entries.size(),
                 validScores.size()
         );
-    }
-
-    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
-        return detectOutlierResult(scores).getAbnormalIndexes();
     }
 
     private void refreshMaliciousFlags(Project project, List<Map<String, Object>> groupScoreRows) {
