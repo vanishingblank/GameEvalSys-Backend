@@ -39,4 +39,9 @@ public class AdminOnlineUserQueryDTO implements Serializable {
      * 是否启用
      */
     private Boolean isEnabled;
+
+    /**
+     * 仅返回在线用户
+     */
+    private Boolean onlineOnly;
 }

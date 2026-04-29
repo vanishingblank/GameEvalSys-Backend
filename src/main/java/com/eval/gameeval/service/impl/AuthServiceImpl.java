@@ -322,6 +322,7 @@ public class AuthServiceImpl implements IAuthService{
             String role = query != null ? query.getRole() : null;
             String keyWords = query != null ? query.getKeyWords() : null;
             Boolean isEnabled = query != null ? query.getIsEnabled() : null;
+            Boolean onlineOnly = query != null ? query.getOnlineOnly() : null;
 
             List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
                     offset,
@@ -347,12 +348,15 @@ public class AuthServiceImpl implements IAuthService{
                 vo.setLastActiveAt(summary.lastActiveAt);
                 vo.setLastLoginAt(summary.lastLoginAt);
 
+                if (Boolean.TRUE.equals(onlineOnly) && summary.onlineCount <= 0) {
+                    continue;
+                }
                 onlineUsers.add(vo);
             }
 
             OnlineUserPageVO pageVO = new OnlineUserPageVO();
             pageVO.setList(onlineUsers);
-            pageVO.setTotal(total);
+            pageVO.setTotal(Boolean.TRUE.equals(onlineOnly) ? (long) onlineUsers.size() : total);
             pageVO.setPage(page);
             pageVO.setSize(size);
 
