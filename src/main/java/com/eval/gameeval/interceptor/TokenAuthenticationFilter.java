@@ -7,12 +7,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -82,8 +84,9 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
         if (redisToken.validateToken(token)) {
             Long userId = redisToken.getUserIdByToken(token);
+            String role = redisToken.getRoleByToken(token);
             if (userId != null) {
-                setAuthentication(userId);
+                setAuthentication(userId, role);
             } else {
                 log.warn("User ID not found for token");
             }
@@ -92,12 +95,16 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
-    private void setAuthentication(Long userId) {
+    private void setAuthentication(Long userId, String role) {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        if (role != null && !role.trim().isEmpty()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+        }
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         userId,
                         null,
-                        List.of()
+                        authorities
                 );
         SecurityContextHolder.getContext().setAuthentication(authentication);
         log.debug("Authentication set for user ID: {}", userId);
