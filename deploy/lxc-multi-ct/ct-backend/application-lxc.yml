@@ -15,6 +15,15 @@ server:
   port: 8080
 
 app:
+  admin:
+    init:
+      enabled: ${APP_ADMIN_INIT_ENABLED:true}
+      username: ${APP_ADMIN_INIT_USERNAME:}
+      password: ${APP_ADMIN_INIT_PASSWORD:}
+      password-hash: ${APP_ADMIN_INIT_PASSWORD_HASH:}
+      name: ${APP_ADMIN_INIT_NAME:System Admin}
+      role: ${APP_ADMIN_INIT_ROLE:super_admin}
+      is-enabled: ${APP_ADMIN_INIT_IS_ENABLED:true}
   cache:
     scheduler:
       enabled: ${APP_CACHE_SCHEDULER_ENABLED:true}
@@ -28,3 +37,20 @@ app:
         # LXC 环境默认 15 分钟
         fixed-delay-ms: ${APP_CACHE_WARMUP_FIXED_DELAY_MS:900000}
         initial-delay-ms: ${APP_CACHE_WARMUP_INITIAL_DELAY_MS:120000}
+
+jwt:
+  secret: ${JWT_SECRET:change-me-to-a-long-random-secret}
+  issuer: ${JWT_ISSUER:gameeval}
+  access-seconds: 14400
+  refresh-seconds: 604800
+  last-active-refresh-seconds: 300
+  max-sessions-per-user: 10
+
+auth:
+  refresh-cookie:
+    name: ${AUTH_REFRESH_COOKIE_NAME:refreshToken}
+    path: ${AUTH_REFRESH_COOKIE_PATH:/api/v1/auth/refresh}
+    http-only: ${AUTH_REFRESH_COOKIE_HTTP_ONLY:true}
+    secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
+    same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
+    max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}

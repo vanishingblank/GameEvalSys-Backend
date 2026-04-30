@@ -56,3 +56,20 @@ app:
         fixed-delay-ms: ${APP_CACHE_WARMUP_FIXED_DELAY_MS:600000}
         initial-delay-ms: ${APP_CACHE_WARMUP_INITIAL_DELAY_MS:90000}
 
+jwt:
+  secret: ${JWT_SECRET:change-me-to-a-long-random-secret}
+  issuer: ${JWT_ISSUER:gameeval}
+  access-seconds: 14400
+  refresh-seconds: 604800
+  last-active-refresh-seconds: 300
+  max-sessions-per-user: 10
+
+auth:
+  refresh-cookie:
+    name: ${AUTH_REFRESH_COOKIE_NAME:refreshToken}
+    path: ${AUTH_REFRESH_COOKIE_PATH:/api/v1/auth/refresh}
+    http-only: ${AUTH_REFRESH_COOKIE_HTTP_ONLY:true}
+    secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
+    same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
+    max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
+
