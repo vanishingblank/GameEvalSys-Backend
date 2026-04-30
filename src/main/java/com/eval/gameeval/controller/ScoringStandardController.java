@@ -8,8 +8,8 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringStandardOverviewVO;
 import com.eval.gameeval.models.VO.ScoringStandardPageVO;
 import com.eval.gameeval.models.VO.ScoringStandardVO;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IScoringStandardService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/scoring-standards")
 public class ScoringStandardController {
     @Resource
+    private CurrentUserContext currentUserContext;
+
+    @Resource
     private IScoringStandardService scoringStandardService;
 
     /**
@@ -28,12 +31,9 @@ public class ScoringStandardController {
      */
     @PostMapping
     @LogRecord(value = "创建打分标准", module = "ScoringStandard")
-    public ResponseEntity<ResponseVO<ScoringStandardVO>> createStandard(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody ScoringStandardCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ScoringStandardVO> response = scoringStandardService.createStandard(token, request);
+    public ResponseEntity<ResponseVO<ScoringStandardVO>> createStandard(@Valid @RequestBody ScoringStandardCreateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ScoringStandardVO> response = scoringStandardService.createStandard(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -41,12 +41,9 @@ public class ScoringStandardController {
      * 获取打分标准列表
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<ScoringStandardPageVO>> getStandardList(
-            @RequestHeader("Authorization") String authorization,
-            ScoringStandardQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ScoringStandardPageVO> response = scoringStandardService.getStandardList(token, query);
+    public ResponseEntity<ResponseVO<ScoringStandardPageVO>> getStandardList(ScoringStandardQueryDTO query) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ScoringStandardPageVO> response = scoringStandardService.getStandardList(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
@@ -54,21 +51,16 @@ public class ScoringStandardController {
      * 获取单个打分标准详情
      */
     @GetMapping("/{standardId}")
-    public ResponseEntity<ResponseVO<ScoringStandardVO>> getStandardDetail(
-            @RequestHeader("Authorization") String authorization,
-            @PathVariable Long standardId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ScoringStandardVO> response = scoringStandardService.getStandardDetail(token, standardId);
+    public ResponseEntity<ResponseVO<ScoringStandardVO>> getStandardDetail(@PathVariable Long standardId) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ScoringStandardVO> response = scoringStandardService.getStandardDetail(currentUserId, standardId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<ResponseVO<ScoringStandardOverviewVO>> getStandardOverview(
-            @RequestHeader("Authorization") String authorization) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ScoringStandardOverviewVO> response = scoringStandardService.getStandardOverview(token);
+    public ResponseEntity<ResponseVO<ScoringStandardOverviewVO>> getStandardOverview() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ScoringStandardOverviewVO> response = scoringStandardService.getStandardOverview(currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -78,12 +70,10 @@ public class ScoringStandardController {
     @PutMapping("/{standardId}")
     @LogRecord(value = "编辑打分标准", module = "ScoringStandard")
     public ResponseEntity<ResponseVO<Void>> updateStandard(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long standardId,
             @Valid @RequestBody ScoringStandardUpdateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = scoringStandardService.updateStandard(token, standardId, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = scoringStandardService.updateStandard(currentUserId, standardId, request);
         return ResponseEntity.ok(response);
     }
 }

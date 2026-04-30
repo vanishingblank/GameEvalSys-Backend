@@ -18,7 +18,7 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.security.AuthSessionStore;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -49,7 +49,7 @@ public class UserServiceImpl implements IUserService {
     @Resource
     private ReviewerGroupMemberMapper groupMemberMapper;
     @Resource
-    private RedisToken redisToken;
+    private AuthSessionStore authSessionStore;
     @Resource
     private PasswordEncoder passwordEncoder;
 
@@ -58,10 +58,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<List<UserWithGroupVO>> createUsers(String token, @Valid UserCreateDTO request) {
+    public ResponseVO<List<UserWithGroupVO>> createUsers(Long currentUserId, @Valid UserCreateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -215,10 +214,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateUser(String token, Long userId, UserUpdateDTO request) {
+    public ResponseVO<Void> updateUser(Long currentUserId, Long userId, UserUpdateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -259,6 +257,10 @@ public class UserServiceImpl implements IUserService {
                 updateUser.setName(targetUser.getName());
             }
 
+            boolean roleChanged = false;
+            boolean statusChanged = false;
+            boolean passwordChanged = false;
+
             // 角色：请求提供则验证并更新，否则保留原值
             if (request.getRole() != null) {
                 if (!isValidRole(request.getRole())) {
@@ -268,6 +270,7 @@ public class UserServiceImpl implements IUserService {
                 if ("admin".equals(currentUser.getRole()) && "super_admin".equals(request.getRole())) {
                     return ResponseVO.forbidden("无权设置为超级管理员");
                 }
+                roleChanged = !request.getRole().equals(targetUser.getRole());
                 updateUser.setRole(request.getRole());
             } else {
                 updateUser.setRole(targetUser.getRole());
@@ -275,6 +278,7 @@ public class UserServiceImpl implements IUserService {
 
             // 启用状态：请求提供则更新，否则保留原值
             if (request.getIsEnabled() != null) {
+                statusChanged = !request.getIsEnabled().equals(targetUser.getIsEnabled());
                 updateUser.setIsEnabled(request.getIsEnabled());
             } else {
                 updateUser.setIsEnabled(targetUser.getIsEnabled());
@@ -282,6 +286,7 @@ public class UserServiceImpl implements IUserService {
 
             // 密码：管理员可设置新密码，否则保留原值
             if (request.getNewPassword() != null && !request.getNewPassword().trim().isEmpty()) {
+                passwordChanged = true;
                 updateUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
             } else {
                 updateUser.setPassword(targetUser.getPassword());
@@ -291,10 +296,11 @@ public class UserServiceImpl implements IUserService {
             int rows = userMapper.updateById(updateUser);
 
             if (rows > 0) {
-                // 7. 如果禁用用户，记录日志
-                if (request.getIsEnabled() != null && !request.getIsEnabled()) {
+                if (statusChanged && Boolean.FALSE.equals(request.getIsEnabled())) {
                     log.info("用户被禁用: userId={}, operator={}", userId, currentUserId);
-//                    redisToken.deleteToken(token);
+                }
+                if (roleChanged || statusChanged || passwordChanged) {
+                    revokeUserSessions(userId);
                 }
                 overviewCacheUtil.clearUserOverviewCache();
                 log.info("编辑用户成功: userId={}, operator={}", userId, currentUserId);
@@ -311,11 +317,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateSelfPassword(String token, @Valid UserPasswordUpdateDTO request) {
-        Long currentUserId = null;
+    public ResponseVO<Void> updateSelfPassword(Long currentUserId, @Valid UserPasswordUpdateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -335,6 +339,7 @@ public class UserServiceImpl implements IUserService {
             int rows = userMapper.updatePasswordById(currentUserId, encodedPassword, LocalDateTime.now());
 
             if (rows > 0) {
+                revokeUserSessions(currentUserId);
                 log.info("用户修改密码成功: userId={}", currentUserId);
                 return ResponseVO.<Void>success("修改成功", null);
             } else {
@@ -349,10 +354,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> deleteUser(String token, Long userId) {
+    public ResponseVO<Void> deleteUser(Long currentUserId, Long userId) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -389,7 +393,7 @@ public class UserServiceImpl implements IUserService {
 
             if (rows > 0) {
                 log.info("逻辑删除用户成功: userId={}, operator={}", userId, currentUserId);
-                redisToken.deleteToken(token);
+                revokeUserSessions(userId);
                 overviewCacheUtil.clearUserOverviewCache();
                 return ResponseVO.<Void>success("删除成功",null);
             } else {
@@ -403,9 +407,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(String token, UserBatchStatusDTO request) {
+    public ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(Long currentUserId, UserBatchStatusDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -451,6 +454,9 @@ public class UserServiceImpl implements IUserService {
 
                     int rows = userMapper.updateById(updateUser);
                     if (rows > 0) {
+                        if (Boolean.FALSE.equals(request.getIsEnabled())) {
+                            revokeUserSessions(userId);
+                        }
                         successCount++;
                     } else {
                         failedIds.add(userId);
@@ -480,9 +486,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(String token, UserBatchDeleteDTO request) {
+    public ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(Long currentUserId, UserBatchDeleteDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -520,6 +525,7 @@ public class UserServiceImpl implements IUserService {
 
                     int rows = userMapper.softDeleteById(userId, LocalDateTime.now());
                     if (rows > 0) {
+                        revokeUserSessions(userId);
                         successCount++;
                     } else {
                         failedIds.add(userId);
@@ -548,10 +554,9 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query) {
+    public ResponseVO<UserPageVO> getUserList(Long currentUserId, UserQueryDTO query) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -637,9 +642,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserOverviewVO> getUserOverview(String token) {
+    public ResponseVO<UserOverviewVO> getUserOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -701,12 +705,11 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<List<UserDetailVO>> batchQueryUsers(String token, UserBatchQueryDTO request) {
+    public ResponseVO<List<UserDetailVO>> batchQueryUsers(Long currentUserId, UserBatchQueryDTO request) {
 
 
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -860,5 +863,13 @@ public class UserServiceImpl implements IUserService {
             log.warn("统计字段转换失败: {}", value, e);
             return 0L;
         }
+    }
+
+    private void revokeUserSessions(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        authSessionStore.bumpTokenVersion(userId);
+        authSessionStore.clearUserSessions(userId);
     }
 }

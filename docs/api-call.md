@@ -38,6 +38,9 @@
     "message": "登录成功",
     "data": {
       "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "b9f5e3c7f7c24c8a9c10d3d0bcd12c7c",
+      "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
+      "expireTime": "2026-04-28 12:00:00",
       "userInfo": {
         "id": 1,
         "username": "admin",
@@ -48,7 +51,30 @@
   }
   ```
 
-### 1.2 退出登录
+### 1.2 刷新 Token
+
+- **接口地址**：`/auth/refresh`
+- **请求方式**：POST
+- **请求参数**：
+  | 参数名 | 类型 | 必填 | 说明 |
+  |--------|------|------|------|
+  | sid | string | 是 | 会话ID |
+  | refreshToken | string | 是 | 刷新令牌 |
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "刷新成功",
+    "data": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "7f1b4e5c3a9b4df1b4d2e2a9c1d3f0ab",
+      "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
+      "expireTime": "2026-04-28 16:00:00"
+    }
+  }
+  ```
+
+### 1.3 退出登录
 
 - **接口地址**：`/auth/logout`
 - **请求方式**：POST
@@ -61,6 +87,127 @@
     "data": null
   }
   ```
+
+### 1.4 查询我的在线会话
+
+- **接口地址**：`/auth/sessions/me`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": [
+      {
+        "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
+        "username": "admin",
+        "role": "super_admin",
+        "loginAt": "2026-04-28T08:00:00Z",
+        "lastActiveAt": "2026-04-28T10:15:00Z",
+        "status": "active"
+      }
+    ]
+  }
+  ```
+
+### 1.5 管理员会话管理
+
+#### 1.5.1 查询指定用户会话
+
+- **接口地址**：`/admin/sessions`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **请求参数**（Query）：
+  | 参数名 | 类型 | 必填 | 说明 |
+  |--------|------|------|------|
+  | userId | number | 是 | 用户ID |
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": [
+      {
+        "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
+        "username": "admin",
+        "role": "super_admin",
+        "loginAt": "2026-04-28T08:00:00Z",
+        "lastActiveAt": "2026-04-28T10:15:00Z",
+        "status": "active"
+      }
+    ]
+  }
+  ```
+
+#### 1.5.2 踢指定会话下线
+
+- **接口地址**：`/admin/sessions/{sid}/kick`
+- **请求方式**：POST
+- **请求头**：`Authorization: Bearer {token}`
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "踢下线成功",
+    "data": null
+  }
+  ```
+
+#### 1.5.3 踢用户全部会话下线
+
+- **接口地址**：`/admin/users/{userId}/kick-all`
+- **请求方式**：POST
+- **请求头**：`Authorization: Bearer {token}`
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "踢下线成功",
+    "data": null
+  }
+  ```
+
+#### 1.5.4 查询在线用户列表
+
+- **接口地址**：`/admin/online-users`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **请求参数**（Query）：
+  | 参数名 | 类型 | 必填 | 说明 |
+  |--------|------|------|------|
+  | page | number | 否 | 页码（默认1） |
+  | size | number | 否 | 每页条数（默认10） |
+  | role | string | 否 | 角色筛选 |
+  | keyWords | string | 否 | 关键词搜索 |
+  | isEnabled | boolean | 否 | 按启用状态筛选 |
+  | onlineOnly | boolean | 否 | 仅返回在线用户 |
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": {
+      "list": [
+        {
+          "id": 1,
+          "username": "admin",
+          "name": "超级管理员",
+          "role": "super_admin",
+          "isEnabled": true,
+          "onlineCount": 2,
+          "lastActiveAt": "2026-04-29T08:12:00Z",
+          "lastLoginAt": "2026-04-29T08:00:00Z"
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "size": 10
+    }
+  }
+  ```
+
+  
 
 ## 2. 用户管理模块（超级管理员/管理员）
 
@@ -1215,6 +1362,7 @@
           "normalizedAverageScore": 4.21,
           "processedAverageScore": 4.27,
           "abnormalCount": 1,
+          "totalAbnormalCount": 2,
           "sampleSize": 6,
           "validSampleSize": 5
         }
@@ -1250,9 +1398,10 @@
   | indicatorAverage[].rawAverageScore | number | 原始平均分，未做标准化和异常剔除 |
   | indicatorAverage[].normalizedAverageScore | number | 标准化后平均分，已消除评委整体偏严/偏松影响，但未剔除异常值 |
   | indicatorAverage[].processedAverageScore | number | 处理后平均分，基于标准化结果剔除恶意评分后计算 |
-  | indicatorAverage[].abnormalCount | number | 判定为恶意评分的条数（按项目规则） |
+  | indicatorAverage[].abnormalCount | number | 该指标自身的恶意评分数（按该指标评分分布检测） |
+  | indicatorAverage[].totalAbnormalCount | number | 总恶意评分数（沿用原项目规则口径，用于兼容旧统计语义） |
   | indicatorAverage[].sampleSize | number | 原始样本总数 |
-  | indicatorAverage[].validSampleSize | number | 剔除异常值后的有效样本数 |
+  | indicatorAverage[].validSampleSize | number | 按指标维度剔除异常值后的有效样本数 |
   | scorerDistribution | array | 打分用户分布统计 |
   | scorerDistribution[].userId | number | 打分用户ID |
   | scorerDistribution[].userName | string | 打分用户名称 |
@@ -1261,6 +1410,7 @@
 - **统计逻辑说明**：
   - **原始平均分**：直接基于原始打分求平均。
   - **标准化平均分**：按评委在当前统计范围内的整体均值做中心化处理，公式为 `adjusted = raw - scorerMean + overallMean`。
+  - **指标异常计数口径**：`indicatorAverage[].abnormalCount` 按单个指标维度检测；`indicatorAverage[].totalAbnormalCount` 保留项目级恶意判定总量口径。
   - **恶意判定规则**（项目级）：
     - `AUTO`：使用 MAD 低分单侧规则 `x < median - 3 × 1.4826 × MAD` 标记恶意评分。
     - `THRESHOLD`：使用项目配置阈值区间，`x < lower` 或 `x > upper` 标记恶意评分。

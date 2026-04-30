@@ -8,8 +8,8 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ReviewerGroupOverviewVO;
 import com.eval.gameeval.models.VO.ReviewerGroupVO;
 import com.eval.gameeval.models.VO.ReviewerGroupPageVO;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IReviewerGroupService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/reviewer-groups")
 public class ReviewerGroupController {
+    @Resource
+    private CurrentUserContext currentUserContext;
 
     @Resource
     private IReviewerGroupService reviewerGroupService;
@@ -32,12 +34,9 @@ public class ReviewerGroupController {
      */
     @PostMapping
     @LogRecord(value = "创建评审组", module = "ReviewerGroup")
-    public ResponseEntity<ResponseVO<ReviewerGroupVO>> createReviewerGroup(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody ReviewerGroupCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.createReviewerGroup(token, request);
+    public ResponseEntity<ResponseVO<ReviewerGroupVO>> createReviewerGroup(@Valid @RequestBody ReviewerGroupCreateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.createReviewerGroup(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -45,12 +44,9 @@ public class ReviewerGroupController {
      * 获取评审组列表
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<ReviewerGroupPageVO>> getReviewerGroupList(
-            @RequestHeader("Authorization") String authorization,
-            ReviewerGroupQueryDTO query
-    ) {
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ReviewerGroupPageVO> response = reviewerGroupService.getReviewerGroupList(token,query);
+    public ResponseEntity<ResponseVO<ReviewerGroupPageVO>> getReviewerGroupList(ReviewerGroupQueryDTO query) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ReviewerGroupPageVO> response = reviewerGroupService.getReviewerGroupList(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
@@ -58,32 +54,25 @@ public class ReviewerGroupController {
      * 获取评审组详情
      */
     @GetMapping("/{groupId}")
-    public ResponseEntity<ResponseVO<ReviewerGroupVO>> getReviewerGroupDetail(
-            @RequestHeader("Authorization") String authorization,
-            @PathVariable Long groupId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.getReviewerGroupDetail(token, groupId);
+    public ResponseEntity<ResponseVO<ReviewerGroupVO>> getReviewerGroupDetail(@PathVariable Long groupId) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.getReviewerGroupDetail(currentUserId, groupId);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{groupId}")
     public ResponseEntity<ResponseVO<ReviewerGroupVO>> updateReviewerGroup(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long groupId,
             @Valid @RequestBody ReviewerGroupUpdateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.updateReviewerGroup(token, groupId, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ReviewerGroupVO> response = reviewerGroupService.updateReviewerGroup(currentUserId, groupId, request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<ResponseVO<ReviewerGroupOverviewVO>> getReviewerGroupOverview(
-            @RequestHeader("Authorization") String authorization) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ReviewerGroupOverviewVO> response = reviewerGroupService.getReviewerGroupOverview(token);
+    public ResponseEntity<ResponseVO<ReviewerGroupOverviewVO>> getReviewerGroupOverview() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ReviewerGroupOverviewVO> response = reviewerGroupService.getReviewerGroupOverview(currentUserId);
         return ResponseEntity.ok(response);
     }
 

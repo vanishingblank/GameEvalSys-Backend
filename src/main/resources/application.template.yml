@@ -1,11 +1,12 @@
 spring:
   # 数据源配置
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
+#    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.mariadb.jdbc.Driver
     #linux with docker
     # url: jdbc:mysql://localhost:3314/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     #windows with local mysql
-    url: jdbc:mysql://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mariadb://localhost:3306/gameeval?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
     hikari:
@@ -83,4 +84,21 @@ app:
         # 本地开发默认 5 分钟
         fixed-delay-ms: ${APP_CACHE_WARMUP_FIXED_DELAY_MS:300000}
         initial-delay-ms: ${APP_CACHE_WARMUP_INITIAL_DELAY_MS:45000}
+
+jwt:
+  secret: ${JWT_SECRET:change-me-to-a-long-random-secret}
+  issuer: ${JWT_ISSUER:gameeval}
+  access-seconds: 14400
+  refresh-seconds: 604800
+  last-active-refresh-seconds: 300
+  max-sessions-per-user: 10
+  
+auth:
+  refresh-cookie:
+    name: ${AUTH_REFRESH_COOKIE_NAME:refreshToken}
+    path: ${AUTH_REFRESH_COOKIE_PATH:/api/v1/auth/refresh}
+    http-only: ${AUTH_REFRESH_COOKIE_HTTP_ONLY:true}
+    secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
+    same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
+    max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
 

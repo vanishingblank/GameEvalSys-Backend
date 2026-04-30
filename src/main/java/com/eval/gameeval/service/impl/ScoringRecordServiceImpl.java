@@ -10,7 +10,6 @@ import com.eval.gameeval.models.VO.ScoringRecordVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IScoringRecordService;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import com.eval.gameeval.util.ScoringRecordCacheUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -59,9 +58,6 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     private UserMapper userMapper;
 
     @Autowired
-    private RedisToken redisToken;
-
-    @Autowired
     private ScoringRecordCacheUtil scoringRecordCacheUtil;
 
     @Autowired
@@ -69,10 +65,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ScoringRecordVO> submitScore(String token, ScoringRecordCreateDTO request) {
+    public ResponseVO<ScoringRecordVO> submitScore(Long currentUserId, ScoringRecordCreateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -243,10 +238,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     }
 
     @Override
-    public ResponseVO<ScoringRecordVO> getScoreRecord(String token, ScoringRecordQueryDTO query) {
+    public ResponseVO<ScoringRecordVO> getScoreRecord(Long currentUserId, ScoringRecordQueryDTO query) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -290,10 +284,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     }
 
     @Override
-    public ResponseVO<ScoringRecordPageVO> getUserProjectRecords(String token, Long projectId, ScoringRecordPageQueryDTO query) {
+    public ResponseVO<ScoringRecordPageVO> getUserProjectRecords(Long currentUserId, Long projectId, ScoringRecordPageQueryDTO query) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

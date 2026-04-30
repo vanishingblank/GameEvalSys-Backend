@@ -16,7 +16,6 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IReviewerGroupService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -46,9 +45,6 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private ReviewerGroupMapper reviewerGroupMapper;
 
     @Resource
@@ -56,10 +52,9 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ReviewerGroupVO> createReviewerGroup(String token, ReviewerGroupCreateDTO request) {
+    public ResponseVO<ReviewerGroupVO> createReviewerGroup(Long currentUserId, ReviewerGroupCreateDTO request) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -122,10 +117,9 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     }
 
     @Override
-    public ResponseVO<ReviewerGroupPageVO> getReviewerGroupList(String token, ReviewerGroupQueryDTO query) {
+    public ResponseVO<ReviewerGroupPageVO> getReviewerGroupList(Long currentUserId, ReviewerGroupQueryDTO query) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -180,10 +174,9 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     }
 
     @Override
-    public ResponseVO<ReviewerGroupVO> getReviewerGroupDetail(String token, Long groupId) {
+    public ResponseVO<ReviewerGroupVO> getReviewerGroupDetail(Long currentUserId, Long groupId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -214,10 +207,9 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ReviewerGroupVO> updateReviewerGroup(String token, Long groupId, ReviewerGroupUpdateDTO request) {
+    public ResponseVO<ReviewerGroupVO> updateReviewerGroup(Long currentUserId, Long groupId, ReviewerGroupUpdateDTO request) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -352,9 +344,8 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
     }
 
     @Override
-    public ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(String token) {
+    public ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

@@ -18,51 +18,51 @@ public interface IGroupService {
 
     /**
      * 创建小组（仅包含基本信息，不关联项目）
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param request 创建请求
      * @return 小组详情
      */
-    ResponseVO<GroupVO> createGroup(String token, GroupCreateDTO request);
+    ResponseVO<GroupVO> createGroup(Long currentUserId, GroupCreateDTO request);
 
     /**
      * 批量创建小组（仅包含基本信息，不关联项目）
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param request 批量创建请求
      * @return 批量创建结果
      */
-    ResponseVO<GroupBatchCreateVO> batchCreateGroups(String token, GroupBatchCreateDTO request);
+    ResponseVO<GroupBatchCreateVO> batchCreateGroups(Long currentUserId, GroupBatchCreateDTO request);
 
     /**
      * 将小组加入项目
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param request 请求参数（包含groupId和projectId）
      * @return 小组详情
      */
-    ResponseVO<GroupVO> addGroupToProject(String token, GroupAddToProjectDTO request);
+    ResponseVO<GroupVO> addGroupToProject(Long currentUserId, GroupAddToProjectDTO request);
 
     /**
      * 编辑小组信息
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param request 编辑请求
      * @return 编辑后的小组详情
      */
-    ResponseVO<GroupVO> updateGroup(String token, GroupUpdateDTO request);
+    ResponseVO<GroupVO> updateGroup(Long currentUserId, GroupUpdateDTO request);
 
     /**
      * 获取项目关联的小组列表
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param projectId 项目ID
      * @return 小组列表
      */
-    ResponseVO<List<GroupVO>> getProjectGroups(String token, Long projectId);
+    ResponseVO<List<GroupVO>> getProjectGroups(Long currentUserId, Long projectId);
 
     /**
      * 查询所有被打分组（小组）列表
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param query 查询参数
      * @return 小组分页列表
      */
-    ResponseVO<GroupPageVO> getAllGroups(String token, GroupQueryDTO query);
+    ResponseVO<GroupPageVO> getAllGroups(Long currentUserId, GroupQueryDTO query);
 
-    ResponseVO<GroupOverviewVO> getGroupOverview(String token);
+    ResponseVO<GroupOverviewVO> getGroupOverview(Long currentUserId);
 }

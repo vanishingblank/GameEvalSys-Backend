@@ -10,17 +10,17 @@ import com.eval.gameeval.models.VO.ProjectVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 
 public interface IProjectService {
-    ResponseVO<ProjectCreateVO> createProject(String token, ProjectCreateDTO request);
+    ResponseVO<ProjectCreateVO> createProject(Long currentUserId, ProjectCreateDTO request);
 
-    ResponseVO<Void> updateProject(String token, Long projectId, ProjectUpdateDTO request);
+    ResponseVO<Void> updateProject(Long currentUserId, Long projectId, ProjectUpdateDTO request);
 
-    ResponseVO<Void> endProject(String token, Long projectId);
+    ResponseVO<Void> endProject(Long currentUserId, Long projectId);
 
-    ResponseVO<ProjectPageVO> getProjectList(String token, ProjectQueryDTO query);
+    ResponseVO<ProjectPageVO> getProjectList(Long currentUserId, ProjectQueryDTO query);
 
-    ResponseVO<ProjectVO> getProjectDetail(String token, Long projectId);
+    ResponseVO<ProjectVO> getProjectDetail(Long currentUserId, Long projectId);
 
-    ResponseVO<ProjectPageVO> getAuthorizedProjects(String token, ProjectQueryDTO query);
+    ResponseVO<ProjectPageVO> getAuthorizedProjects(Long currentUserId, ProjectQueryDTO query);
 
-    ResponseVO<ProjectOverviewVO> getProjectOverview(String token);
+    ResponseVO<ProjectOverviewVO> getProjectOverview(Long currentUserId);
 }

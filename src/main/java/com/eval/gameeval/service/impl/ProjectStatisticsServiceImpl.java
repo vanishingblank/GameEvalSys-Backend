@@ -11,7 +11,6 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringOverviewVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.RedisBaseUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
@@ -64,40 +63,35 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringStandardMapper standardMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
 
     @Resource
     private RedisBaseUtil redisBaseUtil;
 
     @Override
-    public ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId) {
+    public ResponseVO<ProjectStatisticsVO> getProjectStatistics(Long currentUserId, Long projectId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
-            // 2. 验证项目是否存在
+            // 1. 验证项目是否存在
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 查询小组评分明细，并在服务层完成评委标准化与异常检测
+            // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             refreshMaliciousFlags(project, groupScoreList);
             groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             List<ProjectStatisticsVO.GroupAverageVO> groupAverage = buildGroupAverageStatistics(groupScoreList);
 
-            // 4. 查询指标评分明细，并在服务层完成评委标准化与异常检测
+            // 3. 查询指标评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> indicatorScoreList = recordMapper.selectIndicatorScoreDetails(projectId);
             List<ProjectStatisticsVO.IndicatorAverageVO> indicatorAverage = buildIndicatorAverageStatistics(indicatorScoreList);
 
-            // 5. 查询打分用户分布
+            // 4. 查询打分用户分布
 
             List<Map<String, Object>> scorerDistList = recordMapper.selectScorerDistribution(projectId);
             List<ProjectStatisticsVO.ScorerDistributionVO> scorerDistribution = scorerDistList.stream()
@@ -111,7 +105,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     })
                     .collect(Collectors.toList());
 
-            // 6. 构建响应
+            // 5. 构建响应
             ProjectStatisticsVO statisticsVO = new ProjectStatisticsVO();
             statisticsVO.setGroupAverage(groupAverage);
             statisticsVO.setIndicatorAverage(indicatorAverage);
@@ -128,11 +122,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<ScoringOverviewVO> getScoringOverview(String token) {
+    public ResponseVO<ScoringOverviewVO> getScoringOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             Object cache = scoringOverviewCacheUtil.getUserOverviewCache(currentUserId);
@@ -164,11 +157,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<PlatformStatisticsVO> getPlatformStatistics(String token) {
+    public ResponseVO<PlatformStatisticsVO> getPlatformStatistics(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             User currentUser = userMapper.selectById(currentUserId);
@@ -239,11 +231,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<GroupIndicatorStatisticsVO> getGroupIndicatorStatistics(String token, Long projectId, Long groupId) {
+    public ResponseVO<GroupIndicatorStatisticsVO> getGroupIndicatorStatistics(Long currentUserId, Long projectId, Long groupId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             Project project = projectMapper.selectById(projectId);
@@ -285,24 +276,25 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public void exportProjectData(String token, Long projectId, String format, HttpServletResponse response) throws IOException {
+    public void exportProjectData(Long currentUserId, Long projectId, String format, HttpServletResponse response) throws IOException {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
+                return;
             }
 
             // 2. 验证项目是否存在
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             // 3. 查询所有打分记录
             List<ScoringRecord> records = recordMapper.selectByProjectId(projectId);
             if (records == null || records.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
 
             // 4. 查询所有明细（批量）
@@ -401,36 +393,41 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
         } catch (Exception e) {
             log.error("导出项目数据异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
     }
 
     @Override
-    public void exportProjectGroupIndicatorItemScores(String token, Long projectId, String format, HttpServletResponse response) throws IOException {
+    public void exportProjectGroupIndicatorItemScores(Long currentUserId, Long projectId, String format, HttpServletResponse response) throws IOException {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
+                return;
             }
 
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             List<ProjectGroup> projectGroups = groupMapper.selectByProjectId(projectId);
             if (projectGroups == null || projectGroups.isEmpty()) {
-                throw new RuntimeException("该项目暂无小组数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无小组数据");
+                return;
             }
 
             List<ScoringRecord> records = recordMapper.selectByProjectId(projectId);
             if (records == null || records.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
 
             List<ScoringIndicator> indicators = getProjectIndicators(project);
             if (indicators.isEmpty()) {
-                throw new RuntimeException("该项目未配置评分项");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目未配置评分项");
+                return;
             }
 
             List<ScoringIndicatorCategory> categories = project.getStandardId() == null
@@ -572,26 +569,29 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             log.info("导出项目小组评分汇总成功: projectId={}, format={}", projectId, format);
         } catch (Exception e) {
             log.error("导出项目小组评分汇总异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
     }
 
     @Override
-    public void exportAbnormalScoringRecords(String token, Long projectId, HttpServletResponse response) throws IOException {
+    public void exportAbnormalScoringRecords(Long currentUserId, Long projectId, HttpServletResponse response) throws IOException {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                throw new RuntimeException("Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
+                return;
             }
 
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
-                throw new RuntimeException("项目不存在");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "项目不存在");
+                return;
             }
 
             List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
             if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-                throw new RuntimeException("该项目暂无打分数据");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
+                return;
             }
             refreshMaliciousFlags(project, groupScoreRows);
             groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
@@ -665,7 +665,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     .collect(Collectors.toList());
 
             if (abnormalEntries.isEmpty()) {
-                throw new RuntimeException("当前项目暂无被标记为异常的打分记录");
+                writeExportError(response, HttpServletResponse.SC_NOT_FOUND,
+                        "当前项目暂无被标记为异常的打分记录");
+                return;
             }
 
             abnormalEntries.sort(Comparator.comparing(AbnormalExportEntry::getGroupId)
@@ -716,8 +718,47 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             log.info("导出项目异常打分记录成功: projectId={}, abnormalCount={}", projectId, abnormalEntries.size());
         } catch (Exception e) {
             log.error("导出项目异常打分记录异常: projectId={}", projectId, e);
-            throw new IOException("导出失败: " + e.getMessage(), e);
+            writeExportError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "导出失败: " + e.getMessage());
         }
+    }
+
+    private void writeExportError(HttpServletResponse response, int status, String message) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+        response.resetBuffer();
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"code\":" + status + ",\"message\":\""
+                + escapeJson(message) + "\",\"data\":null}");
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '"' || ch == '\\') {
+                builder.append('\\');
+            }
+            if (ch == '\n') {
+                builder.append("\\n");
+                continue;
+            }
+            if (ch == '\r') {
+                builder.append("\\r");
+                continue;
+            }
+            if (ch == '\t') {
+                builder.append("\\t");
+                continue;
+            }
+            builder.append(ch);
+        }
+        return builder.toString();
     }
 
     /**
@@ -826,7 +867,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 .collect(Collectors.groupingBy(row -> toLong(row.get("indicatorId")), LinkedHashMap::new, Collectors.toList()));
 
         return indicatorGroups.values().stream()
-                .map(rows -> {
+                .map((List<Map<String, Object>> rows) -> {
                     BigDecimal indicatorMean = calculateAverage(rows.stream()
                             .map(row -> convertToBigDecimal(row.get("score")))
                             .collect(Collectors.toList()));
@@ -845,17 +886,21 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                             .collect(Collectors.toList());
 
                     RobustScoreSummary summary = summarizeScores(entries);
+                int indicatorAbnormalCount = summary.getAbnormalCount();
+                BigDecimal indicatorProcessedAverage = summary.getProcessedAverageScore();
+                int indicatorValidSampleSize = summary.getValidSampleSize();
                     NormalizedScoreEntry first = entries.get(0);
                     return new ProjectStatisticsVO.IndicatorAverageVO()
                             .setIndicatorId(first.getSubjectId())
                             .setIndicatorName(first.getSubjectName())
-                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(indicatorProcessedAverage)
                             .setRawAverageScore(summary.getRawAverageScore())
                             .setNormalizedAverageScore(summary.getNormalizedAverageScore())
-                            .setProcessedAverageScore(summary.getProcessedAverageScore())
-                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setProcessedAverageScore(indicatorProcessedAverage)
+                            .setAbnormalCount(indicatorAbnormalCount)
+                            .setTotalAbnormalCount(summary.getAbnormalCount())
                             .setSampleSize(summary.getSampleSize())
-                            .setValidSampleSize(summary.getValidSampleSize());
+                            .setValidSampleSize(indicatorValidSampleSize);
                 })
                 .sorted(Comparator.comparing(ProjectStatisticsVO.IndicatorAverageVO::getAverageScore,
                         Comparator.nullsLast(BigDecimal::compareTo)).reversed())
@@ -903,10 +948,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 entries.size(),
                 validScores.size()
         );
-    }
-
-    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
-        return detectOutlierResult(scores).getAbnormalIndexes();
     }
 
     private void refreshMaliciousFlags(Project project, List<Map<String, Object>> groupScoreRows) {
