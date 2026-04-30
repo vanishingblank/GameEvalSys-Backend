@@ -6,10 +6,10 @@ import com.eval.gameeval.models.DTO.Project.ProjectQueryDTO;
 import com.eval.gameeval.models.DTO.Project.ProjectUpdateDTO;
 import com.eval.gameeval.models.DTO.Scoring.ScoringRecordPageQueryDTO;
 import com.eval.gameeval.models.VO.*;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.service.IProjectService;
 import com.eval.gameeval.service.IScoringRecordService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +22,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/projects")
 public class ProjectController {
+    @Resource
+    private CurrentUserContext currentUserContext;
+
     @Resource
     private IProjectService projectService;
 
@@ -37,11 +40,9 @@ public class ProjectController {
     @PostMapping
     @LogRecord(value = "创建项目", module = "Project")
     public ResponseEntity<ResponseVO<ProjectCreateVO>> createProject(
-            @RequestHeader("Authorization") String authorization,
             @Valid @RequestBody ProjectCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectCreateVO> response = projectService.createProject(token, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectCreateVO> response = projectService.createProject(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -51,12 +52,10 @@ public class ProjectController {
     @PutMapping("/{projectId}")
     @LogRecord(value = "编辑项目", module = "Project")
     public ResponseEntity<ResponseVO<Void>> updateProject(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             @Valid @RequestBody ProjectUpdateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = projectService.updateProject(token, projectId, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = projectService.updateProject(currentUserId, projectId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -66,11 +65,9 @@ public class ProjectController {
     @PostMapping("/{projectId}/end")
     @LogRecord(value = "结束项目", module = "Project")
     public ResponseEntity<ResponseVO<Void>> endProject(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = projectService.endProject(token, projectId);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = projectService.endProject(currentUserId, projectId);
         return ResponseEntity.ok(response);
     }
 
@@ -79,20 +76,16 @@ public class ProjectController {
      */
     @GetMapping
     public ResponseEntity<ResponseVO<ProjectPageVO>> getProjectList(
-            @RequestHeader("Authorization") String authorization,
             ProjectQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectPageVO> response = projectService.getProjectList(token, query);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectPageVO> response = projectService.getProjectList(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<ResponseVO<ProjectOverviewVO>> getProjectOverview(
-            @RequestHeader("Authorization") String authorization) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectOverviewVO> response = projectService.getProjectOverview(token);
+    public ResponseEntity<ResponseVO<ProjectOverviewVO>> getProjectOverview() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectOverviewVO> response = projectService.getProjectOverview(currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -101,11 +94,9 @@ public class ProjectController {
      */
     @GetMapping("/{projectId}")
     public ResponseEntity<ResponseVO<ProjectVO>> getProjectDetail(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectVO> response = projectService.getProjectDetail(token, projectId);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectVO> response = projectService.getProjectDetail(currentUserId, projectId);
         return ResponseEntity.ok(response);
     }
 
@@ -114,21 +105,17 @@ public class ProjectController {
      */
     @GetMapping("/authorized")
     public ResponseEntity<ResponseVO<ProjectPageVO>> getAuthorizedProjects(
-            @RequestHeader("Authorization") String authorization,
             ProjectQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectPageVO> response = projectService.getAuthorizedProjects(token, query);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectPageVO> response = projectService.getAuthorizedProjects(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{projectId}/groups")
     public ResponseEntity<ResponseVO<List<GroupVO>>> getProjectGroups(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<GroupVO>> response = groupService.getProjectGroups(token, projectId);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<List<GroupVO>> response = groupService.getProjectGroups(currentUserId, projectId);
         return ResponseEntity.ok(response);
     }
 
@@ -137,12 +124,10 @@ public class ProjectController {
      */
     @GetMapping("/{projectId}/records")
     public ResponseEntity<ResponseVO<ScoringRecordPageVO>> getUserProjectRecords(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             @Valid ScoringRecordPageQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ScoringRecordPageVO> response = scoringRecordService.getUserProjectRecords(token, projectId, query);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ScoringRecordPageVO> response = scoringRecordService.getUserProjectRecords(currentUserId, projectId, query);
         return ResponseEntity.ok(response);
     }
 

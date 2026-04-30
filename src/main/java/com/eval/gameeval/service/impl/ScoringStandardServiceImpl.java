@@ -18,7 +18,6 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IScoringStandardService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.StandardCacheUtil;
 
 import jakarta.annotation.Resource;
@@ -52,9 +51,6 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private StandardCacheUtil standardCacheUtil;
 
     @Resource
@@ -62,9 +58,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ScoringStandardVO> createStandard(String token, ScoringStandardCreateDTO request) {
+    public ResponseVO<ScoringStandardVO> createStandard(Long currentUserId, ScoringStandardCreateDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -150,9 +145,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     }
 
     @Override
-    public ResponseVO<ScoringStandardPageVO> getStandardList(String token, ScoringStandardQueryDTO query) {
+    public ResponseVO<ScoringStandardPageVO> getStandardList(Long currentUserId, ScoringStandardQueryDTO query) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -210,9 +204,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     }
 
     @Override
-    public ResponseVO<ScoringStandardVO> getStandardDetail(String token, Long standardId) {
+    public ResponseVO<ScoringStandardVO> getStandardDetail(Long currentUserId, Long standardId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -251,9 +244,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateStandard(String token, Long standardId, ScoringStandardUpdateDTO request) {
+    public ResponseVO<Void> updateStandard(Long currentUserId, Long standardId, ScoringStandardUpdateDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -392,9 +384,8 @@ public class ScoringStandardServiceImpl implements IScoringStandardService {
     }
 
     @Override
-    public ResponseVO<ScoringStandardOverviewVO> getStandardOverview(String token) {
+    public ResponseVO<ScoringStandardOverviewVO> getStandardOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }

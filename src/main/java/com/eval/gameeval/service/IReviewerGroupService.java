@@ -16,26 +16,26 @@ public interface IReviewerGroupService {
     /**
      * 创建评审组
      */
-    ResponseVO<ReviewerGroupVO> createReviewerGroup(String token, ReviewerGroupCreateDTO request);
+    ResponseVO<ReviewerGroupVO> createReviewerGroup(Long currentUserId, ReviewerGroupCreateDTO request);
 
     /**
      * 获取所有启用的评审组（支持分页）
      */
-    ResponseVO<ReviewerGroupPageVO> getReviewerGroupList(String token, ReviewerGroupQueryDTO query);
+    ResponseVO<ReviewerGroupPageVO> getReviewerGroupList(Long currentUserId, ReviewerGroupQueryDTO query);
 
     /**
      * 获取评审组详情
      */
-    ResponseVO<ReviewerGroupVO> getReviewerGroupDetail(String token, Long groupId);
+    ResponseVO<ReviewerGroupVO> getReviewerGroupDetail(Long currentUserId, Long groupId);
 
     /**
      * 编辑评审组
-     * @param token 认证Token
+     * @param currentUserId 当前登录用户ID
      * @param groupId 评审组ID
      * @param request 更新请求
      * @return 更新后的评审组详情
      */
-    ResponseVO<ReviewerGroupVO> updateReviewerGroup(String token, Long groupId, ReviewerGroupUpdateDTO request);
+    ResponseVO<ReviewerGroupVO> updateReviewerGroup(Long currentUserId, Long groupId, ReviewerGroupUpdateDTO request);
 
-    ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(String token);
+    ResponseVO<ReviewerGroupOverviewVO> getReviewerGroupOverview(Long currentUserId);
 }

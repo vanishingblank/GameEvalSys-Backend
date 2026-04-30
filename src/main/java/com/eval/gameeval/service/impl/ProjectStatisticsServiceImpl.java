@@ -11,7 +11,6 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.ScoringOverviewVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.RedisBaseUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
@@ -64,40 +63,35 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringStandardMapper standardMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
 
     @Resource
     private RedisBaseUtil redisBaseUtil;
 
     @Override
-    public ResponseVO<ProjectStatisticsVO> getProjectStatistics(String token, Long projectId) {
+    public ResponseVO<ProjectStatisticsVO> getProjectStatistics(Long currentUserId, Long projectId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
-            // 2. 验证项目是否存在
+            // 1. 验证项目是否存在
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
                 return ResponseVO.notFound("项目不存在");
             }
 
-            // 3. 查询小组评分明细，并在服务层完成评委标准化与异常检测
+            // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             refreshMaliciousFlags(project, groupScoreList);
             groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             List<ProjectStatisticsVO.GroupAverageVO> groupAverage = buildGroupAverageStatistics(groupScoreList);
 
-            // 4. 查询指标评分明细，并在服务层完成评委标准化与异常检测
+            // 3. 查询指标评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> indicatorScoreList = recordMapper.selectIndicatorScoreDetails(projectId);
             List<ProjectStatisticsVO.IndicatorAverageVO> indicatorAverage = buildIndicatorAverageStatistics(indicatorScoreList);
 
-            // 5. 查询打分用户分布
+            // 4. 查询打分用户分布
 
             List<Map<String, Object>> scorerDistList = recordMapper.selectScorerDistribution(projectId);
             List<ProjectStatisticsVO.ScorerDistributionVO> scorerDistribution = scorerDistList.stream()
@@ -111,7 +105,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     })
                     .collect(Collectors.toList());
 
-            // 6. 构建响应
+            // 5. 构建响应
             ProjectStatisticsVO statisticsVO = new ProjectStatisticsVO();
             statisticsVO.setGroupAverage(groupAverage);
             statisticsVO.setIndicatorAverage(indicatorAverage);
@@ -128,11 +122,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<ScoringOverviewVO> getScoringOverview(String token) {
+    public ResponseVO<ScoringOverviewVO> getScoringOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             Object cache = scoringOverviewCacheUtil.getUserOverviewCache(currentUserId);
@@ -164,11 +157,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<PlatformStatisticsVO> getPlatformStatistics(String token) {
+    public ResponseVO<PlatformStatisticsVO> getPlatformStatistics(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             User currentUser = userMapper.selectById(currentUserId);
@@ -239,11 +231,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public ResponseVO<GroupIndicatorStatisticsVO> getGroupIndicatorStatistics(String token, Long projectId, Long groupId) {
+    public ResponseVO<GroupIndicatorStatisticsVO> getGroupIndicatorStatistics(Long currentUserId, Long projectId, Long groupId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                return ResponseVO.unauthorized("Token无效");
+                return ResponseVO.unauthorized("用户信息无效");
             }
 
             Project project = projectMapper.selectById(projectId);
@@ -285,12 +276,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public void exportProjectData(String token, Long projectId, String format, HttpServletResponse response) throws IOException {
+    public void exportProjectData(Long currentUserId, Long projectId, String format, HttpServletResponse response) throws IOException {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
                 return;
             }
 
@@ -410,11 +399,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public void exportProjectGroupIndicatorItemScores(String token, Long projectId, String format, HttpServletResponse response) throws IOException {
+    public void exportProjectGroupIndicatorItemScores(Long currentUserId, Long projectId, String format, HttpServletResponse response) throws IOException {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
                 return;
             }
 
@@ -587,11 +575,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     @Override
-    public void exportAbnormalScoringRecords(String token, Long projectId, HttpServletResponse response) throws IOException {
+    public void exportAbnormalScoringRecords(Long currentUserId, Long projectId, HttpServletResponse response) throws IOException {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
-                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token无效");
+                writeExportError(response, HttpServletResponse.SC_UNAUTHORIZED, "用户信息无效");
                 return;
             }
 

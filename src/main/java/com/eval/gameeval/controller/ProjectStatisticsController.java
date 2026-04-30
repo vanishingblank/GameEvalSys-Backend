@@ -3,8 +3,8 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.models.VO.GroupIndicatorStatisticsVO;
 import com.eval.gameeval.models.VO.ProjectStatisticsVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IProjectStatisticsService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +22,9 @@ import java.io.IOException;
 public class ProjectStatisticsController {
 
     @Resource
+    private CurrentUserContext currentUserContext;
+
+    @Resource
     private IProjectStatisticsService projectStatisticsService;
 
     /**
@@ -29,11 +32,10 @@ public class ProjectStatisticsController {
      */
     @GetMapping("/{projectId}/statistics")
     public ResponseEntity<ResponseVO<ProjectStatisticsVO>> getProjectStatistics(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId) {
 
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<ProjectStatisticsVO> response = projectStatisticsService.getProjectStatistics(token, projectId);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<ProjectStatisticsVO> response = projectStatisticsService.getProjectStatistics(currentUserId, projectId);
         return ResponseEntity.ok(response);
     }
 
@@ -42,13 +44,12 @@ public class ProjectStatisticsController {
      */
     @GetMapping("/{projectId}/statistics/groups/{groupId}")
     public ResponseEntity<ResponseVO<GroupIndicatorStatisticsVO>> getGroupIndicatorStatistics(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             @PathVariable Long groupId) {
 
-        String token = TokenUtil.extractToken(authorization);
+        Long currentUserId = currentUserContext.getCurrentUserId();
         ResponseVO<GroupIndicatorStatisticsVO> response =
-                projectStatisticsService.getGroupIndicatorStatistics(token, projectId, groupId);
+            projectStatisticsService.getGroupIndicatorStatistics(currentUserId, projectId, groupId);
         return ResponseEntity.ok(response);
     }
 
@@ -57,13 +58,12 @@ public class ProjectStatisticsController {
      */
     @GetMapping("/{projectId}/export")
     public void exportProjectData(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             @RequestParam(required = false, defaultValue = "excel") String format,
             HttpServletResponse response) throws IOException {
 
-        String token = TokenUtil.extractToken(authorization);
-        projectStatisticsService.exportProjectData(token, projectId, format, response);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        projectStatisticsService.exportProjectData(currentUserId, projectId, format, response);
     }
 
     /**
@@ -71,13 +71,12 @@ public class ProjectStatisticsController {
      */
     @GetMapping("/{projectId}/export/group-indicator-items")
     public void exportProjectGroupIndicatorItemScores(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             @RequestParam(required = false, defaultValue = "excel") String format,
             HttpServletResponse response) throws IOException {
 
-        String token = TokenUtil.extractToken(authorization);
-        projectStatisticsService.exportProjectGroupIndicatorItemScores(token, projectId, format, response);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        projectStatisticsService.exportProjectGroupIndicatorItemScores(currentUserId, projectId, format, response);
     }
 
     /**
@@ -85,12 +84,11 @@ public class ProjectStatisticsController {
      */
     @GetMapping("/{projectId}/export/abnormal-scores")
     public void exportAbnormalScoringRecords(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long projectId,
             HttpServletResponse response) throws IOException {
 
-        String token = TokenUtil.extractToken(authorization);
-        projectStatisticsService.exportAbnormalScoringRecords(token, projectId, response);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        projectStatisticsService.exportAbnormalScoringRecords(currentUserId, projectId, response);
     }
 
 

@@ -24,7 +24,6 @@ import com.eval.gameeval.service.IGroupService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -59,9 +58,6 @@ public class GroupServiceImpl implements IGroupService {
     private UserMapper userMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private ProjectCacheUtil projectCacheUtil;
 
     @Resource
@@ -69,10 +65,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<GroupVO> createGroup(String token, GroupCreateDTO request) {
+    public ResponseVO<GroupVO> createGroup(Long currentUserId, GroupCreateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -123,9 +118,8 @@ public class GroupServiceImpl implements IGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<GroupBatchCreateVO> batchCreateGroups(String token, GroupBatchCreateDTO request) {
+    public ResponseVO<GroupBatchCreateVO> batchCreateGroups(Long currentUserId, GroupBatchCreateDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -191,10 +185,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<GroupVO> addGroupToProject(String token, GroupAddToProjectDTO request) {
+    public ResponseVO<GroupVO> addGroupToProject(Long currentUserId, GroupAddToProjectDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -296,10 +289,9 @@ public class GroupServiceImpl implements IGroupService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<GroupVO> updateGroup(String token, GroupUpdateDTO request) {
+    public ResponseVO<GroupVO> updateGroup(Long currentUserId, GroupUpdateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -386,10 +378,9 @@ public class GroupServiceImpl implements IGroupService {
     }
 
     @Override
-    public ResponseVO<List<GroupVO>> getProjectGroups(String token, Long projectId) {
+    public ResponseVO<List<GroupVO>> getProjectGroups(Long currentUserId, Long projectId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -461,10 +452,9 @@ public class GroupServiceImpl implements IGroupService {
     }
 
     @Override
-    public ResponseVO<GroupPageVO> getAllGroups(String token, GroupQueryDTO query) {
+    public ResponseVO<GroupPageVO> getAllGroups(Long currentUserId, GroupQueryDTO query) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -532,9 +522,8 @@ public class GroupServiceImpl implements IGroupService {
     }
 
     @Override
-    public ResponseVO<GroupOverviewVO> getGroupOverview(String token) {
+    public ResponseVO<GroupOverviewVO> getGroupOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

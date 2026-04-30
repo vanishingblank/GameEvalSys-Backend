@@ -18,7 +18,6 @@ import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IUserService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.security.AuthSessionStore;
 
 import jakarta.annotation.Resource;
@@ -50,8 +49,6 @@ public class UserServiceImpl implements IUserService {
     @Resource
     private ReviewerGroupMemberMapper groupMemberMapper;
     @Resource
-    private RedisToken redisToken;
-    @Resource
     private AuthSessionStore authSessionStore;
     @Resource
     private PasswordEncoder passwordEncoder;
@@ -61,10 +58,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<List<UserWithGroupVO>> createUsers(String token, @Valid UserCreateDTO request) {
+    public ResponseVO<List<UserWithGroupVO>> createUsers(Long currentUserId, @Valid UserCreateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -218,10 +214,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateUser(String token, Long userId, UserUpdateDTO request) {
+    public ResponseVO<Void> updateUser(Long currentUserId, Long userId, UserUpdateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -322,11 +317,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateSelfPassword(String token, @Valid UserPasswordUpdateDTO request) {
-        Long currentUserId = null;
+    public ResponseVO<Void> updateSelfPassword(Long currentUserId, @Valid UserPasswordUpdateDTO request) {
         try {
-            // 1. 验证Token并获取当前用户
-            currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -361,10 +354,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> deleteUser(String token, Long userId) {
+    public ResponseVO<Void> deleteUser(Long currentUserId, Long userId) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -415,9 +407,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(String token, UserBatchStatusDTO request) {
+    public ResponseVO<UserBatchOperationResultVO> batchUpdateUserStatus(Long currentUserId, UserBatchStatusDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -495,9 +486,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(String token, UserBatchDeleteDTO request) {
+    public ResponseVO<UserBatchOperationResultVO> batchDeleteUsers(Long currentUserId, UserBatchDeleteDTO request) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -564,10 +554,9 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserPageVO> getUserList(String token, UserQueryDTO query) {
+    public ResponseVO<UserPageVO> getUserList(Long currentUserId, UserQueryDTO query) {
         try {
-            // 1. 验证Token并获取当前用户
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -653,9 +642,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<UserOverviewVO> getUserOverview(String token) {
+    public ResponseVO<UserOverviewVO> getUserOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效，请重新登录");
             }
@@ -717,12 +705,11 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public ResponseVO<List<UserDetailVO>> batchQueryUsers(String token, UserBatchQueryDTO request) {
+    public ResponseVO<List<UserDetailVO>> batchQueryUsers(Long currentUserId, UserBatchQueryDTO request) {
 
 
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

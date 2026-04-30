@@ -11,8 +11,8 @@ import com.eval.gameeval.models.VO.GroupOverviewVO;
 import com.eval.gameeval.models.VO.GroupPageVO;
 import com.eval.gameeval.models.VO.GroupVO;
 import com.eval.gameeval.models.VO.ResponseVO;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IGroupService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +26,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/groups")
 public class GroupController {
+    @Resource
+    private CurrentUserContext currentUserContext;
 
     @Resource
     private IGroupService groupService;
@@ -35,12 +37,9 @@ public class GroupController {
      */
     @PostMapping
     @LogRecord(value = "创建小组", module = "Group")
-    public ResponseEntity<ResponseVO<GroupVO>> createGroup(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody GroupCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<GroupVO> response = groupService.createGroup(token, request);
+    public ResponseEntity<ResponseVO<GroupVO>> createGroup(@Valid @RequestBody GroupCreateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupVO> response = groupService.createGroup(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -49,12 +48,9 @@ public class GroupController {
      */
     @PostMapping("/batch-create")
     @LogRecord(value = "批量创建小组", module = "Group")
-    public ResponseEntity<ResponseVO<GroupBatchCreateVO>> batchCreateGroups(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody GroupBatchCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<GroupBatchCreateVO> response = groupService.batchCreateGroups(token, request);
+    public ResponseEntity<ResponseVO<GroupBatchCreateVO>> batchCreateGroups(@Valid @RequestBody GroupBatchCreateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupBatchCreateVO> response = groupService.batchCreateGroups(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -63,12 +59,9 @@ public class GroupController {
      */
     @PostMapping("/{groupId}/add-to-project")
     @LogRecord(value = "将小组加入项目", module = "Group")
-    public ResponseEntity<ResponseVO<GroupVO>> addGroupToProject(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody GroupAddToProjectDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<GroupVO> response = groupService.addGroupToProject(token, request);
+    public ResponseEntity<ResponseVO<GroupVO>> addGroupToProject(@Valid @RequestBody GroupAddToProjectDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupVO> response = groupService.addGroupToProject(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -78,14 +71,13 @@ public class GroupController {
     @PutMapping("/{groupId}")
     @LogRecord(value = "编辑小组", module = "Group")
     public ResponseEntity<ResponseVO<GroupVO>> updateGroup(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long groupId,
             @Valid @RequestBody GroupUpdateDTO request) {
 
-        String token = TokenUtil.extractToken(authorization);
         // 确保groupId一致
         request.setId(groupId);
-        ResponseVO<GroupVO> response = groupService.updateGroup(token, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupVO> response = groupService.updateGroup(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -93,21 +85,16 @@ public class GroupController {
      * 查询所有小组（分页）
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<GroupPageVO>> getAllGroups(
-            @RequestHeader("Authorization") String authorization,
-            GroupQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<GroupPageVO> response = groupService.getAllGroups(token, query);
+    public ResponseEntity<ResponseVO<GroupPageVO>> getAllGroups(GroupQueryDTO query) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupPageVO> response = groupService.getAllGroups(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<ResponseVO<GroupOverviewVO>> getGroupOverview(
-            @RequestHeader("Authorization") String authorization) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<GroupOverviewVO> response = groupService.getGroupOverview(token);
+    public ResponseEntity<ResponseVO<GroupOverviewVO>> getGroupOverview() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<GroupOverviewVO> response = groupService.getGroupOverview(currentUserId);
         return ResponseEntity.ok(response);
     }
 }

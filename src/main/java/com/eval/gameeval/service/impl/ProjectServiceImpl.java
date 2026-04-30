@@ -14,7 +14,6 @@ import com.eval.gameeval.service.IProjectService;
 import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
-import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -71,9 +70,6 @@ public class ProjectServiceImpl implements IProjectService {
     private ReviewerGroupMapper reviewerGroupMapper;
 
     @Resource
-    private RedisToken redisToken;
-
-    @Resource
     private ProjectCacheUtil projectCacheUtil;
 
     @Resource
@@ -84,10 +80,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<ProjectCreateVO> createProject(String token, ProjectCreateDTO request) {
+    public ResponseVO<ProjectCreateVO> createProject(Long currentUserId, ProjectCreateDTO request) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -262,10 +257,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateProject(String token, Long projectId, ProjectUpdateDTO request) {
+    public ResponseVO<Void> updateProject(Long currentUserId, Long projectId, ProjectUpdateDTO request) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -415,10 +409,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> endProject(String token, Long projectId) {
+    public ResponseVO<Void> endProject(Long currentUserId, Long projectId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -463,10 +456,9 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     @Override
-    public ResponseVO<ProjectPageVO> getProjectList(String token, ProjectQueryDTO query) {
+    public ResponseVO<ProjectPageVO> getProjectList(Long currentUserId, ProjectQueryDTO query) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -544,10 +536,9 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     @Override
-    public ResponseVO<ProjectVO> getProjectDetail(String token, Long projectId) {
+    public ResponseVO<ProjectVO> getProjectDetail(Long currentUserId, Long projectId) {
         try {
-            // 1. 验证Token
-            Long currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -608,11 +599,9 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     @Override
-    public ResponseVO<ProjectPageVO> getAuthorizedProjects(String token, ProjectQueryDTO query) {
-        Long currentUserId = null;
+    public ResponseVO<ProjectPageVO> getAuthorizedProjects(Long currentUserId, ProjectQueryDTO query) {
         try {
-            // 1. 验证Token
-            currentUserId = redisToken.getUserIdByToken(token);
+            // 1. 验证登录态
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }
@@ -707,9 +696,8 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     @Override
-    public ResponseVO<ProjectOverviewVO> getProjectOverview(String token) {
+    public ResponseVO<ProjectOverviewVO> getProjectOverview(Long currentUserId) {
         try {
-            Long currentUserId = redisToken.getUserIdByToken(token);
             if (currentUserId == null) {
                 return ResponseVO.unauthorized("Token无效");
             }

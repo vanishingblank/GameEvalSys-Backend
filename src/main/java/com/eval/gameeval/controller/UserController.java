@@ -9,8 +9,8 @@ import com.eval.gameeval.models.DTO.User.UserPasswordUpdateDTO;
 import com.eval.gameeval.models.DTO.User.UserQueryDTO;
 import com.eval.gameeval.models.DTO.User.UserUpdateDTO;
 import com.eval.gameeval.models.VO.*;
+import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IUserService;
-import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +23,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/users")
 public class UserController {
+    @Resource
+    private CurrentUserContext currentUserContext;
 
     @Resource
     private IUserService userService;
@@ -32,13 +34,9 @@ public class UserController {
      */
     @PostMapping
     @LogRecord(value = "创建用户", module = "User")
-    public ResponseEntity<ResponseVO<List<UserWithGroupVO>>> createUsers(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody UserCreateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-//        String token = "";
-        ResponseVO<List<UserWithGroupVO>> response = userService.createUsers(token, request);
+    public ResponseEntity<ResponseVO<List<UserWithGroupVO>>> createUsers(@Valid @RequestBody UserCreateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<List<UserWithGroupVO>> response = userService.createUsers(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -48,12 +46,10 @@ public class UserController {
     @PutMapping("/{userId}")
     @LogRecord(value = "编辑用户", module = "User")
     public ResponseEntity<ResponseVO<Void>> updateUser(
-            @RequestHeader("Authorization") String authorization,
             @PathVariable Long userId,
             @Valid @RequestBody UserUpdateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = userService.updateUser(token, userId, request);
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = userService.updateUser(currentUserId, userId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -62,12 +58,9 @@ public class UserController {
      */
     @PutMapping("/batch-status")
     @LogRecord(value = "批量修改用户状态", module = "User")
-    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchUpdateUserStatus(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody UserBatchStatusDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<UserBatchOperationResultVO> response = userService.batchUpdateUserStatus(token, request);
+    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchUpdateUserStatus(@Valid @RequestBody UserBatchStatusDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<UserBatchOperationResultVO> response = userService.batchUpdateUserStatus(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -76,12 +69,9 @@ public class UserController {
      */
     @PutMapping("/me/password")
     @LogRecord(value = "修改密码", module = "User")
-    public ResponseEntity<ResponseVO<Void>> updateSelfPassword(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody UserPasswordUpdateDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = userService.updateSelfPassword(token, request);
+    public ResponseEntity<ResponseVO<Void>> updateSelfPassword(@Valid @RequestBody UserPasswordUpdateDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = userService.updateSelfPassword(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -90,12 +80,9 @@ public class UserController {
      */
     @DeleteMapping("/{userId}")
     @LogRecord(value = "删除用户", module = "User")
-    public ResponseEntity<ResponseVO<Void>> deleteUser(
-            @RequestHeader("Authorization") String authorization,
-            @PathVariable Long userId) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<Void> response = userService.deleteUser(token, userId);
+    public ResponseEntity<ResponseVO<Void>> deleteUser(@PathVariable Long userId) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<Void> response = userService.deleteUser(currentUserId, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -104,12 +91,9 @@ public class UserController {
      */
     @DeleteMapping("/batch-delete")
     @LogRecord(value = "批量删除用户", module = "User")
-    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchDeleteUsers(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody UserBatchDeleteDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<UserBatchOperationResultVO> response = userService.batchDeleteUsers(token, request);
+    public ResponseEntity<ResponseVO<UserBatchOperationResultVO>> batchDeleteUsers(@Valid @RequestBody UserBatchDeleteDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<UserBatchOperationResultVO> response = userService.batchDeleteUsers(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
@@ -118,21 +102,16 @@ public class UserController {
      * 获取用户列表（分页）
      */
     @GetMapping
-    public ResponseEntity<ResponseVO<UserPageVO>> getUserList(
-            @RequestHeader("Authorization") String authorization,
-            UserQueryDTO query) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<UserPageVO> response = userService.getUserList(token, query);
+    public ResponseEntity<ResponseVO<UserPageVO>> getUserList(UserQueryDTO query) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<UserPageVO> response = userService.getUserList(currentUserId, query);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<ResponseVO<UserOverviewVO>> getUserOverview(
-            @RequestHeader("Authorization") String authorization) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<UserOverviewVO> response = userService.getUserOverview(token);
+    public ResponseEntity<ResponseVO<UserOverviewVO>> getUserOverview() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<UserOverviewVO> response = userService.getUserOverview(currentUserId);
         return ResponseEntity.ok(response);
     }
 
@@ -144,12 +123,9 @@ public class UserController {
      * @return 用户详细信息列表
      */
     @PostMapping("/batch-query")
-    public ResponseEntity<ResponseVO<List<UserDetailVO>>> batchQueryUsers(
-            @RequestHeader("Authorization") String authorization,
-            @Valid @RequestBody UserBatchQueryDTO request) {
-
-        String token = TokenUtil.extractToken(authorization);
-        ResponseVO<List<UserDetailVO>> response = userService.batchQueryUsers(token, request);
+    public ResponseEntity<ResponseVO<List<UserDetailVO>>> batchQueryUsers(@Valid @RequestBody UserBatchQueryDTO request) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<List<UserDetailVO>> response = userService.batchQueryUsers(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 }
