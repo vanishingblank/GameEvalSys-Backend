@@ -87,6 +87,18 @@ public class RedisToken {
         return getUserIdByToken(token) != null;
     }
 
+    public String getRoleByToken(String token) {
+        Claims claims = parseClaims(token);
+        if (claims == null) {
+            return null;
+        }
+        Long userId = getUserIdByToken(token);
+        if (userId == null) {
+            return null;
+        }
+        return claims.get("role", String.class);
+    }
+
     private Claims parseClaims(String token) {
         if (token == null || token.trim().isEmpty()) {
             return null;
