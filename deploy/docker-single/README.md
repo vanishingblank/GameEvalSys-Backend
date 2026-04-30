@@ -6,7 +6,7 @@
 2. `redis`
 3. `backend`
 
-## Quick start
+## 快速开始
 
 1. 复制env 模板:
    - `cp .env.example .env`
