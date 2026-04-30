@@ -1,5 +1,6 @@
 package com.eval.gameeval.models.VO;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -22,8 +23,9 @@ public class LoginResponseVO implements Serializable {
     private String Token;
 
     /**
-     * 刷新令牌（Refresh Token）
+     * 刷新令牌（仅服务端用于写入Cookie，不下发到响应体）
      */
+    @JsonIgnore
     private String refreshToken;
 
     /**

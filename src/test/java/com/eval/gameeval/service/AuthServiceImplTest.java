@@ -81,14 +81,14 @@ class AuthServiceImplTest {
 
         RefreshRequestDTO refreshRequest = new RefreshRequestDTO();
         refreshRequest.setSid(loginResponse.getData().getSid());
-        refreshRequest.setRefreshToken(loginResponse.getData().getRefreshToken());
 
         Map<Object, Object> session = new HashMap<>();
         session.put("userId", 1L);
         session.put("username", "tester");
         session.put("role", "admin");
 
-        when(authSessionStore.matchRefreshToken(refreshRequest.getSid(), refreshRequest.getRefreshToken())).thenReturn(true);
+        String refreshToken = loginResponse.getData().getRefreshToken();
+        when(authSessionStore.matchRefreshToken(refreshRequest.getSid(), refreshToken)).thenReturn(true);
         when(authSessionStore.getSession(refreshRequest.getSid())).thenReturn(session);
         when(jwtTokenService.generateAccessToken(ArgumentMatchers.anyMap(), ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
                 .thenReturn("new-access-token");
@@ -97,7 +97,7 @@ class AuthServiceImplTest {
         doNothing().when(authSessionStore).refreshSessionTtl(ArgumentMatchers.anyString());
         doNothing().when(authSessionStore).refreshUserSessionsTtl(ArgumentMatchers.anyLong());
 
-        ResponseVO<RefreshResponseVO> refreshResponse = authService.refresh(refreshRequest);
+        ResponseVO<RefreshResponseVO> refreshResponse = authService.refresh(refreshRequest, refreshToken);
         assertThat(refreshResponse.getCode()).isEqualTo(200);
         assertThat(refreshResponse.getData()).isNotNull();
         assertThat(refreshResponse.getData().getToken()).isEqualTo("new-access-token");

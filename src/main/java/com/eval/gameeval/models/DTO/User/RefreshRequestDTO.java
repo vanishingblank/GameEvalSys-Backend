@@ -8,7 +8,4 @@ public class RefreshRequestDTO {
 
     @NotBlank(message = "sid不能为空")
     private String sid;
-
-    @NotBlank(message = "refreshToken不能为空")
-    private String refreshToken;
 }

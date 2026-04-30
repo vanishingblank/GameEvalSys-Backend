@@ -17,7 +17,7 @@ public interface IAuthService {
 
     ResponseVO<Void> logout(String token);
 
-    ResponseVO<RefreshResponseVO> refresh(@Valid RefreshRequestDTO request);
+    ResponseVO<RefreshResponseVO> refresh(@Valid RefreshRequestDTO request, String refreshToken);
 
     ResponseVO<List<SessionInfoVO>> getMySessions(Long userId);
 

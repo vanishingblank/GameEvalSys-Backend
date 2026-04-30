@@ -146,14 +146,13 @@ public class AuthServiceImpl implements IAuthService{
     }
 
     @Override
-    public ResponseVO<RefreshResponseVO> refresh(RefreshRequestDTO request) {
+    public ResponseVO<RefreshResponseVO> refresh(RefreshRequestDTO request, String refreshToken) {
         try {
-            if (request == null || request.getSid() == null || request.getRefreshToken() == null) {
+            if (request == null || request.getSid() == null || refreshToken == null || refreshToken.trim().isEmpty()) {
                 return ResponseVO.badRequest("参数不能为空");
             }
 
             String sid = request.getSid();
-            String refreshToken = request.getRefreshToken();
 
             if (!authSessionStore.matchRefreshToken(sid, refreshToken)) {
                 authSessionStore.deleteSession(sid);
