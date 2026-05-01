@@ -84,6 +84,9 @@ mvnw.cmd spring-boot:run
 
 默认端口：`8080`
 
+## 后端逻辑快速上手
+- 阅读[项目逻辑概览](./docs/project-logic-overview.md)
+
 ## 鉴权说明
 
 - 登录接口：`POST /auth/login`
