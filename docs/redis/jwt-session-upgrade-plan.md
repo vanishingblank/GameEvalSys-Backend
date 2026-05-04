@@ -68,7 +68,7 @@
 ## 3.3 Redis Key 设计（核心）
 
 - `auth:session:{sid}`
-  - 值：`userId、username、role、device、ip、loginAt、lastActiveAt、status`
+  - 值：`userId、username、role、device、ip、loginAt、lastActiveAt、status、loginLocation`
   - TTL：与 refresh 生命周期一致
 
 - `auth:user:sessions:{userId}`
@@ -118,7 +118,8 @@
   1. 生成 `sid`
   2. 生成 access JWT（含 sid/jti）
   3. 生成 refresh token
-  4. 写入 `auth:session:{sid}`、`auth:user:sessions:{userId}`、`auth:refresh:{sid}`
+  4. 在 Controller 层采集 `ip、device、loginLocation`，写入 `auth:session:{sid}`
+  5. 写入 `auth:session:{sid}`、`auth:user:sessions:{userId}`、`auth:refresh:{sid}`
   5. 返回 `accessToken + refreshToken + expireTime + sid`
 
 ## 5.2 刷新 `/auth/refresh`
@@ -237,6 +238,7 @@
 - 黑名单仅用于“主动失效”场景，常规访问以 `auth:session:{sid}` 为准
 - 设定单用户会话上限（如 5~10），超限踢最旧会话
 
+
 ### 12.1 Redis 容量估算公式
 
 定义：
@@ -294,3 +296,116 @@ $$
 | 高峰合计 | 550 RPS | 600~1,200 | 100~260 |
 
 注：以上为估算范围，最终以压测结果为准。建议对 Redis 读写分离或集群扩容预留 2x 余量。
+
+
+---
+
+## 13. 2026/5/5 登录信息详细字段升级（Controller 层采集 + 离线库）
+
+### 13.1 目标与字段范围
+
+- 目标：让会话接口返回更详细的登录信息（IP、设备、IP 所在地）。
+- 新增字段（Session 维度）：
+  - `ip`：登录 IP
+  - `device`：登录设备（由 User-Agent 解析得到的简要描述）
+  - `loginLocation`：登录 IP 所在地（离线库解析）
+
+### 13.2 数据采集位置（Controller 层）
+
+在 `AuthController` 的登录接口里采集，避免 Service 层依赖 HTTP 请求对象。
+
+- IP 取值优先级：
+  1) `X-Forwarded-For`（取第一个非空 IP）
+  2) `X-Real-IP`
+  3) `request.getRemoteAddr()`
+- 设备信息：
+  - 读取 `User-Agent` 头
+  - 解析后取简要描述（例如 `Windows/Chrome`, `iOS/Safari`）
+
+### 13.3 IP 所在地离线库
+
+- 推荐选型：
+  - MaxMind GeoLite2（建议城市库）
+  - ip2region（速度快，数据体积小）
+- 解析策略：
+  - 登录时解析一次，结果写入 `loginLocation`
+  - 以城市级别为主（例如 `CN/Guangdong/Shenzhen`）
+- 缓存策略：
+  - 可按 IP 缓存解析结果，降低重复查询成本
+
+### 13.4 Redis 会话字段写入
+
+- 写入位置：`auth:session:{sid}`
+- 字段示例：
+  - `ip`: `203.0.113.5`
+  - `device`: `Windows/Chrome`
+  - `loginLocation`: `CN/Guangdong/Shenzhen`
+
+### 13.5 响应字段扩展
+
+- `/auth/sessions/me` 与 `/admin/sessions`：
+  - 在 `SessionInfoVO` 中增加 `ip、device、loginLocation`
+- `/admin/online-users`：
+  - 如需要展示最近登录设备/位置，可在 `OnlineUserVO` 中增加同名字段
+  - 默认建议展示最近一次登录会话的 `device/loginLocation`
+
+### 13.6 强制下线策略（保持一致）
+
+- 依旧以 Redis session 为真值：
+  - 删除 `auth:session:{sid}` + `auth:refresh:{sid}` 为核心动作
+  - 如需更强即时性，可补充拉黑当前 `jti`
+- 踢全端：
+  - 清除所有 `sid` 后可选 `tokenVersion` 递增，防止残留 token
+
+### 13.7 验收清单（本次改造）
+
+- 登录后会话里包含 `ip/device/loginLocation`
+- `/auth/sessions/me` 返回新增字段
+- `/admin/online-users` 可展示最近登录设备与所在地
+- 踢指定会话后，该会话立即不可用
+
+---
+
+## 14. JTI 黑名单落地实施
+
+### 14.1 目标
+
+- 主动失效 access token（登出/踢下线）时立即生效。
+- 避免并发窗口导致“被踢后仍可用”的短暂情况。
+
+### 14.2 Redis Key 与 TTL
+
+- Key：`auth:blacklist:access:{jti}`
+- Value：`1`
+- TTL：`access_expire_at - now`
+
+### 14.3 认证链路校验
+
+在 `TokenAuthenticationFilter` 中增加校验：
+
+1. 解析 JWT，取 `jti`、`exp`。
+2. 查询 `auth:blacklist:access:{jti}` 是否存在。
+3. 若存在直接拒绝（401）。
+
+### 14.4 何时写入黑名单
+
+- `/auth/logout`：当前 `jti` 入黑名单。
+- `/admin/sessions/{sid}/kick`：若能从被踢会话的 token 获取 `jti`，则入黑名单。
+- 异常 refresh（复用/泄漏）：删除 session + refresh，并将当前 `jti` 入黑名单。
+
+### 14.5 TTL 计算建议
+
+- 从 JWT 中解析 `exp`（秒级时间戳）。
+- `ttlSeconds = exp - now`，若 `ttlSeconds <= 0` 则不写入。
+
+### 14.6 兼容与注意事项
+
+- 黑名单只用于主动失效场景，常规请求仍以 `auth:session:{sid}` 为真值。
+- access 过期后黑名单会自然过期，避免长期膨胀。
+- 如存在多实例，请确保 Redis 是共享的。
+
+### 14.7 验收清单（黑名单）
+
+- 登出后同一 access token 立即失效
+- 踢下线后 token 立即 401
+- 黑名单条目在 access 过期后自动清理
