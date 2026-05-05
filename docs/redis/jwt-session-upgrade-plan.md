@@ -68,7 +68,8 @@
 ## 3.3 Redis Key 设计（核心）
 
 - `auth:session:{sid}`
-  - 值：`userId、username、role、device、ip、loginAt、lastActiveAt、status、loginLocation`
+
+  - 值：`userId、username、role、device、ip、loginAt、lastActiveAt、status、loginLocation、accessJti、accessExp`
   - TTL：与 refresh 生命周期一致
 
 - `auth:user:sessions:{userId}`
@@ -340,6 +341,8 @@ $$
   - `ip`: `203.0.113.5`
   - `device`: `Windows/Chrome`
   - `loginLocation`: `CN/Guangdong/Shenzhen`
+  - `accessJti`: `7d2f7b72a6d7467e8b1d2e9b46b9e1a1`
+  - `accessExp`: `1772890123`
 
 ### 13.5 响应字段扩展
 
@@ -379,6 +382,11 @@ $$
 - Value：`1`
 - TTL：`access_expire_at - now`
 
+会话字段说明：
+
+- `accessJti`：当前 access token 的 `jti`，用于踢下线时快速拉黑。
+- `accessExp`：当前 access token 的过期时间（秒级时间戳），用于计算黑名单 TTL。
+
 ### 14.3 认证链路校验
 
 在 `TokenAuthenticationFilter` 中增加校验：
@@ -409,3 +417,38 @@ $$
 - 登出后同一 access token 立即失效
 - 踢下线后 token 立即 401
 - 黑名单条目在 access 过期后自动清理
+
+---
+
+## 15. accessJti/accessExp 代码改造清单
+
+### 15.1 写入（登录/刷新）
+
+- 位置：`AuthServiceImpl.login()`
+  - 生成 `jti` 后计算 `accessExpEpochSeconds`。
+  - 在 `saveSession` 之后调用 `authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds)`。
+- 位置：`AuthServiceImpl.refresh()`
+  - 生成新 `jti` 后计算 `accessExpEpochSeconds`。
+  - 调用 `authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds)`。
+
+### 15.2 读取（踢下线）
+
+- 位置：`AuthServiceImpl.kickSession()`
+  - 调用 `authSessionStore.getSession(sid)` 获取 `accessJti/accessExp`。
+  - 计算 `ttlSeconds = accessExp - now` 并调用 `authSessionStore.blacklistAccess(jti, ttlSeconds)`。
+- 位置：`AuthServiceImpl.kickAllSessions()`
+  - 遍历 `sid` 时同样读取 `accessJti/accessExp` 并写入黑名单。
+
+### 15.3 存取位置与字段
+
+- Redis Hash：`auth:session:{sid}`
+  - `accessJti`：当前 access token 的 `jti`。
+  - `accessExp`：当前 access token 的过期时间（秒级时间戳）。
+
+### 15.4 辅助方法
+
+- `AuthSessionStore.updateAccessInfo(String sid, String accessJti, long accessExpEpochSeconds)`
+  - 写入 `accessJti/accessExp` 到 `auth:session:{sid}`。
+- `AuthServiceImpl` 内部辅助：
+  - 计算 `accessExpEpochSeconds`（`now + jwt.accessSeconds`）。
+  - 统一的黑名单写入方法（读取 session -> 计算 TTL -> `blacklistAccess`）。
