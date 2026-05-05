@@ -1,6 +1,7 @@
 package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
+import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
@@ -9,7 +10,9 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
 import com.eval.gameeval.security.CurrentUserContext;
 import com.eval.gameeval.service.IAuthService;
+import com.eval.gameeval.util.IpLocationService;
 import com.eval.gameeval.util.TokenUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -45,13 +48,17 @@ public class AuthController {
     private IAuthService authService;
     @Resource
     private CurrentUserContext currentUserContext;
+    @Resource
+    private IpLocationService ipLocationService;
 
     @PostMapping("/login")
     @LogRecord(value = "用户登录", module = "Auth")
     public ResponseEntity<ResponseVO<LoginResponseVO>> login(
             @Valid @RequestBody LoginRequestDTO loginRequest,
+            HttpServletRequest request,
             HttpServletResponse httpServletResponse){
-        ResponseVO<LoginResponseVO> response = authService.login(loginRequest);
+        LoginMetaDTO meta = buildLoginMeta(request);
+        ResponseVO<LoginResponseVO> response = authService.login(loginRequest, meta);
         writeRefreshCookie(httpServletResponse, response.getData() != null ? response.getData().getRefreshToken() : null);
         return ResponseEntity.ok(response);
     }
@@ -112,6 +119,78 @@ public class AuthController {
                 .maxAge(0)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private LoginMetaDTO buildLoginMeta(HttpServletRequest request) {
+        String ip = extractClientIp(request);
+        String userAgent = request.getHeader("User-Agent");
+        String device = buildDevice(userAgent);
+        String loginLocation = ipLocationService.lookup(ip);
+        return new LoginMetaDTO()
+                .setIp(ip)
+                .setDevice(device)
+                .setLoginLocation(loginLocation);
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        String ip = extractFirstIp(forwarded);
+        if (ip != null) {
+            return ip;
+        }
+        ip = extractFirstIp(request.getHeader("X-Real-IP"));
+        if (ip != null) {
+            return ip;
+        }
+        return request.getRemoteAddr();
+    }
+
+    private String extractFirstIp(String headerValue) {
+        if (headerValue == null) {
+            return null;
+        }
+        String[] parts = headerValue.split(",");
+        for (String part : parts) {
+            String candidate = part.trim();
+            if (!candidate.isEmpty() && !"unknown".equalsIgnoreCase(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private String buildDevice(String userAgent) {
+        if (userAgent == null || userAgent.trim().isEmpty()) {
+            return null;
+        }
+        String ua = userAgent.toLowerCase();
+        String os;
+        if (ua.contains("windows")) {
+            os = "Windows";
+        } else if (ua.contains("mac os")) {
+            os = "Mac";
+        } else if (ua.contains("android")) {
+            os = "Android";
+        } else if (ua.contains("iphone") || ua.contains("ipad") || ua.contains("ios")) {
+            os = "iOS";
+        } else {
+            os = "Other";
+        }
+
+        String browser;
+        if (ua.contains("edg/")) {
+            browser = "Edge";
+        } else if (ua.contains("chrome/")) {
+            browser = "Chrome";
+        } else if (ua.contains("safari/") && !ua.contains("chrome/")) {
+            browser = "Safari";
+        } else if (ua.contains("firefox/")) {
+            browser = "Firefox";
+        } else {
+            browser = "Other";
+        }
+
+        return os + "/" + browser;
     }
 
 //    private String extractToken(String authorization) {

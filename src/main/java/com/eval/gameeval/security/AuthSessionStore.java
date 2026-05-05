@@ -40,13 +40,22 @@ public class AuthSessionStore {
     @Value("${jwt.max-sessions-per-user:10}")
     private int maxSessionsPerUser;
 
-    public void saveSession(String sid, Long userId, String username, String role) {
+    public void saveSession(String sid, Long userId, String username, String role, String ip, String device, String loginLocation) {
         String key = SESSION_PREFIX + sid;
         Map<String, Object> values = new HashMap<>();
         values.put("sid", sid);
         values.put("userId", userId);
         values.put("username", username);
         values.put("role", role);
+        if (ip != null && !ip.trim().isEmpty()) {
+            values.put("ip", ip);
+        }
+        if (device != null && !device.trim().isEmpty()) {
+            values.put("device", device);
+        }
+        if (loginLocation != null && !loginLocation.trim().isEmpty()) {
+            values.put("loginLocation", loginLocation);
+        }
         values.put("loginAt", Instant.now().toString());
         values.put("lastActiveAt", Instant.now().toString());
         values.put("status", "active");

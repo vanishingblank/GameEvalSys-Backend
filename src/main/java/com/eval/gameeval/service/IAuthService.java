@@ -1,5 +1,6 @@
 package com.eval.gameeval.service;
 
+import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
@@ -13,7 +14,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 
 public interface IAuthService {
-    ResponseVO<LoginResponseVO> login(@Valid LoginRequestDTO loginRequest);
+    ResponseVO<LoginResponseVO> login(@Valid LoginRequestDTO loginRequest, LoginMetaDTO meta);
 
     ResponseVO<Void> logout(String token);
 

@@ -19,6 +19,9 @@ public class OnlineUserVO implements Serializable {
     private String role;
     private Boolean isEnabled;
     private Integer onlineCount;
+    private String ip;
+    private String device;
+    private String loginLocation;
     private String lastActiveAt;
     private String lastLoginAt;
 }
