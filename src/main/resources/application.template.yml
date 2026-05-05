@@ -57,6 +57,7 @@ server:
   port: 8080
 
 app:
+  time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
   admin:
     init:
       # 首次部署初始化账号：仅在 sys_user 为空时尝试创建
