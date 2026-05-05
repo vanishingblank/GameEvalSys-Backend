@@ -103,3 +103,6 @@ auth:
     same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
     max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
 
+# ip2region 离线库文件位置（classpath 或 file 路径）
+ip2region:
+  xdb-path: ${IP2REGION_XDB_PATH:classpath:ip2region.xdb}
