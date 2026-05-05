@@ -361,14 +361,26 @@ public class AuthServiceImpl implements IAuthService{
             Boolean isEnabled = query != null ? query.getIsEnabled() : null;
             Boolean onlineOnly = query != null ? query.getOnlineOnly() : null;
 
-            List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
-                    offset,
-                    size,
-                    role,
-                    keyWords,
-                    isEnabled
-            );
-            Long total = userMapper.countTotal(role, keyWords, isEnabled);
+            boolean onlyOnline = Boolean.TRUE.equals(onlineOnly);
+            List<Map<String, Object>> userList;
+            Long total;
+            if (onlyOnline) {
+                Set<Long> onlineUserIds = authSessionStore.getOnlineUserIds();
+                if (onlineUserIds.isEmpty()) {
+                    OnlineUserPageVO empty = new OnlineUserPageVO();
+                    empty.setList(new ArrayList<>());
+                    empty.setTotal(0L);
+                    empty.setPage(page);
+                    empty.setSize(size);
+                    return ResponseVO.success("查询成功", empty);
+                }
+                List<Long> idList = new ArrayList<>(onlineUserIds);
+                userList = userMapper.selectPageWithGroupsByIds(idList, role, keyWords, isEnabled, offset, size);
+                total = userMapper.countTotalByIds(idList, role, keyWords, isEnabled);
+            } else {
+                userList = userMapper.selectPageWithGroups(offset, size, role, keyWords, isEnabled);
+                total = userMapper.countTotal(role, keyWords, isEnabled);
+            }
 
             List<OnlineUserVO> onlineUsers = new ArrayList<>();
             for (Map<String, Object> userMap : userList) {
@@ -388,15 +400,12 @@ public class AuthServiceImpl implements IAuthService{
                 vo.setLastActiveAt(summary.lastActiveAt);
                 vo.setLastLoginAt(summary.lastLoginAt);
 
-                if (Boolean.TRUE.equals(onlineOnly) && summary.onlineCount <= 0) {
-                    continue;
-                }
                 onlineUsers.add(vo);
             }
 
             OnlineUserPageVO pageVO = new OnlineUserPageVO();
             pageVO.setList(onlineUsers);
-            pageVO.setTotal(Boolean.TRUE.equals(onlineOnly) ? (long) onlineUsers.size() : total);
+            pageVO.setTotal(total);
             pageVO.setPage(page);
             pageVO.setSize(size);
 

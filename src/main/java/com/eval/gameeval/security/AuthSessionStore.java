@@ -1,8 +1,13 @@
 package com.eval.gameeval.security;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
@@ -12,6 +17,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
@@ -113,6 +119,48 @@ public class AuthSessionStore {
 
     public void refreshUserSessionsTtl(Long userId) {
         redisTemplate.expire(USER_SESSIONS_PREFIX + userId, refreshSeconds, TimeUnit.SECONDS);
+    }
+
+    public Set<Long> getOnlineUserIds() {
+        return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
+            Set<Long> userIds = new HashSet<>();
+            RedisSerializer<String> keySerializer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
+            RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
+            RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+            byte[] userIdField = hashKeySerializer.serialize("userId");
+
+            boolean canPrefixScan = keySerializer instanceof StringRedisSerializer;
+            String matchPattern = canPrefixScan ? SESSION_PREFIX + "*" : "*";
+
+            Cursor<byte[]> cursor = connection.scan(
+                ScanOptions.scanOptions().match(matchPattern).count(1000).build()
+            );
+            try {
+                while (cursor.hasNext()) {
+                    byte[] rawKey = cursor.next();
+                    String key = keySerializer.deserialize(rawKey);
+                    if (key == null || !key.startsWith(SESSION_PREFIX)) {
+                        continue;
+                    }
+                    byte[] rawValue = connection.hGet(rawKey, userIdField);
+                    if (rawValue == null) {
+                        continue;
+                    }
+                    Object value = hashValueSerializer.deserialize(rawValue);
+                    if (value == null) {
+                        continue;
+                    }
+                    try {
+                        userIds.add(Long.parseLong(value.toString()));
+                    } catch (NumberFormatException e) {
+                        continue;
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+            return userIds;
+        });
     }
 
     public void removeUserSession(Long userId, String sid) {
