@@ -53,6 +53,19 @@ public class AuthSessionStore {
         redisTemplate.expire(key, refreshSeconds, TimeUnit.SECONDS);
     }
 
+    public void updateAccessInfo(String sid, String accessJti, long accessExpEpochSeconds) {
+        if (sid == null || sid.trim().isEmpty()) {
+            return;
+        }
+        String key = SESSION_PREFIX + sid;
+        if (accessJti != null && !accessJti.trim().isEmpty()) {
+            redisTemplate.opsForHash().put(key, "accessJti", accessJti);
+        }
+        if (accessExpEpochSeconds > 0) {
+            redisTemplate.opsForHash().put(key, "accessExp", String.valueOf(accessExpEpochSeconds));
+        }
+    }
+
     public Map<Object, Object> getSession(String sid) {
         String key = SESSION_PREFIX + sid;
         return redisTemplate.opsForHash().entries(key);

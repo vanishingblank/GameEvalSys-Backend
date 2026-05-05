@@ -92,9 +92,11 @@ public class AuthServiceImpl implements IAuthService{
                     String.valueOf(user.getId()),
                     jti
                 );
+                long accessExpEpochSeconds = buildAccessExpEpochSeconds();
 
                 // 4. 保存会话到Redis
                 authSessionStore.saveSession(sid, user.getId(), user.getUsername(), user.getRole());
+                authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds);
                 authSessionStore.addUserSession(user.getId(), sid);
                 authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
                 authSessionStore.enforceSessionLimit(user.getId());
@@ -183,6 +185,8 @@ public class AuthServiceImpl implements IAuthService{
                     String.valueOf(userId),
                     jti
             );
+                long accessExpEpochSeconds = buildAccessExpEpochSeconds();
+                authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds);
 
             String newRefreshToken = tokenUtil.generateToken();
             String newRefreshTokenId = tokenUtil.generateToken();
@@ -261,6 +265,9 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.notFound("会话不存在");
             }
 
+            Map<Object, Object> session = authSessionStore.getSession(sid);
+            blacklistSessionAccess(session);
+
             authSessionStore.deleteSession(sid);
             authSessionStore.deleteRefresh(sid);
             authSessionStore.removeUserSession(targetUserId, sid);
@@ -290,6 +297,8 @@ public class AuthServiceImpl implements IAuthService{
 
             Set<String> sids = authSessionStore.getUserSessions(targetUserId);
             for (String sid : sids) {
+                Map<Object, Object> session = authSessionStore.getSession(sid);
+                blacklistSessionAccess(session);
                 authSessionStore.deleteSession(sid);
                 authSessionStore.deleteRefresh(sid);
                 authSessionStore.removeUserSession(targetUserId, sid);
@@ -432,6 +441,24 @@ public class AuthServiceImpl implements IAuthService{
             return false;
         }
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
+    }
+
+    private long buildAccessExpEpochSeconds() {
+        return Instant.now().plusSeconds(jwtTokenService.getAccessSeconds()).getEpochSecond();
+    }
+
+    private void blacklistSessionAccess(Map<Object, Object> session) {
+        if (session == null || session.isEmpty()) {
+            return;
+        }
+        Object rawJti = session.get("accessJti");
+        String jti = rawJti != null ? rawJti.toString() : null;
+        Long exp = toLong(session.get("accessExp"));
+        if (jti == null || jti.trim().isEmpty() || exp == null) {
+            return;
+        }
+        long ttlSeconds = exp - Instant.now().getEpochSecond();
+        authSessionStore.blacklistAccess(jti, ttlSeconds);
     }
 
     private Long toLong(Object value) {
