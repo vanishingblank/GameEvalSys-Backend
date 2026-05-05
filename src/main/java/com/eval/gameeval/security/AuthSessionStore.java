@@ -2,6 +2,7 @@ package com.eval.gameeval.security;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
@@ -157,7 +158,14 @@ public class AuthSessionStore {
     }
 
     public long getTokenVersion(Long userId) {
-        Object value = redisTemplate.opsForValue().get(TOKEN_VERSION_PREFIX + userId);
+        String key = TOKEN_VERSION_PREFIX + userId;
+        Object value;
+        try {
+            value = redisTemplate.opsForValue().get(key);
+        } catch (SerializationException e) {
+            redisTemplate.delete(key);
+            return 0L;
+        }
         if (value == null) {
             return 0L;
         }
