@@ -365,7 +365,7 @@ public class AuthServiceImpl implements IAuthService{
             List<Map<String, Object>> userList;
             Long total;
             if (onlyOnline) {
-                Set<Long> onlineUserIds = authSessionStore.getOnlineUserIds();
+                Set<Long> onlineUserIds = authSessionStore.getActiveOnlineUserIds();
                 if (onlineUserIds.isEmpty()) {
                     OnlineUserPageVO empty = new OnlineUserPageVO();
                     empty.setList(new ArrayList<>());
@@ -378,8 +378,18 @@ public class AuthServiceImpl implements IAuthService{
                 userList = userMapper.selectPageWithGroupsByIds(idList, role, keyWords, isEnabled, offset, size);
                 total = userMapper.countTotalByIds(idList, role, keyWords, isEnabled);
             } else {
-                userList = userMapper.selectPageWithGroups(offset, size, role, keyWords, isEnabled);
-                total = userMapper.countTotal(role, keyWords, isEnabled);
+                Set<Long> loggedInUserIds = authSessionStore.getLoggedInUserIds();
+                if (loggedInUserIds.isEmpty()) {
+                    OnlineUserPageVO empty = new OnlineUserPageVO();
+                    empty.setList(new ArrayList<>());
+                    empty.setTotal(0L);
+                    empty.setPage(page);
+                    empty.setSize(size);
+                    return ResponseVO.success("查询成功", empty);
+                }
+                List<Long> idList = new ArrayList<>(loggedInUserIds);
+                userList = userMapper.selectPageWithGroupsByIds(idList, role, keyWords, isEnabled, offset, size);
+                total = userMapper.countTotalByIds(idList, role, keyWords, isEnabled);
             }
 
             List<OnlineUserVO> onlineUsers = new ArrayList<>();
@@ -456,7 +466,9 @@ public class AuthServiceImpl implements IAuthService{
             if (session == null || session.isEmpty()) {
                 continue;
             }
-            onlineCount++;
+            if (authSessionStore.isSessionRecentlyActive(session)) {
+                onlineCount++;
+            }
             Instant active = parseInstant(session.get("lastActiveAt"));
             if (active != null && (latestActive == null || active.isAfter(latestActive))) {
                 latestActive = active;

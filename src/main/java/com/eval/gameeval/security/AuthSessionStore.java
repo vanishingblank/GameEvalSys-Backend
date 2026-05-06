@@ -43,6 +43,9 @@ public class AuthSessionStore {
     @Value("${jwt.last-active-refresh-seconds:300}")
     private long lastActiveRefreshSeconds;
 
+    @Value("${jwt.online-active-window-seconds:300}")
+    private long onlineActiveWindowSeconds;
+
     @Value("${jwt.max-sessions-per-user:10}")
     private int maxSessionsPerUser;
 
@@ -122,6 +125,58 @@ public class AuthSessionStore {
     }
 
     public Set<Long> getOnlineUserIds() {
+        return getActiveOnlineUserIds();
+    }
+
+    public Set<Long> getActiveOnlineUserIds() {
+        return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
+            Set<Long> userIds = new HashSet<>();
+            RedisSerializer<String> keySerializer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
+            RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
+            RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+            byte[] userIdField = hashKeySerializer.serialize("userId");
+            byte[] lastActiveAtField = hashKeySerializer.serialize("lastActiveAt");
+            Instant now = Instant.now();
+
+            boolean canPrefixScan = keySerializer instanceof StringRedisSerializer;
+            String matchPattern = canPrefixScan ? SESSION_PREFIX + "*" : "*";
+
+            Cursor<byte[]> cursor = connection.scan(
+                ScanOptions.scanOptions().match(matchPattern).count(1000).build()
+            );
+            try {
+                while (cursor.hasNext()) {
+                    byte[] rawKey = cursor.next();
+                    String key = keySerializer.deserialize(rawKey);
+                    if (key == null || !key.startsWith(SESSION_PREFIX)) {
+                        continue;
+                    }
+                    byte[] rawValue = connection.hGet(rawKey, userIdField);
+                    if (rawValue == null) {
+                        continue;
+                    }
+                    Object value = hashValueSerializer.deserialize(rawValue);
+                    if (value == null) {
+                        continue;
+                    }
+                    byte[] rawLastActiveAt = connection.hGet(rawKey, lastActiveAtField);
+                    if (!isWithinActiveWindow(rawLastActiveAt, hashValueSerializer, now)) {
+                        continue;
+                    }
+                    try {
+                        userIds.add(Long.parseLong(value.toString()));
+                    } catch (NumberFormatException e) {
+                        continue;
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+            return userIds;
+        });
+    }
+
+    public Set<Long> getLoggedInUserIds() {
         return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
             Set<Long> userIds = new HashSet<>();
             RedisSerializer<String> keySerializer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
@@ -161,6 +216,17 @@ public class AuthSessionStore {
             }
             return userIds;
         });
+    }
+
+    public boolean isSessionRecentlyActive(Map<Object, Object> session) {
+        if (session == null || session.isEmpty()) {
+            return false;
+        }
+        Instant lastActiveAt = parseInstant(session.get("lastActiveAt"));
+        if (lastActiveAt == null) {
+            lastActiveAt = parseInstant(session.get("loginAt"));
+        }
+        return isWithinActiveWindow(lastActiveAt, Instant.now());
     }
 
     public void removeUserSession(Long userId, String sid) {
@@ -318,6 +384,37 @@ public class AuthSessionStore {
         } catch (DateTimeParseException e) {
             return Instant.EPOCH;
         }
+    }
+
+    private Instant parseInstant(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(value.toString());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private boolean isWithinActiveWindow(Instant instant, Instant now) {
+        if (instant == null) {
+            return false;
+        }
+        if (onlineActiveWindowSeconds <= 0) {
+            return true;
+        }
+        Instant cutoff = now.minusSeconds(onlineActiveWindowSeconds);
+        return !instant.isBefore(cutoff);
+    }
+
+    private boolean isWithinActiveWindow(byte[] rawLastActiveAt, RedisSerializer<Object> hashValueSerializer, Instant now) {
+        if (rawLastActiveAt == null) {
+            return false;
+        }
+        Object value = hashValueSerializer.deserialize(rawLastActiveAt);
+        Instant lastActiveAt = parseInstant(value);
+        return isWithinActiveWindow(lastActiveAt, now);
     }
 
     private static final class SessionSnapshot {
