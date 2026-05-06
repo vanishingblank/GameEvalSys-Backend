@@ -92,6 +92,7 @@ jwt:
   access-seconds: 14400
   refresh-seconds: 604800
   last-active-refresh-seconds: 300
+  online-active-window-seconds: 300
   max-sessions-per-user: 10
   
 auth:
