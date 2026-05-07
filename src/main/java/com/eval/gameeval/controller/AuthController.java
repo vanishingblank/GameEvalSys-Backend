@@ -136,12 +136,15 @@ public class AuthController {
         String forwarded = request.getHeader("X-Forwarded-For");
         String ip = extractFirstIp(forwarded);
         if (ip != null) {
+            log.info("Extracted client IP from X-Forwarded-For: {}", ip);
             return ip;
         }
         ip = extractFirstIp(request.getHeader("X-Real-IP"));
         if (ip != null) {
+            log.info("Extracted client IP from X-Real-IP: {}", ip);
             return ip;
         }
+        log.info("Using client IP from request.getRemoteAddr(): {}", request.getRemoteAddr());
         return request.getRemoteAddr();
     }
 
