@@ -57,6 +57,7 @@ server:
   port: 8080
 
 app:
+  time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
   admin:
     init:
       # 首次部署初始化账号：仅在 sys_user 为空时尝试创建
@@ -91,6 +92,7 @@ jwt:
   access-seconds: 14400
   refresh-seconds: 604800
   last-active-refresh-seconds: 300
+  online-active-window-seconds: 300
   max-sessions-per-user: 10
   
 auth:
@@ -102,3 +104,6 @@ auth:
     same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
     max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
 
+# ip2region 离线库文件位置（classpath 或 file 路径）
+ip2region:
+  xdb-path: ${IP2REGION_XDB_PATH:classpath:ip2region.xdb}

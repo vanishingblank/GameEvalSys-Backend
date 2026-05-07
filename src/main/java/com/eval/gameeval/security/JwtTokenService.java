@@ -7,6 +7,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import jakarta.annotation.PostConstruct;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
@@ -27,6 +28,20 @@ public class JwtTokenService {
 
     @Value("${jwt.access-seconds:14400}")
     private long accessSeconds;
+
+    @Value("${app.time-zone:Asia/Shanghai}")
+    private String appTimeZone;
+
+    private ZoneId appZoneId = ZoneId.systemDefault();
+
+    @PostConstruct
+    private void initAppZoneId() {
+        try {
+            appZoneId = ZoneId.of(appTimeZone);
+        } catch (Exception e) {
+            appZoneId = ZoneId.systemDefault();
+        }
+    }
 
     public String generateAccessToken(Map<String, Object> claims, String subject, String jti) {
         Instant now = Instant.now();
@@ -58,7 +73,7 @@ public class JwtTokenService {
     }
 
     public LocalDateTime getAccessExpireTime() {
-        return LocalDateTime.ofInstant(Instant.now().plusSeconds(accessSeconds), ZoneId.systemDefault());
+        return LocalDateTime.ofInstant(Instant.now().plusSeconds(accessSeconds), appZoneId);
     }
 
     private Key getSigningKey() {

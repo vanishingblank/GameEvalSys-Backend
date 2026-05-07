@@ -106,14 +106,9 @@ public interface UserMapper extends BaseMapper<User> {
             "LEFT JOIN reviewer_group_member rgm ON u.id = rgm.user_id " +
             "WHERE 1 = 1 " +
             "AND u.is_deleted = 0 " +
-            "<choose>" +
-            "  <when test='isEnabled != null'>" +
-            "    AND u.is_enabled = #{isEnabled} " +
-            "  </when>" +
-            "  <otherwise>" +
-            "    AND u.is_enabled = 1 " +
-            "  </otherwise>" +
-            "</choose>" +
+            "<if test='isEnabled != null'>" +
+            "  AND u.is_enabled = #{isEnabled} " +
+            "</if>" +
             "<if test='role != null and role != \"\"'>" +
             "  AND u.role = #{role} " +
             "</if>" +
@@ -133,6 +128,72 @@ public interface UserMapper extends BaseMapper<User> {
                                                      @Param("isEnabled") Boolean isEnabled
             );
 
+    @Select("<script>" +
+            "SELECT " +
+            "  u.id, " +
+            "  u.username, " +
+            "  u.password, " +
+            "  u.name, " +
+            "  u.role, " +
+            "  u.is_enabled AS isEnabled, " +
+            "  u.create_time AS createTime, " +
+            "  u.update_time AS updateTime, " +
+            "  GROUP_CONCAT(rgm.group_id) AS reviewerGroupIds " +
+            "FROM sys_user u " +
+            "LEFT JOIN reviewer_group_member rgm ON u.id = rgm.user_id " +
+            "WHERE u.is_deleted = 0 " +
+            "AND u.id IN " +
+            "<foreach collection='userIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "<if test='isEnabled != null'>" +
+            "  AND u.is_enabled = #{isEnabled} " +
+            "</if>" +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND u.role = #{role} " +
+            "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (u.username LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR u.name LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "GROUP BY u.id " +
+            "ORDER BY u.create_time DESC " +
+            "LIMIT #{offset}, #{limit}" +
+            "</script>")
+            List<Map<String, Object>> selectPageWithGroupsByIds(
+                                                     @Param("userIds") List<Long> userIds,
+                                                     @Param("role") String role,
+                                                     @Param("keyWords") String keyWords,
+                                                     @Param("isEnabled") Boolean isEnabled,
+                                                     @Param("offset") int offset,
+                                                     @Param("limit") int limit
+            );
+
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM sys_user u " +
+            "WHERE u.is_deleted = 0 " +
+            "AND u.id IN " +
+            "<foreach collection='userIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "<if test='isEnabled != null'>" +
+            "  AND u.is_enabled = #{isEnabled} " +
+            "</if>" +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND u.role = #{role} " +
+            "</if>" +
+            "<if test='keyWords != null and keyWords != \"\"'>" +
+            "  AND (u.username LIKE CONCAT('%', #{keyWords}, '%') " +
+            "       OR u.name LIKE CONCAT('%', #{keyWords}, '%')) " +
+            "</if>" +
+            "</script>")
+    Long countTotalByIds(
+            @Param("userIds") List<Long> userIds,
+            @Param("role") String role,
+            @Param("keyWords") String keyWords,
+            @Param("isEnabled") Boolean isEnabled
+    );
+
     /**
      * 统计用户总数（带角色筛选）
      */
@@ -140,14 +201,9 @@ public interface UserMapper extends BaseMapper<User> {
             "SELECT COUNT(*) FROM sys_user " +
             "WHERE 1 = 1 " +
             "AND is_deleted = 0 " +
-            "<choose>" +
-            "  <when test='isEnabled != null'>" +
-            "    AND is_enabled = #{isEnabled} " +
-            "  </when>" +
-            "  <otherwise>" +
-            "    AND is_enabled = 1 " +
-            "  </otherwise>" +
-            "</choose>" +
+            "<if test='isEnabled != null'>" +
+            "  AND is_enabled = #{isEnabled} " +
+            "</if>" +
             "<if test='role != null and role != \"\"'>" +
             "  AND role = #{role} " +
             "</if>" +

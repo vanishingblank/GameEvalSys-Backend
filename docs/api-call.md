@@ -103,6 +103,9 @@
         "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
         "username": "admin",
         "role": "super_admin",
+        "ip": "203.0.113.5",
+        "device": "Windows/Chrome",
+        "loginLocation": "CN/Guangdong/Shenzhen",
         "loginAt": "2026-04-28T08:00:00Z",
         "lastActiveAt": "2026-04-28T10:15:00Z",
         "status": "active"
@@ -132,6 +135,9 @@
         "sid": "7d2f7b72a6d7467e8b1d2e9b46b9e1a1",
         "username": "admin",
         "role": "super_admin",
+        "ip": "203.0.113.5",
+        "device": "Windows/Chrome",
+        "loginLocation": "CN/Guangdong/Shenzhen",
         "loginAt": "2026-04-28T08:00:00Z",
         "lastActiveAt": "2026-04-28T10:15:00Z",
         "status": "active"
@@ -178,10 +184,14 @@
   |--------|------|------|------|
   | page | number | 否 | 页码（默认1） |
   | size | number | 否 | 每页条数（默认10） |
-  | role | string | 否 | 角色筛选 |
+  | role | string | 否 | 角色筛选；为空或不传则返回全部角色 |
   | keyWords | string | 否 | 关键词搜索 |
-  | isEnabled | boolean | 否 | 按启用状态筛选 |
-  | onlineOnly | boolean | 否 | 仅返回在线用户 |
+  | isEnabled | boolean | 否 | 按启用状态筛选；为空或不传则返回全部 |
+  | onlineOnly | boolean | 否 | 在线口径开关；`true` 仅返回当前活跃在线用户，`false` 返回至少登录过一次的用户（不包含从未登录的用户） |
+
+- 说明：
+  - `onlineOnly=true` 时，列表仅展示最近活跃窗口内仍在线的用户。
+  - `onlineOnly=false` 时，列表不再返回从未登录过的用户，以减少无效查询并避免误解为“全量用户列表”。
 - **响应示例**：
   ```json
   {
@@ -196,6 +206,8 @@
           "role": "super_admin",
           "isEnabled": true,
           "onlineCount": 2,
+          "device": "Windows/Chrome",
+          "loginLocation": "CN/Guangdong/Shenzhen",
           "lastActiveAt": "2026-04-29T08:12:00Z",
           "lastLoginAt": "2026-04-29T08:00:00Z"
         }

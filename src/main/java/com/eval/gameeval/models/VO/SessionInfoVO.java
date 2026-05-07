@@ -16,6 +16,9 @@ public class SessionInfoVO implements Serializable {
     private String sid;
     private String username;
     private String role;
+    private String ip;
+    private String device;
+    private String loginLocation;
     private String loginAt;
     private String lastActiveAt;
     private String status;

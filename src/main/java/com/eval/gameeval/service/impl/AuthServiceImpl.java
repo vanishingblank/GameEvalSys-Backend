@@ -2,6 +2,7 @@ package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
+import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
@@ -16,9 +17,11 @@ import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +31,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
 
@@ -47,8 +52,24 @@ public class AuthServiceImpl implements IAuthService{
     private AuthSessionStore authSessionStore;
     @Resource
     private PasswordEncoder passwordEncoder;
+
+    @Value("${app.time-zone:Asia/Shanghai}")
+    private String appTimeZone;
+
+    private ZoneId appZoneId = ZoneId.systemDefault();
+
+    private static final DateTimeFormatter SESSION_TIME_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
+    @PostConstruct
+    private void initAppZoneId() {
+        try {
+            appZoneId = ZoneId.of(appTimeZone);
+        } catch (Exception e) {
+            appZoneId = ZoneId.systemDefault();
+        }
+    }
     @Override
-    public ResponseVO<LoginResponseVO> login(LoginRequestDTO loginRequest){
+    public ResponseVO<LoginResponseVO> login(LoginRequestDTO loginRequest, LoginMetaDTO meta){
         try{
             // 1.查询用户
             User user = userMapper.selectByUsername(loginRequest.getUsername());
@@ -92,9 +113,19 @@ public class AuthServiceImpl implements IAuthService{
                     String.valueOf(user.getId()),
                     jti
                 );
+                long accessExpEpochSeconds = buildAccessExpEpochSeconds();
 
                 // 4. 保存会话到Redis
-                authSessionStore.saveSession(sid, user.getId(), user.getUsername(), user.getRole());
+                authSessionStore.saveSession(
+                    sid,
+                    user.getId(),
+                    user.getUsername(),
+                    user.getRole(),
+                    meta != null ? meta.getIp() : null,
+                    meta != null ? meta.getDevice() : null,
+                    meta != null ? meta.getLoginLocation() : null
+                );
+                authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds);
                 authSessionStore.addUserSession(user.getId(), sid);
                 authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
                 authSessionStore.enforceSessionLimit(user.getId());
@@ -183,6 +214,8 @@ public class AuthServiceImpl implements IAuthService{
                     String.valueOf(userId),
                     jti
             );
+                long accessExpEpochSeconds = buildAccessExpEpochSeconds();
+                authSessionStore.updateAccessInfo(sid, jti, accessExpEpochSeconds);
 
             String newRefreshToken = tokenUtil.generateToken();
             String newRefreshTokenId = tokenUtil.generateToken();
@@ -261,6 +294,9 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.notFound("会话不存在");
             }
 
+            Map<Object, Object> session = authSessionStore.getSession(sid);
+            blacklistSessionAccess(session);
+
             authSessionStore.deleteSession(sid);
             authSessionStore.deleteRefresh(sid);
             authSessionStore.removeUserSession(targetUserId, sid);
@@ -290,6 +326,8 @@ public class AuthServiceImpl implements IAuthService{
 
             Set<String> sids = authSessionStore.getUserSessions(targetUserId);
             for (String sid : sids) {
+                Map<Object, Object> session = authSessionStore.getSession(sid);
+                blacklistSessionAccess(session);
                 authSessionStore.deleteSession(sid);
                 authSessionStore.deleteRefresh(sid);
                 authSessionStore.removeUserSession(targetUserId, sid);
@@ -323,14 +361,36 @@ public class AuthServiceImpl implements IAuthService{
             Boolean isEnabled = query != null ? query.getIsEnabled() : null;
             Boolean onlineOnly = query != null ? query.getOnlineOnly() : null;
 
-            List<Map<String, Object>> userList = userMapper.selectPageWithGroups(
-                    offset,
-                    size,
-                    role,
-                    keyWords,
-                    isEnabled
-            );
-            Long total = userMapper.countTotal(role, keyWords, isEnabled);
+            boolean onlyOnline = Boolean.TRUE.equals(onlineOnly);
+            List<Map<String, Object>> userList;
+            Long total;
+            if (onlyOnline) {
+                Set<Long> onlineUserIds = authSessionStore.getActiveOnlineUserIds();
+                if (onlineUserIds.isEmpty()) {
+                    OnlineUserPageVO empty = new OnlineUserPageVO();
+                    empty.setList(new ArrayList<>());
+                    empty.setTotal(0L);
+                    empty.setPage(page);
+                    empty.setSize(size);
+                    return ResponseVO.success("查询成功", empty);
+                }
+                List<Long> idList = new ArrayList<>(onlineUserIds);
+                userList = userMapper.selectPageWithGroupsByIds(idList, role, keyWords, isEnabled, offset, size);
+                total = userMapper.countTotalByIds(idList, role, keyWords, isEnabled);
+            } else {
+                Set<Long> loggedInUserIds = authSessionStore.getLoggedInUserIds();
+                if (loggedInUserIds.isEmpty()) {
+                    OnlineUserPageVO empty = new OnlineUserPageVO();
+                    empty.setList(new ArrayList<>());
+                    empty.setTotal(0L);
+                    empty.setPage(page);
+                    empty.setSize(size);
+                    return ResponseVO.success("查询成功", empty);
+                }
+                List<Long> idList = new ArrayList<>(loggedInUserIds);
+                userList = userMapper.selectPageWithGroupsByIds(idList, role, keyWords, isEnabled, offset, size);
+                total = userMapper.countTotalByIds(idList, role, keyWords, isEnabled);
+            }
 
             List<OnlineUserVO> onlineUsers = new ArrayList<>();
             for (Map<String, Object> userMap : userList) {
@@ -344,18 +404,18 @@ public class AuthServiceImpl implements IAuthService{
 
                 SessionSummary summary = buildSessionSummary(userId);
                 vo.setOnlineCount(summary.onlineCount);
+                vo.setDevice(summary.device);
+                vo.setLoginLocation(summary.loginLocation);
+                vo.setIp(summary.ip);
                 vo.setLastActiveAt(summary.lastActiveAt);
                 vo.setLastLoginAt(summary.lastLoginAt);
 
-                if (Boolean.TRUE.equals(onlineOnly) && summary.onlineCount <= 0) {
-                    continue;
-                }
                 onlineUsers.add(vo);
             }
 
             OnlineUserPageVO pageVO = new OnlineUserPageVO();
             pageVO.setList(onlineUsers);
-            pageVO.setTotal(Boolean.TRUE.equals(onlineOnly) ? (long) onlineUsers.size() : total);
+            pageVO.setTotal(total);
             pageVO.setPage(page);
             pageVO.setSize(size);
 
@@ -374,8 +434,11 @@ public class AuthServiceImpl implements IAuthService{
                 .setSid(entry.getKey())
                 .setUsername(String.valueOf(entry.getValue().get("username")))
                 .setRole(String.valueOf(entry.getValue().get("role")))
-                .setLoginAt(String.valueOf(entry.getValue().get("loginAt")))
-                .setLastActiveAt(String.valueOf(entry.getValue().get("lastActiveAt")))
+                .setIp(getSessionText(entry.getValue(), "ip"))
+                .setDevice(getSessionText(entry.getValue(), "device"))
+                .setLoginLocation(getSessionText(entry.getValue(), "loginLocation"))
+                .setLoginAt(formatInstantInAppZone(entry.getValue().get("loginAt")))
+                .setLastActiveAt(formatInstantInAppZone(entry.getValue().get("lastActiveAt")))
                 .setStatus(String.valueOf(entry.getValue().get("status"))))
             .collect(Collectors.toList());
     }
@@ -394,26 +457,34 @@ public class AuthServiceImpl implements IAuthService{
         Instant latestLogin = null;
         String latestActiveText = null;
         String latestLoginText = null;
+        String latestDevice = null;
+        String latestLocation = null;
+        String latestIp = null;
 
         for (String sid : sids) {
             Map<Object, Object> session = authSessionStore.getSession(sid);
             if (session == null || session.isEmpty()) {
                 continue;
             }
-            onlineCount++;
+            if (authSessionStore.isSessionRecentlyActive(session)) {
+                onlineCount++;
+            }
             Instant active = parseInstant(session.get("lastActiveAt"));
             if (active != null && (latestActive == null || active.isAfter(latestActive))) {
                 latestActive = active;
-                latestActiveText = session.get("lastActiveAt") != null ? session.get("lastActiveAt").toString() : null;
+                latestActiveText = formatInstantInAppZone(session.get("lastActiveAt"));
             }
             Instant login = parseInstant(session.get("loginAt"));
             if (login != null && (latestLogin == null || login.isAfter(latestLogin))) {
                 latestLogin = login;
-                latestLoginText = session.get("loginAt") != null ? session.get("loginAt").toString() : null;
+                latestLoginText = formatInstantInAppZone(session.get("loginAt"));
+                latestDevice = getSessionText(session, "device");
+                latestLocation = getSessionText(session, "loginLocation");
+                latestIp = getSessionText(session, "ip");
             }
         }
 
-        return new SessionSummary(onlineCount, latestActiveText, latestLoginText);
+        return new SessionSummary(onlineCount, latestActiveText, latestLoginText, latestDevice, latestLocation, latestIp);
     }
 
     private Instant parseInstant(Object value) {
@@ -427,11 +498,50 @@ public class AuthServiceImpl implements IAuthService{
         }
     }
 
+    private String formatInstantInAppZone(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String raw = value.toString();
+        try {
+            Instant instant = Instant.parse(raw);
+            return SESSION_TIME_FORMATTER.format(instant.atZone(appZoneId));
+        } catch (DateTimeParseException e) {
+            return raw;
+        }
+    }
+
+    private String getSessionText(Map<Object, Object> session, String key) {
+        if (session == null || key == null) {
+            return null;
+        }
+        Object value = session.get(key);
+        return value == null ? null : value.toString();
+    }
+
     private boolean isAdmin(User user) {
         if (user == null) {
             return false;
         }
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
+    }
+
+    private long buildAccessExpEpochSeconds() {
+        return Instant.now().plusSeconds(jwtTokenService.getAccessSeconds()).getEpochSecond();
+    }
+
+    private void blacklistSessionAccess(Map<Object, Object> session) {
+        if (session == null || session.isEmpty()) {
+            return;
+        }
+        Object rawJti = session.get("accessJti");
+        String jti = rawJti != null ? rawJti.toString() : null;
+        Long exp = toLong(session.get("accessExp"));
+        if (jti == null || jti.trim().isEmpty() || exp == null) {
+            return;
+        }
+        long ttlSeconds = exp - Instant.now().getEpochSecond();
+        authSessionStore.blacklistAccess(jti, ttlSeconds);
     }
 
     private Long toLong(Object value) {
@@ -475,11 +585,17 @@ public class AuthServiceImpl implements IAuthService{
         private final int onlineCount;
         private final String lastActiveAt;
         private final String lastLoginAt;
+        private final String device;
+        private final String loginLocation;
+        private final String ip;
 
-        private SessionSummary(int onlineCount, String lastActiveAt, String lastLoginAt) {
+        private SessionSummary(int onlineCount, String lastActiveAt, String lastLoginAt, String device, String loginLocation, String ip) {
             this.onlineCount = onlineCount;
             this.lastActiveAt = lastActiveAt;
             this.lastLoginAt = lastLoginAt;
+            this.device = device;
+            this.loginLocation = loginLocation;
+            this.ip = ip;
         }
     }
 }
