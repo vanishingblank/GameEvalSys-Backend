@@ -223,7 +223,7 @@
 
 - **说明**：
   - 该模块仅超级管理员可见。
-  - 用于在后台查看数据库、Redis、JVM 和主机资源的轻量级状态。
+  - 用于在后台查看数据库、Redis、JVM、主机资源和最近告警日志的轻量级状态。
   - 返回配置摘要时会自动脱敏，不返回密码明文。
 
 ##### 1.5.5.1 查询监控总览
@@ -240,8 +240,10 @@
       "generatedAt": "2026-05-08 10:00:00",
       "overview": {
         "hostName": "gameeval-prod-01",
+        "hostAddress": "10.10.10.21",
         "serverPort": 8080,
         "timeZone": "Asia/Shanghai",
+        "appVersion": "1.4.2",
         "javaVersion": "17.0.10",
         "javaVendor": "Eclipse Adoptium",
         "startTime": "2026-05-08 09:20:00",
@@ -296,6 +298,10 @@
       "os": {
         "systemCpuLoadPercent": 12.34,
         "processCpuLoadPercent": 4.56,
+        "osName": "Linux",
+        "osVersion": "6.8.0-31-generic",
+        "osArch": "amd64",
+        "availableProcessors": 8,
         "totalPhysicalMemoryBytes": 17179869184,
         "freePhysicalMemoryBytes": 8589934592,
         "usedPhysicalMemoryBytes": 8589934592,
@@ -323,10 +329,36 @@
         "serverPort": 8080,
         "timeZone": "Asia/Shanghai",
         "cacheSchedulerEnabled": true
-      }
+      },
+      "logs": [
+        {
+          "time": "2026-05-08 09:58:00",
+          "level": "WARN",
+          "content": "数据库连接池活跃连接数短暂升高"
+        },
+        {
+          "time": "2026-05-08 09:59:00",
+          "level": "ERROR",
+          "content": "Redis 连接异常: Connection timed out"
+        }
+      ]
     }
   }
   ```
+
+- **字段说明**：
+  | 字段名 | 类型 | 说明 |
+  |--------|------|------|
+  | overview.appVersion | string | 应用版本号，支持通过 `APP_VERSION` 在部署时覆盖 |
+  | overview.hostAddress | string | 主机 IP 地址或容器内地址 |
+  | os.osName | string | 操作系统名称 |
+  | os.osVersion | string | 操作系统版本 |
+  | os.osArch | string | 操作系统架构 |
+  | os.availableProcessors | number | CPU 总核心数 |
+  | logs | array | 最近的告警/错误日志，默认返回 5 条 |
+  | logs[].time | string | 日志时间 |
+  | logs[].level | string | 日志级别，通常为 `WARN` 或 `ERROR` |
+  | logs[].content | string | 日志内容摘要 |
 
 ##### 1.5.5.2 查询单项监控
 
@@ -338,6 +370,7 @@
   - `/admin/monitor/jvm`
   - `/admin/monitor/os`
   - `/admin/monitor/config`
+  - `/admin/monitor/logs`
 - **请求方式**：GET
 - **请求头**：`Authorization: Bearer {token}`
 - **说明**：单项接口返回与总览相同的数据片段，前端可按需调用。 
@@ -346,24 +379,32 @@
 
 - **适用场景**：后台服务监控页面。
 - **访问权限**：仅 `super_admin`。
+- **认证方式说明**：
+  - 普通监控接口仍使用 `Authorization: Bearer {token}`。
+  - `GET /admin/monitor/stream` 属于 SSE 长连接，浏览器原生 `EventSource` 不能自定义请求头，因此前端需要将 token 放到查询参数中。
+  - 当前约定的参数名为 `accessToken`，示例：`/api/v1/admin/monitor/stream?accessToken=xxx`。
+  - 后端过滤器仅对 `/admin/monitor/stream` 放行该查询参数认证，不会对其它接口开放这个入口。
 - **推荐接入方式**：
-  1. 页面进入时优先请求 `/admin/monitor/dashboard`，一次性拿到总览、健康、数据库、Redis、JVM、主机和配置摘要。
-  2. 如果页面需要局部刷新，再按卡片区域拆分调用 `/admin/monitor/overview`、`/admin/monitor/health`、`/admin/monitor/datasource`、`/admin/monitor/redis`、`/admin/monitor/jvm`、`/admin/monitor/os`、`/admin/monitor/config`。
+  1. 页面进入时优先请求 `/admin/monitor/dashboard`，一次性拿到总览、健康、数据库、Redis、JVM、主机、配置摘要和最近日志。
+  2. 如果页面需要局部刷新，再按卡片区域拆分调用 `/admin/monitor/overview`、`/admin/monitor/health`、`/admin/monitor/datasource`、`/admin/monitor/redis`、`/admin/monitor/jvm`、`/admin/monitor/os`、`/admin/monitor/config`、`/admin/monitor/logs`。
   3. 刷新周期建议为 10 秒到 30 秒，不建议高频轮询。
 - **页面展示建议**：
   - 顶部总览卡：应用状态、启动时间、运行时长、实例端口。
   - 中部资源卡：数据库、Redis、JVM、主机资源。
   - 底部配置卡：只读展示关键配置摘要。
+  - 底部日志卡：展示最近 5 条 `WARN/ERROR` 记录，不展示完整堆栈。
 - **前端处理规则**：
   - 仅展示，不可编辑。
   - 所有敏感字段保持脱敏展示，不得回显密码原文。
   - 当 `health.overallStatus != UP` 时，页面应高亮告警态。
   - 当某个分项接口返回 `DOWN` 时，卡片应单独显示失败状态，不影响其他卡片渲染。
   - 首屏加载先走普通 `GET /admin/monitor/dashboard`，首屏完成后再建立 SSE 连接做实时刷新。
+  - 建立 SSE 时必须携带最新 token；如果用户刷新了登录态，前端应主动重建连接，避免使用旧 token 导致 `401`。
   - SSE 断开时，前端应自动降级为轮询 `/admin/monitor/health`、`/admin/monitor/jvm`、`/admin/monitor/os`。
+  - 日志卡建议低频刷新，优先和 `config` 同步刷新即可。
 - **数据结构建议**：
   - `dashboard` 作为首屏聚合数据源。
-  - `overview`、`health`、`datasource`、`redis`、`jvm`、`os`、`config` 作为可复用子数据源。
+  - `overview`、`health`、`datasource`、`redis`、`jvm`、`os`、`config`、`logs` 作为可复用子数据源。
   - 页面组件建议按“总览卡 / 状态卡 / 资源卡 / 配置卡”拆分。
 
 ##### 1.5.5.5 SSE 实时刷新建议
@@ -372,9 +413,15 @@
   - `health`：整体健康态
   - `jvm`：堆内存、线程数、GC
   - `os`：CPU、内存、磁盘
+  - `logs`：最近告警与错误摘要
+- **认证注意事项**：
+  - SSE 连接请使用 `EventSource` 连接 `/admin/monitor/stream?accessToken={token}`。
+  - 不要尝试在前端给 `EventSource` 设置 `Authorization` 请求头，这在浏览器里不可用。
+  - SSE 连接失败若返回 `401`，优先检查 token 是否过期或是否未拼接到 URL。
 - **不建议频繁推送的内容**：
   - `config`：配置摘要变化很少，首屏加载后低频刷新即可
   - `datasource`、`redis`：一般只需低频刷新或页面进入时刷新
+  - `logs`：只保留最近 5 条，刷新频率与 `config` 保持一致即可
 - **前端处理建议**：
   1. 页面进入时先请求 `dashboard`。
   2. `dashboard` 渲染完成后再连接 SSE。
@@ -392,6 +439,9 @@
 
   event: os
   data: {"systemCpuLoadPercent":12.34,"processCpuLoadPercent":4.56,"memoryUsagePercent":50.0,"diskUsagePercent":50.0}
+
+  event: logs
+  data: [{"time":"2026-05-08 09:58:00","level":"WARN","content":"数据库连接池活跃连接数短暂升高"}]
   ```
 - **前端状态建议**：
   - `dashboardData`：首屏聚合数据
