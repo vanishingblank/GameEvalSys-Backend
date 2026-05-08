@@ -57,6 +57,7 @@ server:
   port: 8080
 
 app:
+  version: ${APP_VERSION:0.0.1-SNAPSHOT}
   time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
   admin:
     init:
