@@ -48,6 +48,8 @@ public class SecurityConfig {
                                 "/auth/logout",
                                 "/auth/refresh"
                         ).permitAll()
+                        .requestMatchers("/actuator/**").hasAnyAuthority("ROLE_super_admin")
+                        .requestMatchers("/admin/monitor/**").hasAnyAuthority("ROLE_super_admin")
                         .requestMatchers("/admin/**").hasAnyAuthority("ROLE_admin", "ROLE_super_admin")
                         .anyRequest().authenticated()
                 )
