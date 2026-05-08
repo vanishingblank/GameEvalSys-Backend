@@ -31,6 +31,7 @@ server:
   port: 8080
 
 app:
+  version: ${APP_VERSION:0.0.1-SNAPSHOT}
   admin:
     init:
       # 首次部署初始化账号：仅在 sys_user 为空时尝试创建
