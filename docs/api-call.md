@@ -342,6 +342,81 @@
 - **请求头**：`Authorization: Bearer {token}`
 - **说明**：单项接口返回与总览相同的数据片段，前端可按需调用。 
 
+##### 1.5.5.3 前端面板对接说明
+
+- **适用场景**：后台服务监控页面。
+- **访问权限**：仅 `super_admin`。
+- **推荐接入方式**：
+  1. 页面进入时优先请求 `/admin/monitor/dashboard`，一次性拿到总览、健康、数据库、Redis、JVM、主机和配置摘要。
+  2. 如果页面需要局部刷新，再按卡片区域拆分调用 `/admin/monitor/overview`、`/admin/monitor/health`、`/admin/monitor/datasource`、`/admin/monitor/redis`、`/admin/monitor/jvm`、`/admin/monitor/os`、`/admin/monitor/config`。
+  3. 刷新周期建议为 10 秒到 30 秒，不建议高频轮询。
+- **页面展示建议**：
+  - 顶部总览卡：应用状态、启动时间、运行时长、实例端口。
+  - 中部资源卡：数据库、Redis、JVM、主机资源。
+  - 底部配置卡：只读展示关键配置摘要。
+- **前端处理规则**：
+  - 仅展示，不可编辑。
+  - 所有敏感字段保持脱敏展示，不得回显密码原文。
+  - 当 `health.overallStatus != UP` 时，页面应高亮告警态。
+  - 当某个分项接口返回 `DOWN` 时，卡片应单独显示失败状态，不影响其他卡片渲染。
+  - 首屏加载先走普通 `GET /admin/monitor/dashboard`，首屏完成后再建立 SSE 连接做实时刷新。
+  - SSE 断开时，前端应自动降级为轮询 `/admin/monitor/health`、`/admin/monitor/jvm`、`/admin/monitor/os`。
+- **数据结构建议**：
+  - `dashboard` 作为首屏聚合数据源。
+  - `overview`、`health`、`datasource`、`redis`、`jvm`、`os`、`config` 作为可复用子数据源。
+  - 页面组件建议按“总览卡 / 状态卡 / 资源卡 / 配置卡”拆分。
+
+##### 1.5.5.5 SSE 实时刷新建议
+
+- **推荐用途**：
+  - `health`：整体健康态
+  - `jvm`：堆内存、线程数、GC
+  - `os`：CPU、内存、磁盘
+- **不建议频繁推送的内容**：
+  - `config`：配置摘要变化很少，首屏加载后低频刷新即可
+  - `datasource`、`redis`：一般只需低频刷新或页面进入时刷新
+- **前端处理建议**：
+  1. 页面进入时先请求 `dashboard`。
+  2. `dashboard` 渲染完成后再连接 SSE。
+  3. SSE 消息到达后，只更新对应卡片，不要整页重渲染。
+  4. 关闭页面或路由切换时记得关闭连接。
+  5. 断线重连失败后切换回轮询。
+
+- **消息格式建议**：
+  ```text
+  event: health
+  data: {"overallStatus":"UP","datasourceStatus":"UP","redisStatus":"UP","message":"数据库和 Redis 均正常"}
+
+  event: jvm
+  data: {"heapUsedBytes":12345678,"heapCommittedBytes":268435456,"heapMaxBytes":536870912,"threadCount":64}
+
+  event: os
+  data: {"systemCpuLoadPercent":12.34,"processCpuLoadPercent":4.56,"memoryUsagePercent":50.0,"diskUsagePercent":50.0}
+  ```
+- **前端状态建议**：
+  - `dashboardData`：首屏聚合数据
+  - `realtimeData`：SSE 增量数据
+  - `connectionStatus`：`connecting` / `open` / `closed` / `fallback`
+  - `retryCount`：重连次数
+  - `lastUpdateAt`：最近更新时间
+
+##### 1.5.5.4 前端请求示例
+
+- **聚合请求**：
+  ```http
+  GET /admin/monitor/dashboard
+  Authorization: Bearer {token}
+  ```
+- **局部刷新请求**：
+  ```http
+  GET /admin/monitor/health
+  Authorization: Bearer {token}
+  ```
+  ```http
+  GET /admin/monitor/jvm
+  Authorization: Bearer {token}
+  ```
+
   
 
 ## 2. 用户管理模块（超级管理员/管理员）
