@@ -219,6 +219,129 @@
   }
   ```
 
+#### 1.5.5 服务监控（仅 super_admin）
+
+- **说明**：
+  - 该模块仅超级管理员可见。
+  - 用于在后台查看数据库、Redis、JVM 和主机资源的轻量级状态。
+  - 返回配置摘要时会自动脱敏，不返回密码明文。
+
+##### 1.5.5.1 查询监控总览
+
+- **接口地址**：`/admin/monitor/dashboard`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **响应示例**：
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": {
+      "generatedAt": "2026-05-08 10:00:00",
+      "overview": {
+        "hostName": "gameeval-prod-01",
+        "serverPort": 8080,
+        "timeZone": "Asia/Shanghai",
+        "javaVersion": "17.0.10",
+        "javaVendor": "Eclipse Adoptium",
+        "startTime": "2026-05-08 09:20:00",
+        "uptimeMillis": 2400000,
+        "uptimeText": "0d 0h 40m 0s"
+      },
+      "health": {
+        "overallStatus": "UP",
+        "datasourceStatus": "UP",
+        "redisStatus": "UP",
+        "message": "数据库和 Redis 均正常"
+      },
+      "datasource": {
+        "status": "UP",
+        "message": "连接正常",
+        "jdbcType": "mariadb",
+        "jdbcUrlMasked": "jdbc:mariadb://172.30.165.41:10306/gameeval_test",
+        "driverClassName": "org.mariadb.jdbc.Driver",
+        "usernameMasked": "r***t",
+        "activeConnections": 1,
+        "idleConnections": 4,
+        "totalConnections": 5,
+        "maximumPoolSize": 20,
+        "minimumIdle": 5,
+        "threadsAwaitingConnection": 0
+      },
+      "redis": {
+        "status": "UP",
+        "message": "连接正常",
+        "host": "localhost",
+        "port": 6379,
+        "database": 0,
+        "timeoutMillis": 5000,
+        "poolMaxActive": 8,
+        "poolMaxIdle": 8,
+        "poolMinIdle": 0,
+        "poolMaxWaitMillis": -1,
+        "ping": "PONG"
+      },
+      "jvm": {
+        "heapUsedBytes": 12345678,
+        "heapCommittedBytes": 268435456,
+        "heapMaxBytes": 536870912,
+        "nonHeapUsedBytes": 23456789,
+        "nonHeapCommittedBytes": 251658240,
+        "threadCount": 64,
+        "daemonThreadCount": 12,
+        "peakThreadCount": 72,
+        "gcCount": 18,
+        "gcTimeMillis": 420
+      },
+      "os": {
+        "systemCpuLoadPercent": 12.34,
+        "processCpuLoadPercent": 4.56,
+        "totalPhysicalMemoryBytes": 17179869184,
+        "freePhysicalMemoryBytes": 8589934592,
+        "usedPhysicalMemoryBytes": 8589934592,
+        "memoryUsagePercent": 50.0,
+        "diskTotalBytes": 1099511627776,
+        "diskFreeBytes": 549755813888,
+        "diskUsedBytes": 549755813888,
+        "diskUsagePercent": 50.0
+      },
+      "config": {
+        "datasourceUrlMasked": "jdbc:mariadb://172.30.165.41:10306/gameeval_test",
+        "datasourceHost": "172.30.165.41",
+        "datasourcePort": 10306,
+        "datasourceDatabase": "gameeval_test",
+        "datasourceDriverClassName": "org.mariadb.jdbc.Driver",
+        "datasourceUsernameMasked": "r***t",
+        "redisHost": "localhost",
+        "redisPort": 6379,
+        "redisDatabase": 0,
+        "redisTimeoutMillis": 5000,
+        "redisPoolMaxActive": 8,
+        "redisPoolMaxIdle": 8,
+        "redisPoolMinIdle": 0,
+        "redisPoolMaxWaitMillis": -1,
+        "serverPort": 8080,
+        "timeZone": "Asia/Shanghai",
+        "cacheSchedulerEnabled": true
+      }
+    }
+  }
+  ```
+
+##### 1.5.5.2 查询单项监控
+
+- **接口地址**：
+  - `/admin/monitor/overview`
+  - `/admin/monitor/health`
+  - `/admin/monitor/datasource`
+  - `/admin/monitor/redis`
+  - `/admin/monitor/jvm`
+  - `/admin/monitor/os`
+  - `/admin/monitor/config`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **说明**：单项接口返回与总览相同的数据片段，前端可按需调用。 
+
   
 
 ## 2. 用户管理模块（超级管理员/管理员）
