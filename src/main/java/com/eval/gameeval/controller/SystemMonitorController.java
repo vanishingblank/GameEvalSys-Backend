@@ -7,8 +7,11 @@ import com.eval.gameeval.service.SystemMonitorService;
 import jakarta.annotation.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.util.List;
 
 @RestController
 @RequestMapping("/admin/monitor")
@@ -16,6 +19,11 @@ public class SystemMonitorController {
 
     @Resource
     private SystemMonitorService systemMonitorService;
+
+    @GetMapping(value = "/stream", produces = "text/event-stream")
+    public SseEmitter stream() {
+        return systemMonitorService.openStream();
+    }
 
     @GetMapping("/dashboard")
     @LogRecord(value = "查询服务监控总览", module = "SystemMonitor")
@@ -63,5 +71,13 @@ public class SystemMonitorController {
     @LogRecord(value = "查询监控配置摘要", module = "SystemMonitor")
     public ResponseEntity<ResponseVO<SystemMonitorVO.ConfigVO>> getConfig() {
         return ResponseEntity.ok(ResponseVO.success("查询成功", systemMonitorService.getConfig()));
+    }
+
+    @GetMapping("/logs")
+    @LogRecord(value = "查询最近告警日志", module = "SystemMonitor")
+    public ResponseEntity<ResponseVO<List<SystemMonitorVO.LogVO>>> getLogs(
+            @RequestParam(value = "limit", defaultValue = "5") Integer limit
+    ) {
+        return ResponseEntity.ok(ResponseVO.success("查询成功", systemMonitorService.getLogs(limit)));
     }
 }

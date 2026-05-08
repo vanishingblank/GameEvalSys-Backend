@@ -8,6 +8,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Accessors(chain = true)
@@ -26,6 +27,7 @@ public class SystemMonitorVO implements Serializable {
     private JvmVO jvm;
     private OsVO os;
     private ConfigVO config;
+    private List<LogVO> logs;
 
     @Data
     @Accessors(chain = true)
@@ -35,8 +37,10 @@ public class SystemMonitorVO implements Serializable {
         private static final long serialVersionUID = 1L;
 
         private String hostName;
+        private String hostAddress;
         private Integer serverPort;
         private String timeZone;
+        private String appVersion;
         private String javaVersion;
         private String javaVendor;
 
@@ -129,6 +133,10 @@ public class SystemMonitorVO implements Serializable {
 
         private BigDecimal systemCpuLoadPercent;
         private BigDecimal processCpuLoadPercent;
+        private String osName;
+        private String osVersion;
+        private String osArch;
+        private Integer availableProcessors;
         private Long totalPhysicalMemoryBytes;
         private Long freePhysicalMemoryBytes;
         private Long usedPhysicalMemoryBytes;
@@ -163,5 +171,18 @@ public class SystemMonitorVO implements Serializable {
         private Integer serverPort;
         private String timeZone;
         private Boolean cacheSchedulerEnabled;
+    }
+
+    @Data
+    @Accessors(chain = true)
+    public static class LogVO implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+        private LocalDateTime time;
+        private String level;
+        private String content;
     }
 }
