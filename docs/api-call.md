@@ -388,6 +388,7 @@
   1. 页面进入时优先请求 `/admin/monitor/dashboard`，一次性拿到总览、健康、数据库、Redis、JVM、主机、配置摘要和最近日志。
   2. 如果页面需要局部刷新，再按卡片区域拆分调用 `/admin/monitor/overview`、`/admin/monitor/health`、`/admin/monitor/datasource`、`/admin/monitor/redis`、`/admin/monitor/jvm`、`/admin/monitor/os`、`/admin/monitor/config`、`/admin/monitor/logs`。
   3. 刷新周期建议为 10 秒到 30 秒，不建议高频轮询。
+  4. 后端 SSE 推送间隔可通过 `app.monitor.refresh-interval-ms` / `APP_MONITOR_REFRESH_INTERVAL_MS` 调整，最小值由 `app.monitor.refresh-min-interval-ms` / `APP_MONITOR_REFRESH_MIN_INTERVAL_MS` 兜底。
 - **页面展示建议**：
   - 顶部总览卡：应用状态、启动时间、运行时长、实例端口。
   - 中部资源卡：数据库、Redis、JVM、主机资源。

@@ -59,6 +59,9 @@ server:
 app:
   version: ${APP_VERSION:0.0.1-SNAPSHOT}
   time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
+  monitor:
+    refresh-interval-ms: ${APP_MONITOR_REFRESH_INTERVAL_MS:2000}
+    refresh-min-interval-ms: ${APP_MONITOR_REFRESH_MIN_INTERVAL_MS:1000}
   admin:
     init:
       # 首次部署初始化账号：仅在 sys_user 为空时尝试创建
