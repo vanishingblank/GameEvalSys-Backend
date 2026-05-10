@@ -15,6 +15,10 @@ server:
   port: 8080
 
 app:
+  version: ${APP_VERSION:0.0.1-SNAPSHOT}
+  monitor:
+    refresh-interval-ms: ${APP_MONITOR_REFRESH_INTERVAL_MS:2000}
+    refresh-min-interval-ms: ${APP_MONITOR_REFRESH_MIN_INTERVAL_MS:1000}
   admin:
     init:
       enabled: ${APP_ADMIN_INIT_ENABLED:true}

@@ -1,6 +1,7 @@
 package com.eval.gameeval.service;
 
 import com.eval.gameeval.mapper.UserMapper;
+import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
@@ -12,6 +13,8 @@ import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.impl.AuthServiceImpl;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
@@ -54,8 +57,18 @@ class AuthServiceImplTest {
     @InjectMocks
     private AuthServiceImpl authService;
 
+    private LoginMetaDTO buildLoginMeta() {
+        String ip = "127.0.0.1";
+        String device ="Windows";
+        String loginLocation ="localhost";
+        return new LoginMetaDTO()
+                .setIp(ip)
+                .setDevice(device)
+                .setLoginLocation(loginLocation);
+    }
     @Test
     void loginRefreshLogoutFlow() {
+
         User user = new User();
         user.setId(1L);
         user.setUsername("tester");
@@ -72,7 +85,9 @@ class AuthServiceImplTest {
                 .thenReturn("access-token");
         when(jwtTokenService.getAccessExpireTime()).thenReturn(LocalDateTime.now().plusHours(4));
 
-        ResponseVO<LoginResponseVO> loginResponse = authService.login(loginRequest);
+        LoginMetaDTO meta = buildLoginMeta();
+
+        ResponseVO<LoginResponseVO> loginResponse = authService.login(loginRequest,meta);
         assertThat(loginResponse.getCode()).isEqualTo(200);
         assertThat(loginResponse.getData()).isNotNull();
         assertThat(loginResponse.getData().getToken()).isEqualTo("access-token");
