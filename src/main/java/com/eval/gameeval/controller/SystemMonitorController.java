@@ -3,7 +3,7 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SystemMonitorVO;
-import com.eval.gameeval.service.SystemMonitorService;
+import com.eval.gameeval.service.ISystemMonitorService;
 import jakarta.annotation.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import java.util.List;
 
 @RestController
@@ -18,7 +19,7 @@ import java.util.List;
 public class SystemMonitorController {
 
     @Resource
-    private SystemMonitorService systemMonitorService;
+    private ISystemMonitorService systemMonitorService;
 
     @GetMapping(value = "/stream", produces = "text/event-stream")
     public SseEmitter stream() {

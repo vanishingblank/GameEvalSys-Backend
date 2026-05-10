@@ -1,7 +1,7 @@
-package com.eval.gameeval.service;
+package com.eval.gameeval.service.impl;
 
-import lombok.extern.slf4j.Slf4j;
 import com.eval.gameeval.models.VO.SystemMonitorVO;
+import com.eval.gameeval.service.ISystemMonitorService;
 import com.eval.gameeval.logging.RecentWarnErrorLogStore;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
@@ -42,12 +42,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Slf4j
 @Service
-public class SystemMonitorService {
+public class SystemMonitorServiceImpl implements ISystemMonitorService {
 
     private static final long SSE_TIMEOUT_MS = 0L;
-    private static final long SSE_INTERVAL_SECONDS = 5L;
+    private static final long DEFAULT_MONITOR_REFRESH_INTERVAL_MS = 2000L;
+    private static final long MIN_MONITOR_REFRESH_INTERVAL_MS = 1000L;
     private static final int DEFAULT_LOG_LIMIT = 5;
     private static final int MAX_LOG_LIMIT = 20;
 
@@ -113,9 +113,16 @@ public class SystemMonitorService {
     @Value("${app.version:0.0.1-SNAPSHOT}")
     private String appVersion;
 
+    @Value("${app.monitor.refresh-interval-ms:2000}")
+    private Long monitorRefreshIntervalMs;
+
+    @Value("${app.monitor.refresh-min-interval-ms:1000}")
+    private Long monitorRefreshMinIntervalMs;
+
     @Value("${app.cache.scheduler.enabled:true}")
     private Boolean cacheSchedulerEnabled;
 
+    @Override
     public SystemMonitorVO getDashboard() {
         LocalDateTime now = LocalDateTime.now(getZoneId());
         SystemMonitorVO dashboard = new SystemMonitorVO();
@@ -131,38 +138,47 @@ public class SystemMonitorService {
         return dashboard;
     }
 
+    @Override
     public SystemMonitorVO.OverviewVO getOverview() {
         return buildOverview();
     }
 
+    @Override
     public SystemMonitorVO.HealthVO getHealth() {
         return buildHealth();
     }
 
+    @Override
     public SystemMonitorVO.DataSourceVO getDataSource() {
         return buildDataSource();
     }
 
+    @Override
     public SystemMonitorVO.RedisVO getRedis() {
         return buildRedis();
     }
 
+    @Override
     public SystemMonitorVO.JvmVO getJvm() {
         return buildJvm();
     }
 
+    @Override
     public SystemMonitorVO.OsVO getOs() {
         return buildOs();
     }
 
+    @Override
     public SystemMonitorVO.ConfigVO getConfig() {
         return buildConfig();
     }
 
+    @Override
     public List<SystemMonitorVO.LogVO> getLogs() {
         return getLogs(DEFAULT_LOG_LIMIT);
     }
 
+    @Override
     public List<SystemMonitorVO.LogVO> getLogs(int limit) {
         int safeLimit = normalizeLogLimit(limit);
         return RecentWarnErrorLogStore.snapshot(safeLimit).stream()
@@ -170,9 +186,8 @@ public class SystemMonitorService {
                 .toList();
     }
 
+    @Override
     public SseEmitter openStream() {
-        log.info("Opening new system monitor SSE stream");
-
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicLong tickCounter = new AtomicLong(0L);
         AtomicLong heartbeatCounter = new AtomicLong(0L);
@@ -220,8 +235,8 @@ public class SystemMonitorService {
         ScheduledFuture<?> future = sseExecutor.scheduleAtFixedRate(
                 pushTask,
                 0L,
-                SSE_INTERVAL_SECONDS,
-                TimeUnit.SECONDS
+                resolveMonitorRefreshIntervalMillis(),
+                TimeUnit.MILLISECONDS
         );
         futureHolder[0] = future;
 
@@ -538,7 +553,7 @@ public class SystemMonitorService {
     }
 
     private void sendHeartbeat(SseEmitter emitter, long sequence) throws Exception {
-        Map<String, Object> heartbeat = new HashMap<String, Object>();
+        Map<String, Object> heartbeat = new HashMap<>();
         heartbeat.put("sequence", sequence);
         heartbeat.put("timestamp", LocalDateTime.now(getZoneId()).toString());
         emitter.send(SseEmitter.event()
@@ -557,6 +572,13 @@ public class SystemMonitorService {
             return DEFAULT_LOG_LIMIT;
         }
         return Math.min(limit, MAX_LOG_LIMIT);
+    }
+
+    private long resolveMonitorRefreshIntervalMillis() {
+        long configured = monitorRefreshIntervalMs == null ? DEFAULT_MONITOR_REFRESH_INTERVAL_MS : monitorRefreshIntervalMs;
+        long configuredMin = monitorRefreshMinIntervalMs == null ? MIN_MONITOR_REFRESH_INTERVAL_MS : monitorRefreshMinIntervalMs;
+        long floor = Math.max(configuredMin, MIN_MONITOR_REFRESH_INTERVAL_MS);
+        return Math.max(configured, floor);
     }
 
     private SystemMonitorVO.LogVO toLogVo(RecentWarnErrorLogStore.LogEntry entry) {
