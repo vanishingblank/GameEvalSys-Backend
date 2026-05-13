@@ -33,6 +33,7 @@ public class AuthSessionStore {
     private static final String REFRESH_PREFIX = "auth:refresh:";
     private static final String BLACKLIST_PREFIX = "auth:blacklist:access:";
     private static final String TOKEN_VERSION_PREFIX = "auth:user:tokenVersion:";
+    private static final StringRedisSerializer STRING_SERIALIZER = new StringRedisSerializer();
 
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
@@ -87,11 +88,11 @@ public class AuthSessionStore {
 
     public Map<Object, Object> getSession(String sid) {
         String key = SESSION_PREFIX + sid;
-        return redisTemplate.opsForHash().entries(key);
+        return getHashEntries(key);
     }
 
     public Long getSessionUserId(String sid) {
-        Object value = redisTemplate.opsForHash().get(SESSION_PREFIX + sid, "userId");
+        Object value = getHashValue(SESSION_PREFIX + sid, "userId");
         if (value == null) {
             return null;
         }
@@ -113,7 +114,12 @@ public class AuthSessionStore {
     }
 
     public Set<String> getUserSessions(Long userId) {
-        Set<Object> raw = redisTemplate.opsForSet().members(USER_SESSIONS_PREFIX + userId);
+        Set<Object> raw;
+        try {
+            raw = redisTemplate.opsForSet().members(USER_SESSIONS_PREFIX + userId);
+        } catch (SerializationException e) {
+            raw = getStringSetMembers(USER_SESSIONS_PREFIX + userId);
+        }
         if (raw == null || raw.isEmpty()) {
             return Set.of();
         }
@@ -131,23 +137,19 @@ public class AuthSessionStore {
     public Set<Long> getActiveOnlineUserIds() {
         return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
             Set<Long> userIds = new HashSet<>();
-            RedisSerializer<String> keySerializer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
             RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
             RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-            byte[] userIdField = hashKeySerializer.serialize("userId");
-            byte[] lastActiveAtField = hashKeySerializer.serialize("lastActiveAt");
+            byte[] userIdField = serializeHashField(hashKeySerializer, "userId");
+            byte[] lastActiveAtField = serializeHashField(hashKeySerializer, "lastActiveAt");
             Instant now = Instant.now();
 
-            boolean canPrefixScan = keySerializer instanceof StringRedisSerializer;
-            String matchPattern = canPrefixScan ? SESSION_PREFIX + "*" : "*";
-
             Cursor<byte[]> cursor = connection.scan(
-                ScanOptions.scanOptions().match(matchPattern).count(1000).build()
+                ScanOptions.scanOptions().match(SESSION_PREFIX + "*").count(1000).build()
             );
             try {
                 while (cursor.hasNext()) {
                     byte[] rawKey = cursor.next();
-                    String key = keySerializer.deserialize(rawKey);
+                    String key = deserializeKey(rawKey);
                     if (key == null || !key.startsWith(SESSION_PREFIX)) {
                         continue;
                     }
@@ -155,7 +157,7 @@ public class AuthSessionStore {
                     if (rawValue == null) {
                         continue;
                     }
-                    Object value = hashValueSerializer.deserialize(rawValue);
+                    Object value = deserializeHashValue(hashValueSerializer, rawValue);
                     if (value == null) {
                         continue;
                     }
@@ -179,21 +181,17 @@ public class AuthSessionStore {
     public Set<Long> getLoggedInUserIds() {
         return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
             Set<Long> userIds = new HashSet<>();
-            RedisSerializer<String> keySerializer = (RedisSerializer<String>) redisTemplate.getKeySerializer();
             RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
             RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-            byte[] userIdField = hashKeySerializer.serialize("userId");
-
-            boolean canPrefixScan = keySerializer instanceof StringRedisSerializer;
-            String matchPattern = canPrefixScan ? SESSION_PREFIX + "*" : "*";
+            byte[] userIdField = serializeHashField(hashKeySerializer, "userId");
 
             Cursor<byte[]> cursor = connection.scan(
-                ScanOptions.scanOptions().match(matchPattern).count(1000).build()
+                ScanOptions.scanOptions().match(SESSION_PREFIX + "*").count(1000).build()
             );
             try {
                 while (cursor.hasNext()) {
                     byte[] rawKey = cursor.next();
-                    String key = keySerializer.deserialize(rawKey);
+                    String key = deserializeKey(rawKey);
                     if (key == null || !key.startsWith(SESSION_PREFIX)) {
                         continue;
                     }
@@ -201,7 +199,7 @@ public class AuthSessionStore {
                     if (rawValue == null) {
                         continue;
                     }
-                    Object value = hashValueSerializer.deserialize(rawValue);
+                    Object value = deserializeHashValue(hashValueSerializer, rawValue);
                     if (value == null) {
                         continue;
                     }
@@ -264,7 +262,7 @@ public class AuthSessionStore {
             return;
         }
         String key = SESSION_PREFIX + sid;
-        Object raw = redisTemplate.opsForHash().get(key, "lastActiveAt");
+        Object raw = getHashValue(key, "lastActiveAt");
         Instant now = Instant.now();
         if (raw == null) {
             redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
@@ -327,11 +325,11 @@ public class AuthSessionStore {
 
     public Map<Object, Object> getRefreshInfo(String sid) {
         String key = REFRESH_PREFIX + sid;
-        return redisTemplate.opsForHash().entries(key);
+        return getHashEntries(key);
     }
 
     public boolean matchRefreshToken(String sid, String refreshToken) {
-        Object stored = redisTemplate.opsForHash().get(REFRESH_PREFIX + sid, "tokenHash");
+        Object stored = getHashValue(REFRESH_PREFIX + sid, "tokenHash");
         if (stored == null) {
             return false;
         }
@@ -412,9 +410,87 @@ public class AuthSessionStore {
         if (rawLastActiveAt == null) {
             return false;
         }
-        Object value = hashValueSerializer.deserialize(rawLastActiveAt);
+        Object value = deserializeHashValue(hashValueSerializer, rawLastActiveAt);
         Instant lastActiveAt = parseInstant(value);
         return isWithinActiveWindow(lastActiveAt, now);
+    }
+
+    private Map<Object, Object> getHashEntries(String key) {
+        try {
+            return redisTemplate.opsForHash().entries(key);
+        } catch (SerializationException e) {
+            return redisTemplate.execute((RedisCallback<Map<Object, Object>>) connection -> {
+                Map<Object, Object> result = new HashMap<>();
+                RedisSerializer<Object> hashValueSerializer =
+                    (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+                Map<byte[], byte[]> rawEntries = connection.hGetAll(STRING_SERIALIZER.serialize(key));
+                for (Map.Entry<byte[], byte[]> entry : rawEntries.entrySet()) {
+                    String hashKey = STRING_SERIALIZER.deserialize(entry.getKey());
+                    Object hashValue = deserializeHashValue(hashValueSerializer, entry.getValue());
+                    if (hashKey != null && hashValue != null) {
+                        result.put(hashKey, hashValue);
+                    }
+                }
+                return result;
+            });
+        }
+    }
+
+    private Object getHashValue(String key, String field) {
+        try {
+            return redisTemplate.opsForHash().get(key, field);
+        } catch (SerializationException e) {
+            return redisTemplate.execute((RedisCallback<Object>) connection -> {
+                RedisSerializer<Object> hashValueSerializer =
+                    (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+                byte[] rawValue = connection.hGet(
+                    STRING_SERIALIZER.serialize(key),
+                    STRING_SERIALIZER.serialize(field)
+                );
+                return deserializeHashValue(hashValueSerializer, rawValue);
+            });
+        }
+    }
+
+    private Set<Object> getStringSetMembers(String key) {
+        return redisTemplate.execute((RedisCallback<Set<Object>>) connection -> {
+            Set<byte[]> rawMembers = connection.sMembers(STRING_SERIALIZER.serialize(key));
+            Set<Object> result = new HashSet<>();
+            for (byte[] rawMember : rawMembers) {
+                String member = STRING_SERIALIZER.deserialize(rawMember);
+                if (member != null) {
+                    result.add(member);
+                }
+            }
+            return result;
+        });
+    }
+
+    private byte[] serializeHashField(RedisSerializer<Object> hashKeySerializer, String field) {
+        try {
+            return hashKeySerializer.serialize(field);
+        } catch (SerializationException e) {
+            return STRING_SERIALIZER.serialize(field);
+        }
+    }
+
+    private String deserializeKey(byte[] rawKey) {
+        try {
+            return STRING_SERIALIZER.deserialize(rawKey);
+        } catch (SerializationException e) {
+            return null;
+        }
+    }
+
+    private Object deserializeHashValue(RedisSerializer<Object> hashValueSerializer, byte[] rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        try {
+            return hashValueSerializer.deserialize(rawValue);
+        } catch (SerializationException e) {
+            return STRING_SERIALIZER.deserialize(rawValue);
+        }
     }
 
     private static final class SessionSnapshot {
