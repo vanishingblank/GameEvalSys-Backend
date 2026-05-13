@@ -51,6 +51,8 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
     private static final int DEFAULT_LOG_LIMIT = 5;
     private static final int MAX_LOG_LIMIT = 20;
 
+    private final AtomicLong sseEventId = new AtomicLong(0L);
+
     private final ScheduledExecutorService sseExecutor = Executors.newScheduledThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "system-monitor-sse");
         thread.setDaemon(true);
@@ -210,6 +212,7 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
                     return;
                 }
 
+                sendEvent(emitter, "dashboard", getDashboard());
                 sendEvent(emitter, "health", getHealth());
                 sendEvent(emitter, "jvm", getJvm());
                 sendEvent(emitter, "os", getOs());
@@ -221,7 +224,6 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
                     sendEvent(emitter, "config", getConfig());
                     sendEvent(emitter, "overview", getOverview());
                     sendEvent(emitter, "logs", getLogs());
-                    sendEvent(emitter, "dashboard", getDashboard());
                 }
             } catch (Exception ex) {
                 cancelStream(futureHolder);
@@ -549,7 +551,11 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
     }
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data) throws Exception {
-        emitter.send(SseEmitter.event().name(eventName).data(data));
+        emitter.send(SseEmitter.event()
+                .id(String.valueOf(sseEventId.incrementAndGet()))
+                .name(eventName)
+                .reconnectTime(resolveMonitorRefreshIntervalMillis())
+                .data(data));
     }
 
     private void sendHeartbeat(SseEmitter emitter, long sequence) throws Exception {
@@ -557,7 +563,9 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
         heartbeat.put("sequence", sequence);
         heartbeat.put("timestamp", LocalDateTime.now(getZoneId()).toString());
         emitter.send(SseEmitter.event()
+                .id(String.valueOf(sseEventId.incrementAndGet()))
                 .name("heartbeat")
+                .reconnectTime(resolveMonitorRefreshIntervalMillis())
                 .data(heartbeat));
     }
 
