@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -39,6 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,6 +55,7 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
     private static final int MAX_LOG_LIMIT = 20;
 
     private final AtomicLong sseEventId = new AtomicLong(0L);
+    private final AtomicReference<CpuTimes> previousCpuTimes = new AtomicReference<>();
 
     private final ScheduledExecutorService sseExecutor = Executors.newScheduledThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "system-monitor-sse");
@@ -397,7 +401,7 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
             }
             long diskUsed = Math.max(diskTotal - diskFree, 0L);
 
-            vo.setSystemCpuLoadPercent(percent(osBean.getSystemCpuLoad()))
+            vo.setSystemCpuLoadPercent(resolveSystemCpuLoadPercent(osBean))
                     .setProcessCpuLoadPercent(percent(osBean.getProcessCpuLoad()))
                     .setTotalPhysicalMemoryBytes(totalPhysicalMemory)
                     .setFreePhysicalMemoryBytes(freePhysicalMemory)
@@ -410,6 +414,64 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
         }
 
         return vo;
+    }
+
+    private BigDecimal resolveSystemCpuLoadPercent(com.sun.management.OperatingSystemMXBean osBean) {
+        BigDecimal mxBeanCpuLoad = percent(osBean.getSystemCpuLoad());
+        if (mxBeanCpuLoad != null) {
+            return mxBeanCpuLoad;
+        }
+        return resolveLinuxProcStatCpuLoadPercent();
+    }
+
+    private BigDecimal resolveLinuxProcStatCpuLoadPercent() {
+        CpuTimes current = readLinuxProcStatCpuTimes();
+        if (current == null) {
+            return null;
+        }
+
+        CpuTimes previous = previousCpuTimes.getAndSet(current);
+        if (previous == null) {
+            return null;
+        }
+
+        long totalDelta = current.total() - previous.total();
+        long idleDelta = current.idle() - previous.idle();
+        if (totalDelta <= 0L || idleDelta < 0L) {
+            return null;
+        }
+
+        double usage = (double) (totalDelta - idleDelta) / totalDelta;
+        return percent(usage);
+    }
+
+    private CpuTimes readLinuxProcStatCpuTimes() {
+        try {
+            List<String> lines = Files.readAllLines(Path.of("/proc/stat"));
+            if (lines.isEmpty() || !lines.get(0).startsWith("cpu ")) {
+                return null;
+            }
+
+            String[] parts = lines.get(0).trim().split("\\s+");
+            if (parts.length < 5) {
+                return null;
+            }
+
+            long user = parseLongOrZero(parts[1]);
+            long nice = parseLongOrZero(parts[2]);
+            long system = parseLongOrZero(parts[3]);
+            long idle = parseLongOrZero(parts[4]);
+            long iowait = parts.length > 5 ? parseLongOrZero(parts[5]) : 0L;
+            long irq = parts.length > 6 ? parseLongOrZero(parts[6]) : 0L;
+            long softIrq = parts.length > 7 ? parseLongOrZero(parts[7]) : 0L;
+            long steal = parts.length > 8 ? parseLongOrZero(parts[8]) : 0L;
+
+            long idleAll = idle + iowait;
+            long total = user + nice + system + idle + iowait + irq + softIrq + steal;
+            return new CpuTimes(total, idleAll);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private SystemMonitorVO.ConfigVO buildConfig() {
@@ -536,6 +598,14 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
         }
     }
 
+    private long parseLongOrZero(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
+
     private BigDecimal percent(double value) {
         if (value < 0) {
             return null;
@@ -627,6 +697,24 @@ public class SystemMonitorServiceImpl implements ISystemMonitorService {
 
         private String database() {
             return database;
+        }
+    }
+
+    private static final class CpuTimes {
+        private final long total;
+        private final long idle;
+
+        private CpuTimes(long total, long idle) {
+            this.total = total;
+            this.idle = idle;
+        }
+
+        private long total() {
+            return total;
+        }
+
+        private long idle() {
+            return idle;
         }
     }
 }
