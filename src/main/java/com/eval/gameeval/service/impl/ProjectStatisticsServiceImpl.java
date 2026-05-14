@@ -13,6 +13,7 @@ import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
 import com.eval.gameeval.util.RedisBaseUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
+import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -66,6 +67,9 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
 
     @Resource
+    private ProjectCacheUtil projectCacheUtil;
+
+    @Resource
     private RedisBaseUtil redisBaseUtil;
 
     @Override
@@ -79,6 +83,17 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             Project project = projectMapper.selectById(projectId);
             if (project == null) {
                 return ResponseVO.notFound("项目不存在");
+            }
+
+            Object cache = projectCacheUtil.getProjectStatisticsCache(projectId);
+            if (cache != null) {
+                ProjectStatisticsVO cached = (ProjectStatisticsVO) cache;
+                log.info("【缓存命中】获取项目统计: projectId={}, groups={}, indicators={}, scorers={}",
+                        projectId,
+                        cached.getGroupAverage() != null ? cached.getGroupAverage().size() : 0,
+                        cached.getIndicatorAverage() != null ? cached.getIndicatorAverage().size() : 0,
+                        cached.getScorerDistribution() != null ? cached.getScorerDistribution().size() : 0);
+                return ResponseVO.success("查询成功", cached);
             }
 
             // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
@@ -108,6 +123,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             statisticsVO.setGroupAverage(groupAverage);
             statisticsVO.setIndicatorAverage(indicatorAverage);
             statisticsVO.setScorerDistribution(scorerDistribution);
+
+            projectCacheUtil.cacheProjectStatistics(projectId, statisticsVO);
 
             log.info("查询项目统计成功: projectId={}", projectId);
 
@@ -296,7 +313,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             }
 
             // 4. 查询所有明细（批量）
-            List<Long> recordIds = records.stream().map(ScoringRecord::getId).toList();
+            List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
 
             // 5. 根据项目评分标准动态获取指标列，避免固定3列导致错位
@@ -432,7 +449,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     ? Collections.emptyList()
                     : categoryMapper.selectByStandardId(project.getStandardId());
 
-            List<Long> recordIds = records.stream().map(ScoringRecord::getId).toList();
+            List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
 
             if (allDetails == null) {
@@ -764,7 +781,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         // 设置响应头
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
-        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
         response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName + ".xlsx");
 
         // 使用Hutool导出
@@ -785,7 +802,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         // 设置响应头
         response.setContentType("text/csv");
         response.setCharacterEncoding("utf-8");
-        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
         response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName + ".csv");
 
         // 构建CSV内容
@@ -947,7 +964,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();

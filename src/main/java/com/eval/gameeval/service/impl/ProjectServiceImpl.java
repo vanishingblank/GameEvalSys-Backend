@@ -227,6 +227,7 @@ public class ProjectServiceImpl implements IProjectService {
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
+            projectCacheUtil.clearProjectStatisticsCache(project.getId());
             overviewCacheUtil.clearProjectOverviewCache();
             overviewCacheUtil.clearStandardOverviewCache();
             overviewCacheUtil.clearGroupOverviewCache();
@@ -387,6 +388,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
             projectCacheUtil.clearPlatformStatisticsCache();          // 清除平台统计缓存
+            projectCacheUtil.clearProjectStatisticsCache(projectId);
                 overviewCacheUtil.clearProjectOverviewCache();
                 overviewCacheUtil.clearStandardOverviewCache();
                 overviewCacheUtil.clearGroupOverviewCache();
@@ -438,6 +440,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);
             projectCacheUtil.clearAllProjectListCache();
             projectCacheUtil.clearPlatformStatisticsCache();
+            projectCacheUtil.clearProjectStatisticsCache(projectId);
             overviewCacheUtil.clearProjectOverviewCache();
             
             // 清除所有相关用户的授权项目缓存
@@ -923,7 +926,7 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();

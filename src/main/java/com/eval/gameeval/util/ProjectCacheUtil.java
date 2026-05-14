@@ -162,6 +162,38 @@ public class ProjectCacheUtil {
         }
     }
 
+    // ========== 项目统计缓存 ==========
+    public void cacheProjectStatistics(Long projectId, Object value) {
+        String key = RedisKeyUtil.buildProjectStatisticsKey(projectId);
+        boolean result = redisBaseUtil.set(key, value, RedisKeyUtil.PROJECT_STATISTICS_TTL);
+        if (result) {
+            log.info("【项目统计缓存】设置成功: key={}, ttl={}s", key, RedisKeyUtil.PROJECT_STATISTICS_TTL);
+        } else {
+            log.error("【项目统计缓存】设置失败: key={}, projectId={}", key, projectId);
+        }
+    }
+
+    public Object getProjectStatisticsCache(Long projectId) {
+        String key = RedisKeyUtil.buildProjectStatisticsKey(projectId);
+        Object value = redisBaseUtil.get(key);
+        if (value != null) {
+            log.debug("【项目统计缓存】命中: key={}", key);
+        } else {
+            log.debug("【项目统计缓存】未命中: key={}", key);
+        }
+        return value;
+    }
+
+    public void clearProjectStatisticsCache(Long projectId) {
+        String key = RedisKeyUtil.buildProjectStatisticsKey(projectId);
+        boolean result = redisBaseUtil.delete(key);
+        if (result) {
+            log.info("【项目统计缓存】清除成功: key={}", key);
+        } else {
+            log.debug("【项目统计缓存】清除(key不存在或失败): key={}", key);
+        }
+    }
+
     public void clearPlatformStatisticsCache() {
         try {
             redisBaseUtil.delete(RedisKeyUtil.PLATFORM_STATISTICS_KEY);

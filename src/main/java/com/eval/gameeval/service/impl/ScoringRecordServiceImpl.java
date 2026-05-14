@@ -9,6 +9,7 @@ import com.eval.gameeval.models.VO.ScoringRecordPageVO;
 import com.eval.gameeval.models.VO.ScoringRecordVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IScoringRecordService;
+import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import com.eval.gameeval.util.ScoringRecordCacheUtil;
@@ -62,6 +63,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
     @Autowired
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
+
+    @Autowired
+    private ProjectCacheUtil projectCacheUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -229,6 +233,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
             scoringRecordCacheUtil.clearUserProjectRecordsCache(request.getProjectId(), currentUserId);
             scoringOverviewCacheUtil.clearUserOverviewCache(currentUserId);
+                projectCacheUtil.clearProjectStatisticsCache(request.getProjectId());
             return ResponseVO.success(action + "成功", responseVO);
 
         } catch (Exception e) {
@@ -358,7 +363,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();
