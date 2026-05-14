@@ -24,6 +24,7 @@ public final class RedisKeyUtil {
     public static final String PROJECT_AUTHORIZED_KEY_PREFIX = "project:authorized:";
     public static final String PROJECT_GROUPS_KEY_PREFIX = "project:groups:";
     public static final String PROJECT_STATISTICS_KEY_PREFIX = "project:statistics:";
+    public static final String PROJECT_MALICIOUS_REBUILD_TASK_KEY_PREFIX = "project:malicious:rebuild:task:";
     public static final String SCORING_RECORD_PAGE_KEY_PREFIX = "scoring:record:page:";
     public static final String SCORING_OVERVIEW_KEY_PREFIX = "scoring:overview:user:";
     public static final String PLATFORM_STATISTICS_KEY = "statistics:platform:overview";
@@ -38,6 +39,7 @@ public final class RedisKeyUtil {
     public static final long PROJECT_AUTHORIZED_TTL = 600; // 10分钟（用户权限可能变化）
     public static final long PROJECT_GROUPS_TTL = 1800;   // 30分钟
     public static final long PROJECT_STATISTICS_TTL = 120; // 2分钟
+    public static final long PROJECT_MALICIOUS_REBUILD_TASK_TTL = 600; // 10分钟
     public static final long SCORING_RECORD_PAGE_TTL = 300; // 5分钟
     public static final long SCORING_OVERVIEW_TTL = 120; // 2分钟
     public static final long PLATFORM_STATISTICS_TTL = 300; // 5分钟
@@ -153,6 +155,14 @@ public final class RedisKeyUtil {
      */
     public static String buildProjectStatisticsKey(Long projectId) {
         return PROJECT_STATISTICS_KEY_PREFIX + projectId;
+    }
+
+    /**
+     * 构建项目恶意标记重算任务状态缓存键
+     * 格式: project:malicious:rebuild:task:{projectId}
+     */
+    public static String buildProjectMaliciousRebuildTaskKey(Long projectId) {
+        return PROJECT_MALICIOUS_REBUILD_TASK_KEY_PREFIX + projectId;
     }
 
     /**
