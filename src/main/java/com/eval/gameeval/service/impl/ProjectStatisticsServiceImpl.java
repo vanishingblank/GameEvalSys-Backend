@@ -13,6 +13,7 @@ import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IProjectStatisticsService;
 import com.eval.gameeval.util.RedisBaseUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
+import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -60,10 +61,13 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringIndicatorCategoryMapper categoryMapper;
 
     @Resource
-    private ScoringStandardMapper standardMapper;
+    private ProjectStatisticsSummaryMapper statisticsSummaryMapper;
 
     @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
+
+    @Resource
+    private ProjectCacheUtil projectCacheUtil;
 
     @Resource
     private RedisBaseUtil redisBaseUtil;
@@ -81,10 +85,64 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 return ResponseVO.notFound("项目不存在");
             }
 
+            Object cache = projectCacheUtil.getProjectStatisticsCache(projectId);
+            if (cache != null) {
+                ProjectStatisticsVO cached = (ProjectStatisticsVO) cache;
+                log.info("【缓存命中】获取项目统计: projectId={}, groups={}, indicators={}, scorers={}",
+                        projectId,
+                        cached.getGroupAverage() != null ? cached.getGroupAverage().size() : 0,
+                        cached.getIndicatorAverage() != null ? cached.getIndicatorAverage().size() : 0,
+                        cached.getScorerDistribution() != null ? cached.getScorerDistribution().size() : 0);
+                return ResponseVO.success("查询成功", cached);
+            }
+
+                List<ProjectStatisticsGroupSummary> groupSummaries = statisticsSummaryMapper.selectGroupSummaryByProjectId(projectId);
+                List<ProjectStatisticsIndicatorSummary> indicatorSummaries = statisticsSummaryMapper.selectIndicatorSummaryByProjectId(projectId);
+                List<ProjectStatisticsScorerDistributionSummary> scorerSummaries = statisticsSummaryMapper.selectScorerDistributionSummaryByProjectId(projectId);
+
+                if (!groupSummaries.isEmpty() || !indicatorSummaries.isEmpty() || !scorerSummaries.isEmpty()) {
+                ProjectStatisticsVO summaryVO = new ProjectStatisticsVO()
+                    .setGroupAverage(groupSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.GroupAverageVO()
+                            .setGroupId(summary.getGroupId())
+                            .setGroupName(summary.getGroupName())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize()))
+                        .collect(Collectors.toList()))
+                    .setIndicatorAverage(indicatorSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.IndicatorAverageVO()
+                            .setIndicatorId(summary.getIndicatorId())
+                            .setIndicatorName(summary.getIndicatorName())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setTotalAbnormalCount(summary.getTotalAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize()))
+                        .collect(Collectors.toList()))
+                    .setScorerDistribution(scorerSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.ScorerDistributionVO()
+                            .setUserId(summary.getUserId())
+                            .setUserName(summary.getUserName())
+                            .setScoreRange(summary.getScoreRange())
+                            .setCount(summary.getCount()))
+                        .collect(Collectors.toList()));
+
+                projectCacheUtil.cacheProjectStatistics(projectId, summaryVO);
+                log.info("【汇总表命中】获取项目统计: projectId={}, groups={}, indicators={}, scorers={}",
+                    projectId, groupSummaries.size(), indicatorSummaries.size(), scorerSummaries.size());
+                return ResponseVO.success("查询成功", summaryVO);
+                }
+
             // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
-            refreshMaliciousFlags(project, groupScoreList);
-            groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             List<ProjectStatisticsVO.GroupAverageVO> groupAverage = buildGroupAverageStatistics(groupScoreList);
 
             // 3. 查询指标评分明细，并在服务层完成评委标准化与异常检测
@@ -110,6 +168,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             statisticsVO.setGroupAverage(groupAverage);
             statisticsVO.setIndicatorAverage(indicatorAverage);
             statisticsVO.setScorerDistribution(scorerDistribution);
+
+            projectCacheUtil.cacheProjectStatistics(projectId, statisticsVO);
 
             log.info("查询项目统计成功: projectId={}", projectId);
 
@@ -298,7 +358,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             }
 
             // 4. 查询所有明细（批量）
-            List<Long> recordIds = records.stream().map(ScoringRecord::getId).toList();
+            List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
 
             // 5. 根据项目评分标准动态获取指标列，避免固定3列导致错位
@@ -434,7 +494,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                     ? Collections.emptyList()
                     : categoryMapper.selectByStandardId(project.getStandardId());
 
-            List<Long> recordIds = records.stream().map(ScoringRecord::getId).toList();
+            List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
 
             if (allDetails == null) {
@@ -593,8 +653,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
                 return;
             }
-            refreshMaliciousFlags(project, groupScoreRows);
-            groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
 
             BigDecimal projectMean = calculateAverage(groupScoreRows.stream()
                     .map(row -> convertToBigDecimal(row.get("totalScore")))
@@ -768,7 +826,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         // 设置响应头
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
-        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
         response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName + ".xlsx");
 
         // 使用Hutool导出
@@ -789,7 +847,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         // 设置响应头
         response.setContentType("text/csv");
         response.setCharacterEncoding("utf-8");
-        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
         response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName + ".csv");
 
         // 构建CSV内容
@@ -950,59 +1008,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         );
     }
 
-    private void refreshMaliciousFlags(Project project, List<Map<String, Object>> groupScoreRows) {
-        if (project == null || project.getId() == null) {
-            return;
-        }
-        String maliciousRuleType = normalizeMaliciousRuleType(project.getMaliciousRuleType());
-        Long projectId = project.getId();
-        if (MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType)) {
-            BigDecimal lower = project.getMaliciousScoreLower();
-            BigDecimal upper = project.getMaliciousScoreUpper();
-            if (lower == null || upper == null || lower.compareTo(upper) > 0) {
-                log.warn("项目阈值模式配置异常，回退AUTO算法: projectId={}, lower={}, upper={}",
-                        projectId, lower, upper);
-            } else {
-                recordMapper.markMaliciousByThreshold(projectId, lower, upper);
-                return;
-            }
-        }
-
-        recordMapper.clearMaliciousFlagByProjectId(projectId);
-        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-            return;
-        }
-
-        Map<Long, List<Map<String, Object>>> groupRowsMap = groupScoreRows.stream()
-                .collect(Collectors.groupingBy(row -> toLong(row.get("groupId")), LinkedHashMap::new, Collectors.toList()));
-
-        Set<Long> maliciousRecordIds = new LinkedHashSet<>();
-        for (List<Map<String, Object>> rows : groupRowsMap.values()) {
-            if (rows == null || rows.isEmpty()) {
-                continue;
-            }
-            List<BigDecimal> rawScores = rows.stream()
-                    .map(row -> convertToBigDecimal(row.get("totalScore")))
-                    .collect(Collectors.toList());
-            OutlierDetectionResult detectionResult = detectOutlierResult(rawScores);
-            for (Integer abnormalIndex : detectionResult.getAbnormalIndexes()) {
-                if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= rows.size()) {
-                    continue;
-                }
-                Long recordId = toLong(rows.get(abnormalIndex).get("recordId"));
-                if (recordId != null && recordId > 0) {
-                    maliciousRecordIds.add(recordId);
-                }
-            }
-        }
-
-        if (!maliciousRecordIds.isEmpty()) {
-            recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
-        }
-    }
-
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();
@@ -1325,14 +1332,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         }
         List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(project.getStandardId());
         return indicators != null ? indicators : Collections.emptyList();
-    }
-
-    private String getScoringStandardName(Project project) {
-        if (project.getStandardId() == null) {
-            return "-";
-        }
-        ScoringStandard standard = standardMapper.selectById(project.getStandardId());
-        return standard != null ? standard.getName() : "-";
     }
 
     private String formatDecimal(BigDecimal value) {

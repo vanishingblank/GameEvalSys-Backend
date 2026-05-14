@@ -21,6 +21,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 
 import java.math.BigDecimal;
@@ -28,7 +30,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,6 +78,9 @@ public class ProjectServiceImpl implements IProjectService {
 
     @Resource
     private OverviewCacheUtil overviewCacheUtil;
+
+    @Resource
+    private ProjectMaliciousRebuildTaskService projectMaliciousRebuildTaskService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -227,6 +231,7 @@ public class ProjectServiceImpl implements IProjectService {
             // 9. 清除缓存
             projectCacheUtil.clearAllProjectListCache(); // 清除全局项目列表缓存
             projectCacheUtil.clearPlatformStatisticsCache(); // 清除平台统计缓存
+            projectCacheUtil.clearProjectStatisticsCache(project.getId());
             overviewCacheUtil.clearProjectOverviewCache();
             overviewCacheUtil.clearStandardOverviewCache();
             overviewCacheUtil.clearGroupOverviewCache();
@@ -380,13 +385,14 @@ public class ProjectServiceImpl implements IProjectService {
             if (!Objects.equals(project.getMaliciousRuleType(), effectiveRuleType)
                     || !Objects.equals(project.getMaliciousScoreLower(), effectiveScoreLower)
                     || !Objects.equals(project.getMaliciousScoreUpper(), effectiveScoreUpper)) {
-                refreshProjectMaliciousFlags(projectId, effectiveRuleType, effectiveScoreLower, effectiveScoreUpper);
+                triggerProjectMaliciousRebuildAfterCommit(projectId, effectiveRuleType, effectiveScoreLower, effectiveScoreUpper);
             }
 
             projectCacheUtil.clearProjectDetailCache(projectId);      // 清除详情缓存
             projectCacheUtil.clearAllProjectListCache();              // 清除列表缓存
             projectCacheUtil.clearProjectGroupsCache(projectId);      // 清除小组缓存
             projectCacheUtil.clearPlatformStatisticsCache();          // 清除平台统计缓存
+            projectCacheUtil.clearProjectStatisticsCache(projectId);
                 overviewCacheUtil.clearProjectOverviewCache();
                 overviewCacheUtil.clearStandardOverviewCache();
                 overviewCacheUtil.clearGroupOverviewCache();
@@ -438,6 +444,7 @@ public class ProjectServiceImpl implements IProjectService {
             projectCacheUtil.clearProjectDetailCache(projectId);
             projectCacheUtil.clearAllProjectListCache();
             projectCacheUtil.clearPlatformStatisticsCache();
+            projectCacheUtil.clearProjectStatisticsCache(projectId);
             overviewCacheUtil.clearProjectOverviewCache();
             
             // 清除所有相关用户的授权项目缓存
@@ -923,7 +930,7 @@ public class ProjectServiceImpl implements IProjectService {
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();
@@ -933,96 +940,26 @@ public class ProjectServiceImpl implements IProjectService {
         return normalized;
     }
 
-    private void refreshProjectMaliciousFlags(Long projectId, String ruleType, BigDecimal scoreLower, BigDecimal scoreUpper) {
+    private void triggerProjectMaliciousRebuildAfterCommit(Long projectId, String ruleType,
+                                                           BigDecimal scoreLower, BigDecimal scoreUpper) {
         if (projectId == null) {
             return;
         }
-        if (MALICIOUS_RULE_THRESHOLD.equals(ruleType)) {
-            if (scoreLower == null || scoreUpper == null) {
-                log.warn("阈值模式配置不完整，跳过恶意标记重算: projectId={}", projectId);
-                return;
-            }
-            recordMapper.markMaliciousByThreshold(projectId, scoreLower, scoreUpper);
-            return;
-        }
 
-        List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
-        recordMapper.clearMaliciousFlagByProjectId(projectId);
-        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-            return;
-        }
+        Runnable rebuildTask = () -> projectMaliciousRebuildTaskService.rebuildProjectMaliciousFlagsAsync(
+                projectId, ruleType, scoreLower, scoreUpper);
 
-        Map<Long, List<Map<String, Object>>> groupRowsMap = groupScoreRows.stream()
-                .collect(Collectors.groupingBy(row -> toLong(row.get("groupId")), LinkedHashMap::new, Collectors.toList()));
-
-        Set<Long> maliciousRecordIds = new HashSet<>();
-        for (List<Map<String, Object>> rows : groupRowsMap.values()) {
-            if (rows == null || rows.isEmpty()) {
-                continue;
-            }
-            List<BigDecimal> rawScores = rows.stream()
-                    .map(row -> new BigDecimal(String.valueOf(row.get("totalScore"))))
-                    .collect(Collectors.toList());
-            Set<Integer> abnormalIndexes = detectOutlierIndexes(rawScores);
-            for (Integer abnormalIndex : abnormalIndexes) {
-                if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= rows.size()) {
-                    continue;
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rebuildTask.run();
                 }
-                Long recordId = toLong(rows.get(abnormalIndex).get("recordId"));
-                if (recordId != null && recordId > 0) {
-                    maliciousRecordIds.add(recordId);
-                }
-            }
+            });
+            log.info("已注册项目恶意标记异步重算任务: projectId={}", projectId);
+        } else {
+            rebuildTask.run();
         }
-
-        if (!maliciousRecordIds.isEmpty()) {
-            recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
-        }
-    }
-
-    private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
-        if (scores == null || scores.size() < 4) {
-            return Collections.emptySet();
-        }
-        BigDecimal median = calculateMedian(scores);
-        List<BigDecimal> deviations = scores.stream()
-                .map(score -> score.subtract(median).abs())
-                .collect(Collectors.toList());
-        BigDecimal mad = calculateMedian(deviations);
-
-        BigDecimal threshold = mad.multiply(new BigDecimal("1.4826")).multiply(BigDecimal.valueOf(3L));
-        BigDecimal thresholdFloor = median.abs().multiply(new BigDecimal("0.05"));
-        if (thresholdFloor.compareTo(new BigDecimal("0.50")) < 0) {
-            thresholdFloor = new BigDecimal("0.50");
-        }
-        if (threshold.compareTo(thresholdFloor) < 0) {
-            threshold = thresholdFloor;
-        }
-
-        BigDecimal lowerBound = median.subtract(threshold);
-        Set<Integer> abnormalIndexes = new HashSet<>();
-        for (int i = 0; i < scores.size(); i++) {
-            if (scores.get(i).compareTo(lowerBound) < 0) {
-                abnormalIndexes.add(i);
-            }
-        }
-        return abnormalIndexes;
-    }
-
-    private BigDecimal calculateMedian(List<BigDecimal> scores) {
-        if (scores == null || scores.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        List<BigDecimal> sortedScores = scores.stream()
-                .sorted(BigDecimal::compareTo)
-                .collect(Collectors.toList());
-        int middle = sortedScores.size() / 2;
-        if (sortedScores.size() % 2 == 0) {
-            return sortedScores.get(middle - 1)
-                    .add(sortedScores.get(middle))
-                    .divide(BigDecimal.valueOf(2L), 6, java.math.RoundingMode.HALF_UP);
-        }
-        return sortedScores.get(middle);
     }
 
     private Long toLong(Object value) {

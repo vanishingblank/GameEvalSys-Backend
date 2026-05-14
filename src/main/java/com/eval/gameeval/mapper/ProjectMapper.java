@@ -27,6 +27,9 @@ public interface ProjectMapper {
             "AND is_deleted = 0")
     List<Long> selectStatusMismatchProjectIds(@Param("now") LocalDateTime now);
 
+    @Select("SELECT id FROM project WHERE is_deleted = 0 ORDER BY id")
+    List<Long> selectAllActiveProjectIds();
+
     @Select("<script>" +
             "SELECT id, name, description, start_date AS startDate, end_date AS endDate, " +
             "status, is_enabled AS isEnabled, standard_id AS standardId, " +

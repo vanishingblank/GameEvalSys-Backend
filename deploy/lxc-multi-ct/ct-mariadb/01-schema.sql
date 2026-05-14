@@ -167,6 +167,68 @@ CREATE TABLE `scoring_record_detail` (
                                          CONSTRAINT `fk_detail_indicator` FOREIGN KEY (`indicator_id`) REFERENCES `scoring_indicator` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打分记录明细表';
 
+-- 项目统计汇总表（项目维度）
+CREATE TABLE `project_statistics_project_summary` (
+                                                    `project_id` bigint NOT NULL COMMENT '项目ID',
+                                                    `raw_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '原始平均分',
+                                                    `normalized_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '标准化后平均分',
+                                                    `processed_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '处理后平均分',
+                                                    `abnormal_count` int NOT NULL DEFAULT 0 COMMENT '异常评分数',
+                                                    `sample_size` int NOT NULL DEFAULT 0 COMMENT '总样本数',
+                                                    `valid_sample_size` int NOT NULL DEFAULT 0 COMMENT '有效样本数',
+                                                    `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                    PRIMARY KEY (`project_id`),
+                                                    CONSTRAINT `fk_psps_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目统计汇总表（项目维度）';
+
+-- 项目统计汇总表（小组维度）
+CREATE TABLE `project_statistics_group_summary` (
+                                                   `project_id` bigint NOT NULL COMMENT '项目ID',
+                                                   `group_id` bigint NOT NULL COMMENT '小组ID',
+                                                   `group_name` varchar(100) NOT NULL COMMENT '小组名称',
+                                                   `raw_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '原始平均分',
+                                                   `normalized_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '标准化后平均分',
+                                                   `processed_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '处理后平均分',
+                                                   `abnormal_count` int NOT NULL DEFAULT 0 COMMENT '异常评分数',
+                                                   `sample_size` int NOT NULL DEFAULT 0 COMMENT '总样本数',
+                                                   `valid_sample_size` int NOT NULL DEFAULT 0 COMMENT '有效样本数',
+                                                   `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                   PRIMARY KEY (`project_id`, `group_id`),
+                                                   KEY `idx_psgs_project_id` (`project_id`),
+                                                   CONSTRAINT `fk_psgs_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目统计汇总表（小组维度）';
+
+-- 项目统计汇总表（指标维度）
+CREATE TABLE `project_statistics_indicator_summary` (
+                                                      `project_id` bigint NOT NULL COMMENT '项目ID',
+                                                      `indicator_id` bigint NOT NULL COMMENT '指标ID',
+                                                      `indicator_name` varchar(100) NOT NULL COMMENT '指标名称',
+                                                      `raw_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '原始平均分',
+                                                      `normalized_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '标准化后平均分',
+                                                      `processed_average_score` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '处理后平均分',
+                                                      `abnormal_count` int NOT NULL DEFAULT 0 COMMENT '异常评分数',
+                                                      `total_abnormal_count` int NOT NULL DEFAULT 0 COMMENT '总异常评分数',
+                                                      `sample_size` int NOT NULL DEFAULT 0 COMMENT '总样本数',
+                                                      `valid_sample_size` int NOT NULL DEFAULT 0 COMMENT '有效样本数',
+                                                      `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                      PRIMARY KEY (`project_id`, `indicator_id`),
+                                                      KEY `idx_psis_project_id` (`project_id`),
+                                                      CONSTRAINT `fk_psis_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目统计汇总表（指标维度）';
+
+-- 项目统计汇总表（评委分布）
+CREATE TABLE `project_statistics_scorer_distribution_summary` (
+                                                                `project_id` bigint NOT NULL COMMENT '项目ID',
+                                                                `user_id` bigint NOT NULL COMMENT '打分用户ID',
+                                                                `user_name` varchar(100) NOT NULL COMMENT '打分用户姓名',
+                                                                `score_range` varchar(20) NOT NULL COMMENT '分数区间',
+                                                                `count` int NOT NULL DEFAULT 0 COMMENT '数量',
+                                                                `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                                PRIMARY KEY (`project_id`, `user_id`, `score_range`),
+                                                                KEY `idx_pssds_project_id` (`project_id`),
+                                                                CONSTRAINT `fk_pssds_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目统计汇总表（评委分布）';
+
 -- 评审组主表
 CREATE TABLE `reviewer_group` (
                                   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '评审组ID',

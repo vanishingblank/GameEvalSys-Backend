@@ -9,6 +9,7 @@ import com.eval.gameeval.models.VO.ScoringRecordPageVO;
 import com.eval.gameeval.models.VO.ScoringRecordVO;
 import com.eval.gameeval.models.entity.*;
 import com.eval.gameeval.service.IScoringRecordService;
+import com.eval.gameeval.util.ProjectCacheUtil;
 import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.ScoringOverviewCacheUtil;
 import com.eval.gameeval.util.ScoringRecordCacheUtil;
@@ -17,6 +18,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -62,6 +65,12 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
     @Autowired
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
+
+    @Autowired
+    private ProjectCacheUtil projectCacheUtil;
+
+    @Autowired
+    private ProjectStatisticsSummaryRebuildService projectStatisticsSummaryRebuildService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -229,6 +238,8 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
             scoringRecordCacheUtil.clearUserProjectRecordsCache(request.getProjectId(), currentUserId);
             scoringOverviewCacheUtil.clearUserOverviewCache(currentUserId);
+                projectCacheUtil.clearProjectStatisticsCache(request.getProjectId());
+            triggerProjectStatisticsSummaryRebuildAfterCommit(request.getProjectId());
             return ResponseVO.success(action + "成功", responseVO);
 
         } catch (Exception e) {
@@ -358,7 +369,7 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
-        if (ruleType == null || ruleType.isBlank()) {
+        if (ruleType == null || ruleType.trim().isEmpty()) {
             return MALICIOUS_RULE_AUTO;
         }
         String normalized = ruleType.trim().toUpperCase();
@@ -482,5 +493,24 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 })
                 .collect(Collectors.toList()));
         return responseVO;
+    }
+
+    private void triggerProjectStatisticsSummaryRebuildAfterCommit(Long projectId) {
+        if (projectId == null) {
+            return;
+        }
+
+        Runnable rebuildTask = () -> projectStatisticsSummaryRebuildService.rebuildProjectStatisticsSummaryAsync(projectId);
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rebuildTask.run();
+                }
+            });
+            log.info("已注册项目统计汇总重建任务: projectId={}", projectId);
+        } else {
+            rebuildTask.run();
+        }
     }
 }
