@@ -83,8 +83,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
             // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
-            refreshMaliciousFlags(project, groupScoreList);
-            groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
             List<ProjectStatisticsVO.GroupAverageVO> groupAverage = buildGroupAverageStatistics(groupScoreList);
 
             // 3. 查询指标评分明细，并在服务层完成评委标准化与异常检测
@@ -593,8 +591,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 writeExportError(response, HttpServletResponse.SC_NOT_FOUND, "该项目暂无打分数据");
                 return;
             }
-            refreshMaliciousFlags(project, groupScoreRows);
-            groupScoreRows = recordMapper.selectGroupScoreDetails(projectId);
 
             BigDecimal projectMean = calculateAverage(groupScoreRows.stream()
                     .map(row -> convertToBigDecimal(row.get("totalScore")))
@@ -948,57 +944,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 entries.size(),
                 validScores.size()
         );
-    }
-
-    private void refreshMaliciousFlags(Project project, List<Map<String, Object>> groupScoreRows) {
-        if (project == null || project.getId() == null) {
-            return;
-        }
-        String maliciousRuleType = normalizeMaliciousRuleType(project.getMaliciousRuleType());
-        Long projectId = project.getId();
-        if (MALICIOUS_RULE_THRESHOLD.equals(maliciousRuleType)) {
-            BigDecimal lower = project.getMaliciousScoreLower();
-            BigDecimal upper = project.getMaliciousScoreUpper();
-            if (lower == null || upper == null || lower.compareTo(upper) > 0) {
-                log.warn("项目阈值模式配置异常，回退AUTO算法: projectId={}, lower={}, upper={}",
-                        projectId, lower, upper);
-            } else {
-                recordMapper.markMaliciousByThreshold(projectId, lower, upper);
-                return;
-            }
-        }
-
-        recordMapper.clearMaliciousFlagByProjectId(projectId);
-        if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-            return;
-        }
-
-        Map<Long, List<Map<String, Object>>> groupRowsMap = groupScoreRows.stream()
-                .collect(Collectors.groupingBy(row -> toLong(row.get("groupId")), LinkedHashMap::new, Collectors.toList()));
-
-        Set<Long> maliciousRecordIds = new LinkedHashSet<>();
-        for (List<Map<String, Object>> rows : groupRowsMap.values()) {
-            if (rows == null || rows.isEmpty()) {
-                continue;
-            }
-            List<BigDecimal> rawScores = rows.stream()
-                    .map(row -> convertToBigDecimal(row.get("totalScore")))
-                    .collect(Collectors.toList());
-            OutlierDetectionResult detectionResult = detectOutlierResult(rawScores);
-            for (Integer abnormalIndex : detectionResult.getAbnormalIndexes()) {
-                if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= rows.size()) {
-                    continue;
-                }
-                Long recordId = toLong(rows.get(abnormalIndex).get("recordId"));
-                if (recordId != null && recordId > 0) {
-                    maliciousRecordIds.add(recordId);
-                }
-            }
-        }
-
-        if (!maliciousRecordIds.isEmpty()) {
-            recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
-        }
     }
 
     private String normalizeMaliciousRuleType(String ruleType) {
