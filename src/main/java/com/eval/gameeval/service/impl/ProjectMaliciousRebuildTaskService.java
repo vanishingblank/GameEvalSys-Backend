@@ -30,6 +30,9 @@ public class ProjectMaliciousRebuildTaskService {
     @Resource
     private ProjectCacheUtil projectCacheUtil;
 
+    @Resource
+    private ProjectStatisticsSummaryRebuildService projectStatisticsSummaryRebuildService;
+
     @Async
     public void rebuildProjectMaliciousFlagsAsync(Long projectId, String ruleType, BigDecimal scoreLower, BigDecimal scoreUpper) {
         updateTaskStatus(projectId, "RUNNING", "项目恶意标记重算中", 0);
@@ -100,6 +103,7 @@ public class ProjectMaliciousRebuildTaskService {
                 recordMapper.markMaliciousByRecordIds(new ArrayList<>(maliciousRecordIds));
             }
             projectCacheUtil.clearProjectStatisticsCache(projectId);
+            projectStatisticsSummaryRebuildService.rebuildProjectStatisticsSummaryAsync(projectId);
             log.info("【异步重算】项目恶意标记完成: projectId={}, maliciousCount={}", projectId, maliciousRecordIds.size());
         } catch (Exception e) {
             log.error("【异步重算】项目恶意标记失败: projectId={}", projectId, e);

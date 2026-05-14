@@ -61,7 +61,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     private ScoringIndicatorCategoryMapper categoryMapper;
 
     @Resource
-    private ScoringStandardMapper standardMapper;
+    private ProjectStatisticsSummaryMapper statisticsSummaryMapper;
 
     @Resource
     private ScoringOverviewCacheUtil scoringOverviewCacheUtil;
@@ -95,6 +95,51 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                         cached.getScorerDistribution() != null ? cached.getScorerDistribution().size() : 0);
                 return ResponseVO.success("查询成功", cached);
             }
+
+                List<ProjectStatisticsGroupSummary> groupSummaries = statisticsSummaryMapper.selectGroupSummaryByProjectId(projectId);
+                List<ProjectStatisticsIndicatorSummary> indicatorSummaries = statisticsSummaryMapper.selectIndicatorSummaryByProjectId(projectId);
+                List<ProjectStatisticsScorerDistributionSummary> scorerSummaries = statisticsSummaryMapper.selectScorerDistributionSummaryByProjectId(projectId);
+
+                if (!groupSummaries.isEmpty() || !indicatorSummaries.isEmpty() || !scorerSummaries.isEmpty()) {
+                ProjectStatisticsVO summaryVO = new ProjectStatisticsVO()
+                    .setGroupAverage(groupSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.GroupAverageVO()
+                            .setGroupId(summary.getGroupId())
+                            .setGroupName(summary.getGroupName())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize()))
+                        .collect(Collectors.toList()))
+                    .setIndicatorAverage(indicatorSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.IndicatorAverageVO()
+                            .setIndicatorId(summary.getIndicatorId())
+                            .setIndicatorName(summary.getIndicatorName())
+                            .setRawAverageScore(summary.getRawAverageScore())
+                            .setNormalizedAverageScore(summary.getNormalizedAverageScore())
+                            .setProcessedAverageScore(summary.getProcessedAverageScore())
+                            .setAverageScore(summary.getProcessedAverageScore())
+                            .setAbnormalCount(summary.getAbnormalCount())
+                            .setTotalAbnormalCount(summary.getTotalAbnormalCount())
+                            .setSampleSize(summary.getSampleSize())
+                            .setValidSampleSize(summary.getValidSampleSize()))
+                        .collect(Collectors.toList()))
+                    .setScorerDistribution(scorerSummaries.stream()
+                        .map(summary -> new ProjectStatisticsVO.ScorerDistributionVO()
+                            .setUserId(summary.getUserId())
+                            .setUserName(summary.getUserName())
+                            .setScoreRange(summary.getScoreRange())
+                            .setCount(summary.getCount()))
+                        .collect(Collectors.toList()));
+
+                projectCacheUtil.cacheProjectStatistics(projectId, summaryVO);
+                log.info("【汇总表命中】获取项目统计: projectId={}, groups={}, indicators={}, scorers={}",
+                    projectId, groupSummaries.size(), indicatorSummaries.size(), scorerSummaries.size());
+                return ResponseVO.success("查询成功", summaryVO);
+                }
 
             // 2. 查询小组评分明细，并在服务层完成评委标准化与异常检测
             List<Map<String, Object>> groupScoreList = recordMapper.selectGroupScoreDetails(projectId);
@@ -1287,14 +1332,6 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         }
         List<ScoringIndicator> indicators = indicatorMapper.selectByStandardId(project.getStandardId());
         return indicators != null ? indicators : Collections.emptyList();
-    }
-
-    private String getScoringStandardName(Project project) {
-        if (project.getStandardId() == null) {
-            return "-";
-        }
-        ScoringStandard standard = standardMapper.selectById(project.getStandardId());
-        return standard != null ? standard.getName() : "-";
     }
 
     private String formatDecimal(BigDecimal value) {
