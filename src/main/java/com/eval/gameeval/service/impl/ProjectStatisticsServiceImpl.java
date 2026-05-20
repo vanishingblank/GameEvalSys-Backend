@@ -157,7 +157,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                         ProjectStatisticsVO.ScorerDistributionVO vo = new ProjectStatisticsVO.ScorerDistributionVO();
                         vo.setUserId(((Number) map.get("userId")).longValue());
                         vo.setUserName((String) map.get("userName"));
-                        vo.setScoreRange((String) map.get("scoreRange"));
+                        vo.setScoreRange(buildScoreRangeText(map.get("minScore"), map.get("maxScore")));
                         vo.setCount(((Number) map.get("count")).intValue());
                         return vo;
                     })
@@ -357,6 +357,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 return;
             }
 
+            List<ProjectGroup> projectGroups = groupMapper.selectByProjectId(projectId);
+
             // 4. 查询所有明细（批量）
             List<Long> recordIds = records.stream().map(ScoringRecord::getId).collect(Collectors.toList());
             List<ScoringRecordDetail> allDetails = detailMapper.selectByRecordIds(recordIds);
@@ -400,6 +402,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
 
             Map<Long, String> groupNameCache = new HashMap<>();
             Map<Long, String> userNameCache = new HashMap<>();
+
+            List<List<Object>> incompleteScorerRows = buildIncompleteScorerRows(projectGroups, records, userNameCache, groupNameCache);
 
             // 数据行（按动态指标列填充）
             for (ScoringRecord record : records) {
@@ -446,7 +450,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 exportCsv(response, fileName, rows);
             } else {
                 // Excel格式（默认）
-                exportExcel(response, fileName, rows);
+                exportExcel(response, fileName, rows, "未完成打分评委", incompleteScorerRows);
             }
 
             log.info("导出项目数据成功: projectId={}, format={}", projectId, format);
@@ -836,6 +840,29 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         writer.write(rows);
 
         // 输出到浏览器
+        writer.flush(response.getOutputStream());
+        writer.close();
+    }
+
+    /**
+     * 导出Excel（双表）
+     */
+    private void exportExcel(HttpServletResponse response, String fileName, List<List<Object>> rows,
+                             String secondSheetName, List<List<Object>> secondRows) throws IOException {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName + ".xlsx");
+
+        ExcelWriter writer = ExcelUtil.getWriter(true);
+        writer.renameSheet(0, "项目打分明细");
+        writer.write(rows);
+
+        if (secondRows != null && !secondRows.isEmpty()) {
+            writer.setSheet(secondSheetName);
+            writer.write(secondRows);
+        }
+
         writer.flush(response.getOutputStream());
         writer.close();
     }
@@ -1342,6 +1369,15 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         return normalized.scale() < 0 ? normalized.setScale(0).toPlainString() : normalized.toPlainString();
     }
 
+    private String buildScoreRangeText(Object minScore, Object maxScore) {
+        BigDecimal min = convertToBigDecimal(minScore);
+        BigDecimal max = convertToBigDecimal(maxScore);
+        if (min.compareTo(max) == 0) {
+            return formatDecimal(min) + "分";
+        }
+        return formatDecimal(min) + "-" + formatDecimal(max) + "分";
+    }
+
     private String buildThresholdRuleDesc(Project project) {
         if (project == null) {
             return "阈值模式";
@@ -1351,6 +1387,84 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
         }
         return "x < " + formatDecimal(project.getMaliciousScoreLower()) +
                 " 或 x > " + formatDecimal(project.getMaliciousScoreUpper());
+    }
+
+    private List<List<Object>> buildIncompleteScorerRows(List<ProjectGroup> projectGroups,
+                                                         List<ScoringRecord> records,
+                                                         Map<Long, String> userNameCache,
+                                                         Map<Long, String> groupNameCache) {
+        List<List<Object>> rows = new ArrayList<>();
+
+        List<Object> header = new ArrayList<>();
+        header.add("评委ID");
+        header.add("评委姓名");
+        header.add("项目总小组数");
+        header.add("已打分小组数");
+        header.add("未打分小组数量");
+        header.add("未打分小组信息");
+        rows.add(header);
+
+        if (projectGroups == null || projectGroups.isEmpty() || records == null || records.isEmpty()) {
+            return rows;
+        }
+
+        List<Long> allGroupIds = projectGroups.stream()
+                .map(ProjectGroup::getGroupInfoId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (allGroupIds.isEmpty()) {
+            return rows;
+        }
+
+        Map<Long, Set<Long>> userScoredGroupIds = new LinkedHashMap<>();
+        Set<Long> userIds = new LinkedHashSet<>();
+        for (ScoringRecord record : records) {
+            if (record == null || record.getUserId() == null || record.getGroupInfoId() == null) {
+                continue;
+            }
+            userIds.add(record.getUserId());
+            userScoredGroupIds.computeIfAbsent(record.getUserId(), key -> new LinkedHashSet<>())
+                    .add(record.getGroupInfoId());
+        }
+
+        List<Long> sortedUserIds = userIds.stream().sorted().collect(Collectors.toList());
+        for (Long userId : sortedUserIds) {
+            Set<Long> scoredGroupIds = userScoredGroupIds.getOrDefault(userId, Collections.emptySet());
+            List<Long> missingGroupIds = allGroupIds.stream()
+                    .filter(groupId -> !scoredGroupIds.contains(groupId))
+                    .collect(Collectors.toList());
+
+            if (missingGroupIds.isEmpty()) {
+                continue;
+            }
+
+            String userName = userNameCache.computeIfAbsent(userId, id -> {
+                User user = userMapper.selectById(id);
+                return user != null ? user.getName() : "未知";
+            });
+
+            List<Object> row = new ArrayList<>();
+            row.add(userId);
+            row.add(userName);
+            row.add(allGroupIds.size());
+            row.add(scoredGroupIds.size());
+            row.add(missingGroupIds.size());
+            row.add(missingGroupIds.stream()
+                    .map(groupId -> buildGroupDisplayText(groupId, groupNameCache))
+                    .collect(Collectors.joining("；")));
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    private String buildGroupDisplayText(Long groupId, Map<Long, String> groupNameCache) {
+        String groupName = groupNameCache.computeIfAbsent(groupId, id -> {
+            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(id);
+            return groupInfo != null ? groupInfo.getName() : "未知";
+        });
+        return groupName + "(ID:" + groupId + ")";
     }
 
     private Long toLong(Object value) {

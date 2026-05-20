@@ -147,20 +147,14 @@ public interface ScoringRecordMapper {
     @Select("SELECT " +
             "  u.id AS userId, " +
             "  u.name AS userName, " +
-            "  CASE " +
-            "    WHEN sr.total_score >= 0 AND sr.total_score < 2 THEN '0-2分' " +
-            "    WHEN sr.total_score >= 2 AND sr.total_score < 4 THEN '2-4分' " +
-            "    WHEN sr.total_score >= 4 AND sr.total_score < 6 THEN '4-6分' " +
-            "    WHEN sr.total_score >= 6 AND sr.total_score < 8 THEN '6-8分' " +
-            "    WHEN sr.total_score >= 8 AND sr.total_score <= 10 THEN '8-10分' " +
-            "    ELSE '其他' " +
-            "  END AS scoreRange, " +
+            "  MIN(sr.total_score) AS minScore, " +
+            "  MAX(sr.total_score) AS maxScore, " +
             "  COUNT(*) AS count " +
             "FROM scoring_record sr " +
             "JOIN sys_user u ON sr.user_id = u.id " +
             "WHERE sr.project_id = #{projectId} " +
-            "GROUP BY u.id, u.name, scoreRange " +
-            "ORDER BY u.id, scoreRange")
+            "GROUP BY u.id, u.name " +
+            "ORDER BY u.id")
     List<Map<String, Object>> selectScorerDistribution(@Param("projectId") Long projectId);
 
     /**

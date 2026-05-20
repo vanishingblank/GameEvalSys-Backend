@@ -261,11 +261,28 @@ public class ProjectStatisticsSummaryRebuildService {
                     .setProjectId(projectId)
                     .setUserId(toLong(row.get("userId")))
                     .setUserName(row.get("userName") != null ? row.get("userName").toString() : "-")
-                    .setScoreRange(row.get("scoreRange") != null ? row.get("scoreRange").toString() : "-")
+                    .setScoreRange(buildScoreRangeText(row.get("minScore"), row.get("maxScore")))
                     .setCount(toInteger(row.get("count")))
                     .setUpdatedTime(now));
         }
         return results;
+    }
+
+    private String buildScoreRangeText(Object minScore, Object maxScore) {
+        BigDecimal min = convertToBigDecimal(minScore);
+        BigDecimal max = convertToBigDecimal(maxScore);
+        if (min.compareTo(max) == 0) {
+            return formatDecimal(min) + "分";
+        }
+        return formatDecimal(min) + "-" + formatDecimal(max) + "分";
+    }
+
+    private String formatDecimal(BigDecimal value) {
+        if (value == null) {
+            return "-";
+        }
+        BigDecimal normalized = value.stripTrailingZeros();
+        return normalized.scale() < 0 ? normalized.setScale(0).toPlainString() : normalized.toPlainString();
     }
 
     private Map<Long, NormalizationStats> buildScorerStats(List<Map<String, Object>> rows, String userKey, String scoreKey) {
