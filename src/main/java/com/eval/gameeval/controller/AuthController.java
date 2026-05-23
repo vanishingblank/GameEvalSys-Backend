@@ -4,7 +4,9 @@ import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
+import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.RouteNodeVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
@@ -60,6 +62,20 @@ public class AuthController {
         LoginMetaDTO meta = buildLoginMeta(request);
         ResponseVO<LoginResponseVO> response = authService.login(loginRequest, meta);
         writeRefreshCookie(httpServletResponse, response.getData() != null ? response.getData().getRefreshToken() : null);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ResponseVO<AuthProfileVO>> getCurrentUserProfile() {
+        Long userId = currentUserContext.getCurrentUserId();
+        ResponseVO<AuthProfileVO> response = authService.getCurrentUserProfile(userId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/routes")
+    public ResponseEntity<ResponseVO<List<RouteNodeVO>>> getCurrentUserRoutes() {
+        Long userId = currentUserContext.getCurrentUserId();
+        ResponseVO<List<RouteNodeVO>> response = authService.getCurrentUserRoutes(userId);
         return ResponseEntity.ok(response);
     }
 
