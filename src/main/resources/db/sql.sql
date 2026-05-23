@@ -17,6 +17,107 @@ CREATE TABLE `sys_user` (
                             KEY `idx_is_deleted_enabled` (`is_deleted`,`is_enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
+-- 菜单路由表
+CREATE TABLE `sys_menu` (
+                           `id` bigint NOT NULL AUTO_INCREMENT COMMENT '菜单ID',
+                           `parent_id` bigint DEFAULT 0 COMMENT '父级菜单ID，顶级为0',
+                           `menu_code` varchar(64) NOT NULL COMMENT '菜单编码',
+                           `menu_type` varchar(20) NOT NULL COMMENT '菜单类型：dir/menu/button',
+                           `title` varchar(100) NOT NULL COMMENT '标题',
+                           `path` varchar(255) NOT NULL COMMENT '路由路径',
+                           `route_name` varchar(64) NOT NULL COMMENT '路由名称',
+                           `icon` varchar(64) DEFAULT '' COMMENT '图标',
+                           `hidden` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否隐藏',
+                           `component_code` varchar(64) DEFAULT '' COMMENT '前端组件映射编码',
+                           `sort_num` int NOT NULL DEFAULT 0 COMMENT '排序号',
+                           `is_enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+                           `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否删除',
+                           `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                           `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                           PRIMARY KEY (`id`),
+                           UNIQUE KEY `uk_menu_code` (`menu_code`),
+                           KEY `idx_parent_id` (`parent_id`),
+                           KEY `idx_sort_num` (`sort_num`),
+                           KEY `idx_enabled_deleted` (`is_enabled`,`is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='菜单路由表';
+
+-- 角色菜单关联表
+CREATE TABLE `sys_role_menu` (
+                                `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+                                `role_code` varchar(32) NOT NULL COMMENT '角色编码',
+                                `menu_code` varchar(64) NOT NULL COMMENT '菜单编码',
+                                `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                PRIMARY KEY (`id`),
+                                UNIQUE KEY `uk_role_menu` (`role_code`, `menu_code`),
+                                KEY `idx_role_code` (`role_code`),
+                                KEY `idx_menu_code` (`menu_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单关联表';
+
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_code`, `menu_type`, `title`, `path`, `route_name`, `icon`, `hidden`, `component_code`, `sort_num`, `is_enabled`, `is_deleted`) VALUES
+(1, 0, 'home', 'menu', '首页', '/home', 'home', 'HomeFilled', 0, 'normal-home', 1, 1, 0),
+(2, 0, 'scoring', 'dir', '评分中心', '/scoring', 'scoringRoot', 'EditPen', 0, '', 2, 1, 0),
+(3, 2, 'scoring-list', 'menu', '打分项目列表', '/scoring/list', 'scoringList', 'List', 0, 'normal-scoring-list', 1, 1, 0),
+(4, 2, 'scoring-project', 'menu', '项目打分', '/scoring/:projectId', 'projectScoring', 'Edit', 1, 'normal-project-scoring', 2, 1, 0),
+(5, 2, 'scoring-groups', 'menu', '评分分组', '/scoring/groups', 'scoringGroups', 'Connection', 0, 'normal-scoring-groups', 3, 1, 0),
+(6, 0, 'admin', 'dir', '管理面板', '/admin', 'adminRoot', 'Setting', 0, '', 3, 1, 0),
+(7, 6, 'admin-project', 'menu', '项目管理', '/admin/project', 'projectList', 'Management', 0, 'admin-project-list', 5, 1, 0),
+(20, 6, 'admin-project-group', 'menu', '项目受审队伍管理', '/admin/project-groups', 'projectGroupList', 'User', 0, 'admin-project-group', 4, 1, 0),
+(8, 7, 'admin-project-edit', 'menu', '编辑项目', '/admin/project/edit/:id', 'projectEdit', 'Management', 1, 'admin-project-edit', 1, 1, 0),
+(9, 7, 'admin-project-statistic', 'menu', '项目打分统计', '/admin/project/statistic', 'projectStatisticList', 'DataAnalysis', 0, 'admin-project-statistic', 2, 1, 0),
+(10, 9, 'admin-project-statistic-detail', 'menu', '打分统计详情', '/admin/project/statistic/:projectId', 'projectStatisticDetail', 'DataAnalysis', 1, 'admin-project-statistic-detail', 1, 1, 0),
+(11, 6, 'admin-reviewer-group', 'menu', '评审队伍管理', '/admin/reviewer-group', 'reviewerGroupList', 'UserFilled', 0, 'admin-reviewer-group', 1, 1, 0),
+(12, 11, 'admin-reviewer-group-add', 'menu', '评审队伍添加', '/admin/reviewer-groups/add', 'reviewerGroupAdd', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 1, 1, 0),
+(13, 11, 'admin-reviewer-group-edit', 'menu', '评审队伍编辑', '/admin/reviewer-groups/edit/:id', 'reviewerGroupEdit', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 2, 1, 0),
+(14, 6, 'admin-scoring-stds', 'menu', '打分标准', '/admin/scoring-stds', 'scoringStdList', 'Checked', 0, 'admin-scoring-stds', 3, 1, 0),
+(15, 6, 'admin-user', 'menu', '用户管理', '/admin/user', 'userList', 'User', 0, 'admin-user', 2, 1, 0),
+(16, 6, 'admin-statistic', 'menu', '平台统计', '/admin/statistic', 'adminStatistic', 'Histogram', 0, 'admin-statistic', 1, 1, 0),
+(17, 6, 'super-monitor', 'dir', '系统监控', '/super-admin/monitor', 'monitorRoot', 'Monitor', 0, '', 6, 1, 0),
+(18, 17, 'super-monitor-online', 'menu', '用户在线管理', '/super-admin/monitor/online', 'monitorOnline', 'UserFilled', 0, 'super-monitor-online', 2, 1, 0),
+(19, 17, 'super-monitor-server', 'menu', '服务器面板', '/super-admin/monitor/server', 'monitorServer', 'DataLine', 0, 'super-monitor-server', 1, 1, 0);
+
+INSERT INTO `sys_role_menu` (`role_code`, `menu_code`) VALUES
+('normal', 'home'),
+('scorer', 'home'),
+('scorer', 'scoring'),
+('scorer', 'scoring-list'),
+('scorer', 'scoring-project'),
+('scorer', 'scoring-groups'),
+('admin', 'home'),
+('admin', 'admin'),
+('admin', 'admin-project'),
+('admin', 'admin-project-edit'),
+('admin', 'admin-project-statistic'),
+('admin', 'admin-project-statistic-detail'),
+('admin', 'admin-reviewer-group'),
+('admin', 'admin-reviewer-group-add'),
+('admin', 'admin-reviewer-group-edit'),
+('admin', 'admin-scoring-stds'),
+('admin', 'admin-user'),
+('admin', 'admin-statistic'),
+('admin', 'admin-project-group'),
+('admin', 'super-monitor'),
+('admin', 'super-monitor-online'),
+('admin', 'super-monitor-server'),
+('super_admin', 'home'),
+('super_admin', 'scoring'),
+('super_admin', 'scoring-list'),
+('super_admin', 'scoring-project'),
+('super_admin', 'admin'),
+('super_admin', 'admin-project'),
+('super_admin', 'admin-project-edit'),
+('super_admin', 'admin-project-statistic'),
+('super_admin', 'admin-project-statistic-detail'),
+('super_admin', 'admin-reviewer-group'),
+('super_admin', 'admin-reviewer-group-add'),
+('super_admin', 'admin-reviewer-group-edit'),
+('super_admin', 'admin-scoring-stds'),
+('super_admin', 'admin-user'),
+('super_admin', 'admin-statistic'),
+('super_admin', 'admin-project-group'),
+('super_admin', 'super-monitor'),
+('super_admin', 'super-monitor-online'),
+('super_admin', 'super-monitor-server');
+
 -- 打分标准主表
 CREATE TABLE `scoring_standard` (
                                     `id` bigint NOT NULL AUTO_INCREMENT COMMENT '标准ID',
