@@ -24,11 +24,11 @@
 - 可行性结论：可行。主要工作量为新增菜单持久层与路由生成服务，以及管理端的菜单维护接口；鉴于现有认证会话设计，权限变更可以通过更新 `tokenVersion` / 会话存储实现即时生效。
 
 实现建议（针对本项目）：
+
 - 新增 `sys_menu` / `sys_role_menu` 等表并编写对应的 SQL 迁移脚本（或在现有迁移工具中添加）；
 - 在后端实现 `Menu` 实体、`MenuRepository`、`MenuService` 与 `MenuController`；对外暴露最小接口 `GET /auth/me`（可选，用于返回用户基本信息与角色）、`GET /auth/routes`（返回当前用户路由树）、以及管理端的 `GET/POST/PUT/DELETE /admin/menus`；
 - 复用 `RedisToken` / `AuthSessionStore` 中的 `tokenVersion` 与会话黑名单逻辑，确保角色/菜单变更后会话失效或在刷新时生效；
 - 前端仍通过本地 `routeMap` 完成 `routeCode -> component` 的映射，后端仅提供白名单级的 `componentCode`/`menuCode` 等元数据。
-
 
 ### 2.1 为什么不直接下发前端组件路径
 
@@ -157,37 +157,43 @@
 返回示例：
 
 ```json
-[
-  {
-    "menuCode": "home",
-    "path": "/home",
-    "routeName": "home",
-    "title": "首页",
-    "icon": "HomeFilled",
-    "hidden": false,
-    "componentCode": "normal-home",
-    "children": []
-  },
-  {
-    "menuCode": "admin",
-    "path": "/admin",
-    "routeName": "adminRoot",
-    "title": "管理面板",
-    "icon": "Setting",
-    "hidden": false,
-    "children": [
-      {
-        "menuCode": "admin-project",
-        "path": "/admin/project",
-        "routeName": "projectList",
-        "title": "项目管理",
-        "componentCode": "admin-project-list",
-        "hidden": false
-      }
-    ]
-  }
-]
+{
+  "code": 200,
+  "message": "查询成功",
+  "data": [
+    {
+      "menuCode": "home",
+      "path": "/home",
+      "routeName": "home",
+      "title": "首页",
+      "icon": "HomeFilled",
+      "hidden": false,
+      "componentCode": "normal-home",
+      "children": []
+    },
+    {
+      "menuCode": "admin",
+      "path": "/admin",
+      "routeName": "adminRoot",
+      "title": "管理面板",
+      "icon": "Setting",
+      "hidden": false,
+      "children": [
+        {
+          "menuCode": "admin-project",
+          "path": "/admin/project",
+          "routeName": "projectList",
+          "title": "项目管理",
+          "componentCode": "admin-project-list",
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}
 ```
+
+说明：本项目前端请求封装 `src/utils/request.js` 在 `code===200` 时返回 `{ code, message, data }`，因此 `GET /auth/routes` 也应保持相同响应外层结构。
 
 ### 5.3 管理端菜单配置
 
@@ -273,6 +279,67 @@ com.example.project
 - `src/layouts/components/side-bar/index.vue`
   - 改为基于注入后的路由或同一份路由树生成菜单
 
+## 附：前端 `componentCode` 映射表（供后端对接参考）
+
+为了避免前后端耦合，后端只下发白名单级的 `componentCode`，前端根据本地映射表将 `componentCode` 转为实际组件。下面是基于当前仓库的推荐映射示例（请在需要时扩展）：
+
+| componentCode           | 前端组件路径                                                                                                    | 建议的 routeName    | 描述             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------- |
+| `normal-home`           | [src/pages/normal/home/HomePage.vue](src/pages/normal/home/HomePage.vue#L1)                                     | `home`              | 首页             |
+| `normal-scoring-list`   | [src/pages/normal/scoring/list/index.vue](src/pages/normal/scoring/list/index.vue#L1)                           | `scoringList`       | 评分条目列表     |
+| `normal-scoring-groups` | [src/pages/normal/scoring/groups/index.vue](src/pages/normal/scoring/groups/index.vue#L1)                       | `scoringGroups`     | 评分分组管理     |
+| `admin-project-list`    | [src/pages/admin/project/list/index.vue](src/pages/admin/project/list/index.vue#L1)                             | `projectList`       | 项目管理列表     |
+| `admin-project-edit`    | [src/pages/admin/project/edit/index.vue](src/pages/admin/project/edit/index.vue#L1)                             | `projectEdit`       | 项目编辑页       |
+| `admin-project-group`   | [src/pages/admin/project-group/index.vue](src/pages/admin/project-group/index.vue#L1)                           | `projectGroup`      | 项目分组         |
+| `admin-reviewer-group`  | [src/pages/admin/reviewer-group/ReviewerGroupList.vue](src/pages/admin/reviewer-group/ReviewerGroupList.vue#L1) | `reviewerGroupList` | 评分组管理       |
+| `admin-user`            | [src/pages/admin/user/index.vue](src/pages/admin/user/index.vue#L1)                                             | `userList`          | 用户管理         |
+| `admin-statistic`       | [src/pages/admin/statistic/StatisticPannel.vue](src/pages/admin/statistic/StatisticPannel.vue#L1)               | `adminStatistic`    | 管理端统计面板   |
+| `public-login`          | [src/pages/public/login/LoginPage.vue](src/pages/public/login/LoginPage.vue#L1)                                 | `login`             | 登录页           |
+| `public-notfound`       | [src/pages/public/404/NotFound.vue](src/pages/public/404/NotFound.vue#L1)                                       | `notFound`          | 404 页面（兜底） |
+| `super-monitor-server`  | [src/pages/super-admin/monitor/server/index.vue](src/pages/super-admin/monitor/server/index.vue#L1)             | `monitorServer`     | 监控 - 服务页    |
+
+如何在前端注册：
+
+1. 本表放置在 `src/router/routeMap.js` 中（已有 `routeMap` 对象）。修改示例：
+
+```js
+// 在 src/router/routeMap.js 中添加或扩展条目
+export const routeMap = {
+  "normal-home": () => import("@/pages/normal/home/HomePage.vue"),
+  "normal-scoring-list": () => import("@/pages/normal/scoring/list/index.vue"),
+  "normal-scoring-groups": () => import("@/pages/normal/scoring/groups/index.vue"),
+  "admin-project-list": () => import("@/pages/admin/project/list/index.vue"),
+  "admin-project-edit": () => import("@/pages/admin/project/edit/index.vue"),
+  "admin-project-group": () => import("@/pages/admin/project-group/index.vue"),
+  "admin-reviewer-group": () => import("@/pages/admin/reviewer-group/ReviewerGroupList.vue"),
+  "admin-user": () => import("@/pages/admin/user/index.vue"),
+  "admin-statistic": () => import("@/pages/admin/statistic/StatisticPannel.vue"),
+  "public-login": () => import("@/pages/public/login/LoginPage.vue"),
+  "public-notfound": () => import("@/pages/public/404/NotFound.vue"),
+  "super-monitor-server": () => import("@/pages/super-admin/monitor/server/index.vue"),
+};
+```
+
+2. 后端下发的 `/auth/routes` 中 `componentCode` 字段应使用表中约定值；若返回值中的 `componentCode` 未命中，前端会渲染 `NotFound` 作为兜底。
+
+3. 新增页面时：先在 `src/pages/...` 下实现页面，再在 `src/router/routeMap.js` 注册新的 `componentCode`，最后在后端菜单管理中使用该 `componentCode`。
+
+4. 后端示例节点（最小字段）：
+
+```json
+{
+  "menuCode": "admin-project",
+  "path": "/admin/project",
+  "routeName": "projectList",
+  "title": "项目管理",
+  "icon": "Management",
+  "componentCode": "admin-project-list",
+  "children": []
+}
+```
+
+以上映射表为建议起点；在对接前请双方（前后端）确认最终的 `componentCode` 命名规范和新增流程。
+
 ## 9. 安全要求
 
 - 不能只依赖前端隐藏菜单，后端必须对所有敏感接口做权限校验
@@ -311,30 +378,36 @@ com.example.project
 下面的 TODO 是结合当前项目代码（已有 `AuthController`/`SecurityConfig`/`TokenAuthenticationFilter` 等）给出的优先级与执行建议：
 
 1. 数据库与迁移
-  - 新增 `sys_menu`、`sys_role_menu`、`sys_user_role` 的建表 SQL，并在项目的迁移脚本或部署流程中加入（MIGRATION）。
+
+- 新增 `sys_menu`、`sys_role_menu`、`sys_user_role` 的建表 SQL，并在项目的迁移脚本或部署流程中加入（MIGRATION）。
 
 2. 后端模型与仓库
-  - 新增 `Menu` 实体、`MenuRepository`（使用 Spring Data JPA 或 MyBatis），并编写基本的 CRUD 方法。
+
+- 新增 `Menu` 实体、`MenuRepository`（使用 Spring Data JPA 或 MyBatis），并编写基本的 CRUD 方法。
 
 3. 服务层与路由生成
-  - 实现 `MenuService`，提供 `List<MenuVO> buildMenuTreeForUser(Long userId)` 方法；该方法应基于用户角色查询 `sys_role_menu` 并返回树形结构。
+
+- 实现 `MenuService`，提供 `List<MenuVO> buildMenuTreeForUser(Long userId)` 方法；该方法应基于用户角色查询 `sys_role_menu` 并返回树形结构。
 
 4. 控制器与 API
-  - 新增 `GET /auth/routes`：返回当前用户可访问的路由树（无须返回前端组件路径，只返回 `menuCode/componentCode/path/title/permissionCodes` 等元数据）。
-  - 新增管理 API：`/admin/menus` 的 `GET/POST/PUT/DELETE`，并在 `SecurityConfig` 中仅允许 `ROLE_admin`/`ROLE_super_admin` 访问。
-  - （可选）新增 `GET /auth/me` 返回当前用户基本信息与角色数组，便于前端在启动时恢复状态。
+
+- 新增 `GET /auth/routes`：返回当前用户可访问的路由树（无须返回前端组件路径，只返回 `menuCode/componentCode/path/title/permissionCodes` 等元数据）。
+- 新增管理 API：`/admin/menus` 的 `GET/POST/PUT/DELETE`，并在 `SecurityConfig` 中仅允许 `ROLE_admin`/`ROLE_super_admin` 访问。
+- （可选）新增 `GET /auth/me` 返回当前用户基本信息与角色数组，便于前端在启动时恢复状态。
 
 5. 会话失效与一致性
-  - 复用现有 `AuthSessionStore` / `tokenVersion` 机制：在角色或菜单权限变更时更新 `tokenVersion` 或删除相关会话，以保证旧 token 在刷新时失效。
+
+- 复用现有 `AuthSessionStore` / `tokenVersion` 机制：在角色或菜单权限变更时更新 `tokenVersion` 或删除相关会话，以保证旧 token 在刷新时失效。
 
 6. 前端对接文档
-  - 在仓库 `docs/` 中补充前端对接说明，示例：如何将后端返回的 `menuCode/componentCode` 映射到本地 `routeMap`。
+
+- 在仓库 `docs/` 中补充前端对接说明，示例：如何将后端返回的 `menuCode/componentCode` 映射到本地 `routeMap`。
 
 7. 测试与验收
-  - 为 `MenuService` 和 `MenuController` 编写单元测试与集成测试，覆盖权限过滤与路由树生成逻辑。
+
+- 为 `MenuService` 和 `MenuController` 编写单元测试与集成测试，覆盖权限过滤与路由树生成逻辑。
 
 优先级建议：先做 1-4 达成最小闭环（MVP），再推进 5-7。
-
 
 ## 11. 验收标准
 
