@@ -29,6 +29,46 @@
 - **请求参数**：
   | 参数名 | 类型 | 必填 | 说明 |
   |--------|------|------|------|
+        {
+          "menuCode": "scoring",
+          "path": "/scoring",
+          "routeName": "scoringRoot",
+          "title": "评分中心",
+          "icon": "EditPen",
+          "hidden": false,
+          "children": [
+            {
+              "menuCode": "scoring-list",
+              "path": "/scoring/list",
+              "routeName": "scoringList",
+              "title": "评分条目",
+              "icon": "List",
+              "hidden": false,
+              "componentCode": "normal-scoring-list",
+              "children": []
+            },
+            {
+              "menuCode": "scoring-project",
+              "path": "/scoring/:projectId",
+              "routeName": "projectScoring",
+              "title": "项目打分",
+              "icon": "Edit",
+              "hidden": true,
+              "componentCode": "normal-project-scoring",
+              "children": []
+            },
+            {
+              "menuCode": "scoring-groups",
+              "path": "/scoring/groups",
+              "routeName": "scoringGroups",
+              "title": "评分分组",
+              "icon": "Connection",
+              "hidden": false,
+              "componentCode": "normal-scoring-groups",
+              "children": []
+            }
+          ]
+        },
   | username | string | 是 | 用户名 |
   | password | string | 是 | 密码 |
 - **响应示例**：
@@ -44,8 +84,132 @@
       "userInfo": {
         "id": 1,
         "username": "admin",
-        "role": "super_admin",
+              "componentCode": "admin-project-list",
+              "children": [
+                {
+                  "menuCode": "admin-project-edit",
+                  "path": "/admin/project/edit/:id",
+                  "routeName": "projectEdit",
+                  "title": "编辑项目",
+                  "icon": "Management",
+                  "hidden": true,
+                  "componentCode": "admin-project-edit",
+                  "children": []
+                },
+                {
+                  "menuCode": "admin-project-statistic",
+                  "path": "/admin/project/statistic",
+                  "routeName": "projectStatisticList",
+                  "title": "项目打分统计",
+                  "icon": "DataAnalysis",
+                  "hidden": false,
+                  "componentCode": "admin-project-statistic",
+                  "children": [
+                    {
+                      "menuCode": "admin-project-statistic-detail",
+                      "path": "/admin/project/statistic/:projectId",
+                      "routeName": "projectStatisticDetail",
+                      "title": "打分统计详情",
+                      "icon": "DataAnalysis",
+                      "hidden": true,
+                      "componentCode": "admin-project-statistic-detail",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
         "name": "超级管理员"
+            {
+              "menuCode": "admin-reviewer-group",
+              "path": "/admin/reviewer-group",
+              "routeName": "reviewerGroupList",
+              "title": "评分组管理",
+              "icon": "UserFilled",
+              "hidden": false,
+              "componentCode": "admin-reviewer-group",
+              "children": [
+                {
+                  "menuCode": "admin-reviewer-group-add",
+                  "path": "/admin/reviewer-group/add",
+                  "routeName": "reviewerGroupAdd",
+                  "title": "评审队伍添加",
+                  "icon": "OfficeBuilding",
+                  "hidden": true,
+                  "componentCode": "admin-reviewer-group-upsert",
+                  "children": []
+                },
+                {
+                  "menuCode": "admin-reviewer-group-edit",
+                  "path": "/admin/reviewer-group/edit/:id",
+                  "routeName": "reviewerGroupEdit",
+                  "title": "评审队伍编辑",
+                  "icon": "OfficeBuilding",
+                  "hidden": true,
+                  "componentCode": "admin-reviewer-group-upsert",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "menuCode": "admin-scoring-stds",
+              "path": "/admin/scoring-stds",
+              "routeName": "scoringStdList",
+              "title": "打分标准",
+              "icon": "Checked",
+              "hidden": false,
+              "componentCode": "admin-scoring-stds",
+              "children": []
+            },
+            {
+              "menuCode": "admin-user",
+              "path": "/admin/user",
+              "routeName": "userList",
+              "title": "用户管理",
+              "icon": "User",
+              "hidden": false,
+              "componentCode": "admin-user",
+              "children": []
+            },
+            {
+              "menuCode": "admin-statistic",
+              "path": "/admin/statistic",
+              "routeName": "adminStatistic",
+              "title": "统计面板",
+              "icon": "Histogram",
+              "hidden": false,
+              "componentCode": "admin-statistic",
+              "children": []
+            },
+            {
+              "menuCode": "super-monitor",
+              "path": "/admin/monitor",
+              "routeName": "monitorRoot",
+              "title": "系统监控",
+              "icon": "Monitor",
+              "hidden": false,
+              "children": [
+                {
+                  "menuCode": "super-monitor-online",
+                  "path": "/admin/monitor/online",
+                  "routeName": "monitorOnline",
+                  "title": "在线用户",
+                  "icon": "UserFilled",
+                  "hidden": false,
+                  "componentCode": "super-monitor-online",
+                  "children": []
+                },
+                {
+                  "menuCode": "super-monitor-server",
+                  "path": "/admin/monitor/server",
+                  "routeName": "monitorServer",
+                  "title": "服务监控",
+                  "icon": "DataLine",
+                  "hidden": false,
+                  "componentCode": "super-monitor-server",
+                  "children": []
+                }
+              ]
+            }
       }
     }
   }
@@ -113,6 +277,151 @@
     ]
   }
   ```
+
+### 1.4.1 获取当前用户动态路由树
+
+- **接口地址**：`/auth/routes`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **说明**：用于前端动态路由注入。后端返回菜单/路由树，前端通过本地 `componentCode -> component` 白名单映射渲染页面。
+- **响应示例**：
+
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": [
+      {
+        "menuCode": "home",
+        "path": "/home",
+        "routeName": "home",
+        "title": "首页",
+        "icon": "HomeFilled",
+        "hidden": false,
+        "componentCode": "normal-home",
+        "children": []
+      },
+      {
+        "menuCode": "admin",
+        "path": "/admin",
+        "routeName": "adminRoot",
+        "title": "管理面板",
+        "icon": "Setting",
+        "hidden": false,
+        "children": [
+          {
+            "menuCode": "admin-project",
+            "path": "/admin/project",
+            "routeName": "projectList",
+            "title": "项目管理",
+            "icon": "Management",
+            "hidden": false,
+            "componentCode": "admin-project-list"
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+- **字段约束建议**：
+  - `menuCode`、`routeName` 在同一树内应唯一。
+  - `componentCode` 仅返回白名单值，不返回前端源码路径。
+  - `hidden=true` 仅影响菜单展示，不应绕过后端接口鉴权。
+
+### 1.4.2 获取当前用户信息
+
+- **接口地址**：`/auth/me`
+- **请求方式**：GET
+- **请求头**：`Authorization: Bearer {token}`
+- **说明**：用于前端在刷新或首次进入时恢复当前用户身份信息、角色和权限摘要。
+- **响应示例**：
+
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": {
+      "id": 1,
+      "username": "admin",
+      "name": "系统管理员",
+      "role": "super_admin",
+      "roles": ["super_admin"],
+      "permissions": [
+        "menu:home:view",
+        "menu:scoring:view",
+        "menu:scoring-list:view",
+        "menu:scoring-project:view",
+        "menu:scoring-groups:view",
+        "menu:admin:view",
+        "menu:admin-project:view",
+        "menu:admin-project-edit:view",
+        "menu:admin-project-statistic:view",
+        "menu:admin-project-statistic-detail:view",
+        "menu:admin-reviewer-group:view",
+        "menu:admin-reviewer-group-add:view",
+        "menu:admin-reviewer-group-edit:view",
+        "menu:admin-scoring-stds:view",
+        "menu:admin-user:view",
+        "menu:admin-statistic:view",
+        "menu:super-monitor:view",
+        "menu:super-monitor-online:view",
+        "menu:super-monitor-server:view"
+      ]
+    }
+  }
+  ```
+
+### 1.4.3 菜单管理 CRUD
+
+- **接口前缀**：`/admin/menus`
+- **权限要求**：`ROLE_admin` 或 `ROLE_super_admin`
+
+#### 1.4.3.1 查询菜单树
+
+- **接口地址**：`/admin/menus`
+- **请求方式**：GET
+- **说明**：返回可管理的菜单树，包含 `roleCodes`、`hidden`、`isEnabled` 等字段。
+
+#### 1.4.3.2 查询菜单详情
+
+- **接口地址**：`/admin/menus/{id}`
+- **请求方式**：GET
+
+#### 1.4.3.3 创建菜单
+
+- **接口地址**：`/admin/menus`
+- **请求方式**：POST
+- **请求体示例**：
+
+  ```json
+  {
+    "parentId": 5,
+    "menuCode": "admin-user",
+    "menuType": "menu",
+    "title": "用户管理",
+    "path": "/admin/user",
+    "routeName": "userList",
+    "icon": "User",
+    "hidden": false,
+    "componentCode": "admin-user",
+    "sortNum": 3,
+    "isEnabled": true,
+    "roleCodes": ["admin", "super_admin"]
+  }
+  ```
+
+#### 1.4.3.4 更新菜单
+
+- **接口地址**：`/admin/menus/{id}`
+- **请求方式**：PUT
+- **说明**：`menuCode` 不允许修改，更新时需保持与原值一致；`roleCodes` 会覆盖重建。
+
+#### 1.4.3.5 删除菜单
+
+- **接口地址**：`/admin/menus/{id}`
+- **请求方式**：DELETE
+- **说明**：删除会级联软删除当前菜单及其子菜单，并清理相关角色绑定。
 
 ### 1.5 管理员会话管理
 
@@ -218,6 +527,7 @@
     }
   }
   ```
+- `onlineCount`是最近活跃的会话数
 
 #### 1.5.5 服务监控（仅 super_admin）
 
@@ -232,6 +542,7 @@
 - **请求方式**：GET
 - **请求头**：`Authorization: Bearer {token}`
 - **响应示例**：
+
   ```json
   {
     "code": 200,
@@ -373,7 +684,7 @@
   - `/admin/monitor/logs`
 - **请求方式**：GET
 - **请求头**：`Authorization: Bearer {token}`
-- **说明**：单项接口返回与总览相同的数据片段，前端可按需调用。 
+- **说明**：单项接口返回与总览相同的数据片段，前端可按需调用。
 
 ##### 1.5.5.3 前端面板对接说明
 
@@ -388,7 +699,6 @@
   1. 页面进入时优先请求 `/admin/monitor/dashboard`，一次性拿到总览、健康、数据库、Redis、JVM、主机、配置摘要和最近日志。
   2. 如果页面需要局部刷新，再按卡片区域拆分调用 `/admin/monitor/overview`、`/admin/monitor/health`、`/admin/monitor/datasource`、`/admin/monitor/redis`、`/admin/monitor/jvm`、`/admin/monitor/os`、`/admin/monitor/config`、`/admin/monitor/logs`。
   3. 刷新周期建议为 10 秒到 30 秒，不建议高频轮询。
-  4. 后端 SSE 推送间隔可通过 `app.monitor.refresh-interval-ms` / `APP_MONITOR_REFRESH_INTERVAL_MS` 调整，最小值由 `app.monitor.refresh-min-interval-ms` / `APP_MONITOR_REFRESH_MIN_INTERVAL_MS` 兜底。
 - **页面展示建议**：
   - 顶部总览卡：应用状态、启动时间、运行时长、实例端口。
   - 中部资源卡：数据库、Redis、JVM、主机资源。
@@ -431,6 +741,7 @@
   5. 断线重连失败后切换回轮询。
 
 - **消息格式建议**：
+
   ```text
   event: health
   data: {"overallStatus":"UP","datasourceStatus":"UP","redisStatus":"UP","message":"数据库和 Redis 均正常"}
@@ -444,6 +755,7 @@
   event: logs
   data: [{"time":"2026-05-08 09:58:00","level":"WARN","content":"数据库连接池活跃连接数短暂升高"}]
   ```
+
 - **前端状态建议**：
   - `dashboardData`：首屏聚合数据
   - `realtimeData`：SSE 增量数据
@@ -467,8 +779,6 @@
   GET /admin/monitor/jvm
   Authorization: Bearer {token}
   ```
-
-  
 
 ## 2. 用户管理模块（超级管理员/管理员）
 
@@ -1632,7 +1942,7 @@
         {
           "userId": 2,
           "userName": "打分员01",
-          "scoreRange": "4.1-5.8分",
+          "scoreRange": "4-6分",
           "count": 3
         }
       ]
@@ -1677,7 +1987,6 @@
     - `THRESHOLD`：使用项目配置阈值区间，`x < lower` 或 `x > upper` 标记恶意评分。
   - **处理后平均分**：先按项目规则标记恶意评分，再在**非恶意样本**上计算标准化后的平均值。
   - **降级策略**：`AUTO` 模式在样本量过少时会跳过异常检测，仅保留标准化结果。
-
 
 ### 7.1.1 获取项目内指定小组的指标平均得分明细
 
@@ -1773,21 +2082,7 @@
 - **响应**：文件流（直接下载）
 - **说明**：
   - 导出文件包含项目的所有打分记录、小组统计、指标统计等数据
-  - Excel 导出包含 2 个 Sheet：
-    - Sheet1：项目打分明细
-    - Sheet2：未完成打分评委
   - 文件名格式：`项目名_打分统计_{时间戳}.xlsx`
-
-- **Sheet2：未完成打分评委**
-
-| 列名 | 说明 |
-|------|------|
-| 评委ID | 打分用户ID |
-| 评委姓名 | 打分用户姓名 |
-| 项目总小组数 | 当前项目包含的小组总数 |
-| 已打分小组数 | 该评委已完成打分的小组数 |
-| 未打分小组数量 | 该评委尚未打分的小组数 |
-| 未打分小组信息 | 未打分的小组名称及 ID，多个小组用 `；` 分隔 |
 
 ### 7.4 导出当前项目小组的打分数据
 
@@ -1856,20 +2151,20 @@ GET /projects/114514/export/group-indicator-items?format=excel
 
 - **导出数据列说明**
 
-| 列名         | 说明 |
-| ------------ | ---- |
-| 项目名称     | 当前项目名称 |
-| 记录ID       | 打分记录ID（`scoring_record.id`） |
-| 小组ID       | 被评分小组ID |
-| 小组名称     | 被评分小组名称 |
-| 评委ID       | 打分用户ID |
-| 评委姓名     | 打分用户姓名 |
-| 原始总分     | 打分记录原始总分（未标准化） |
-| 标准化后分数 | 按评委偏严/偏松校正后的分数 |
-| 偏差绝对值   | `AUTO` 模式为 `|原始总分 - 中位数|`；`THRESHOLD` 模式为 `-` |
+| 列名         | 说明                                               |
+| ------------ | -------------------------------------------------- | ----------------- | ----------------------- |
+| 项目名称     | 当前项目名称                                       |
+| 记录ID       | 打分记录ID（`scoring_record.id`）                  |
+| 小组ID       | 被评分小组ID                                       |
+| 小组名称     | 被评分小组名称                                     |
+| 评委ID       | 打分用户ID                                         |
+| 评委姓名     | 打分用户姓名                                       |
+| 原始总分     | 打分记录原始总分（未标准化）                       |
+| 标准化后分数 | 按评委偏严/偏松校正后的分数                        |
+| 偏差绝对值   | `AUTO` 模式为 `                                    | 原始总分 - 中位数 | `；`THRESHOLD`模式为`-` |
 | 异常阈值     | `AUTO` 模式为 MAD 距离阈值；`THRESHOLD` 模式为 `-` |
-| 打分时间     | 打分记录创建时间 |
-| 异常规则     | 具体触发规则文本（AUTO 或 THRESHOLD） |
+| 打分时间     | 打分记录创建时间                                   |
+| 异常规则     | 具体触发规则文本（AUTO 或 THRESHOLD）              |
 
 - **请求示例**
 
@@ -2131,8 +2426,9 @@ GET /api/v1/statistics/platform
    - 返回文件流供客户端下载
 
 5. ✅ **异常打分导出（方案 B）** - `GET /projects/{projectId}/export/abnormal-scores`
-  - 导出 MAD 规则标记的异常记录
-  - 返回 Excel 文件流供客户端下载
+
+- 导出 MAD 规则标记的异常记录
+- 返回 Excel 文件流供客户端下载
 
 ---
 
