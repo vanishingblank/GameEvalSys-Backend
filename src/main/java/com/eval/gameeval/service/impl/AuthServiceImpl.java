@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.time.Instant;
@@ -606,9 +607,11 @@ public class AuthServiceImpl implements IAuthService{
                 return List.of();
             }
 
+            List<Menu> routeMenus = expandRouteMenus(menus);
+
             Map<Long, RouteNodeVO> nodeMap = new LinkedHashMap<>();
             Map<Long, Menu> menuMap = new LinkedHashMap<>();
-            for (Menu menu : menus) {
+            for (Menu menu : routeMenus) {
                 if (menu == null || menu.getId() == null) {
                     continue;
                 }
@@ -617,7 +620,7 @@ public class AuthServiceImpl implements IAuthService{
             }
 
             List<RouteNodeVO> roots = new ArrayList<>();
-            for (Menu menu : menus) {
+            for (Menu menu : routeMenus) {
                 if (menu == null || menu.getId() == null) {
                     continue;
                 }
@@ -638,6 +641,61 @@ public class AuthServiceImpl implements IAuthService{
             }
 
             return roots;
+        }
+
+        private List<Menu> expandRouteMenus(List<Menu> menus) {
+            List<Menu> allMenus = menuMapper.selectAllMenus();
+            if (allMenus == null || allMenus.isEmpty()) {
+                return menus;
+            }
+
+            Map<Long, Menu> allMenuMap = new LinkedHashMap<>();
+            for (Menu menu : allMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                allMenuMap.put(menu.getId(), menu);
+            }
+
+            Set<Long> requiredIds = new LinkedHashSet<>();
+            for (Menu menu : menus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                collectRouteMenuIds(menu.getId(), allMenuMap, requiredIds);
+            }
+
+            if (requiredIds.isEmpty()) {
+                return List.of();
+            }
+
+            List<Menu> expanded = new ArrayList<>();
+            for (Menu menu : allMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                if (requiredIds.contains(menu.getId())) {
+                    expanded.add(menu);
+                }
+            }
+            return expanded;
+        }
+
+        private void collectRouteMenuIds(Long menuId, Map<Long, Menu> allMenuMap, Set<Long> requiredIds) {
+            Long currentId = menuId;
+            Set<Long> visitedIds = new LinkedHashSet<>();
+            while (currentId != null && currentId != 0L && visitedIds.add(currentId)) {
+                requiredIds.add(currentId);
+                Menu currentMenu = allMenuMap.get(currentId);
+                if (currentMenu == null) {
+                    return;
+                }
+                Long parentId = currentMenu.getParentId();
+                if (parentId == null || parentId == 0L) {
+                    return;
+                }
+                currentId = parentId;
+            }
         }
 
         private RouteNodeVO toRouteNode(Menu menu) {
