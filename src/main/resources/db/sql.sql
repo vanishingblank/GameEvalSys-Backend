@@ -53,35 +53,35 @@ CREATE TABLE `sys_role_menu` (
                                 KEY `idx_menu_code` (`menu_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单关联表';
 
-INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_code`, `menu_type`, `title`, `path`, `route_name`, `icon`, `hidden`, `component_code`, `sort_num`, `is_enabled`, `is_deleted`) VALUES
-(1, 0, 'home', 'menu', '首页', '/home', 'home', 'HomeFilled', 0, 'normal-home', 1, 1, 0),
-(2, 0, 'scoring', 'dir', '评分中心', '/scoring', 'scoringRoot', 'EditPen', 0, '', 2, 1, 0),
-(3, 2, 'scoring-list', 'menu', '打分项目列表', '/scoring/list', 'scoringList', 'List', 0, 'normal-scoring-list', 1, 1, 0),
-(4, 2, 'scoring-project', 'menu', '项目打分', '/scoring/:projectId', 'projectScoring', 'Edit', 1, 'normal-project-scoring', 2, 1, 0),
-(5, 2, 'scoring-groups', 'menu', '评分分组', '/scoring/groups', 'scoringGroups', 'Connection', 0, 'normal-scoring-groups', 3, 1, 0),
-(6, 0, 'admin', 'dir', '管理面板', '/admin', 'adminRoot', 'Setting', 0, '', 3, 1, 0),
-(7, 6, 'admin-project', 'menu', '项目管理', '/admin/project', 'projectList', 'Management', 0, 'admin-project-list', 5, 1, 0),
-(20, 6, 'admin-project-group', 'menu', '项目受审队伍管理', '/admin/project-groups', 'projectGroupList', 'User', 0, 'admin-project-group', 4, 1, 0),
-(8, 7, 'admin-project-edit', 'menu', '编辑项目', '/admin/project/edit/:id', 'projectEdit', 'Management', 1, 'admin-project-edit', 1, 1, 0),
-(9, 7, 'admin-project-statistic', 'menu', '项目打分统计', '/admin/project/statistic', 'projectStatisticList', 'DataAnalysis', 0, 'admin-project-statistic', 2, 1, 0),
-(10, 9, 'admin-project-statistic-detail', 'menu', '打分统计详情', '/admin/project/statistic/:projectId', 'projectStatisticDetail', 'DataAnalysis', 1, 'admin-project-statistic-detail', 1, 1, 0),
-(11, 6, 'admin-reviewer-group', 'menu', '评审队伍管理', '/admin/reviewer-group', 'reviewerGroupList', 'UserFilled', 0, 'admin-reviewer-group', 1, 1, 0),
-(12, 11, 'admin-reviewer-group-add', 'menu', '评审队伍添加', '/admin/reviewer-groups/add', 'reviewerGroupAdd', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 1, 1, 0),
-(13, 11, 'admin-reviewer-group-edit', 'menu', '评审队伍编辑', '/admin/reviewer-groups/edit/:id', 'reviewerGroupEdit', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 2, 1, 0),
-(14, 6, 'admin-scoring-stds', 'menu', '打分标准', '/admin/scoring-stds', 'scoringStdList', 'Checked', 0, 'admin-scoring-stds', 3, 1, 0),
-(15, 6, 'admin-user', 'menu', '用户管理', '/admin/user', 'userList', 'User', 0, 'admin-user', 2, 1, 0),
-(16, 6, 'admin-statistic', 'menu', '平台统计', '/admin/statistic', 'adminStatistic', 'Histogram', 0, 'admin-statistic', 1, 1, 0),
-(17, 6, 'super-monitor', 'dir', '系统监控', '/super-admin/monitor', 'monitorRoot', 'Monitor', 0, '', 6, 1, 0),
-(18, 17, 'super-monitor-online', 'menu', '用户在线管理', '/super-admin/monitor/online', 'monitorOnline', 'UserFilled', 0, 'super-monitor-online', 2, 1, 0),
-(19, 17, 'super-monitor-server', 'menu', '服务器面板', '/super-admin/monitor/server', 'monitorServer', 'DataLine', 0, 'super-monitor-server', 1, 1, 0);
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_code`, `menu_type`, `title`, `path`, `route_name`, `icon`, `hidden`, `component_code`, `sort_num`, `is_enabled`, `is_deleted`) VALUE
+    (1, 0, 'home', 'menu', '首页', '/home', 'home', 'HomeFilled', 0, 'normal-home', 1, 1, 0),
+    (2, 0, 'scoring-list', 'menu', '打分项目列表', '/scoring', 'scoringRoot', 'Edit', 0, 'normal-scoring-list', 2, 1, 0),
+    (6, 0, 'admin', 'dir', '管理面板', '/admin', 'adminRoot', 'Setting', 0, '', 3, 1, 0),
+    (21, 0, 'statistic', 'dir', '数据统计', '/admin/statistic', 'statisticRoot', 'Histogram', 0, '', 4, 1, 0),
+    (17, 0, 'super-admin', 'dir', '后台管理', '/super-admin', '/super-admin', 'Grid', 0, '', 5, 1, 0),
+    (3, 2, 'scoring-project', 'menu', '项目打分', '/scoring/:projectId', 'projectScoring', '', 1, 'normal-project-scoring', 2, 1, 0),
+    (7, 6, 'admin-project', 'menu', '项目管理', '/admin/project', 'projectList', 'Management', 0, 'admin-project-list', 5, 1, 0),
+    (20, 6, 'admin-project-group', 'menu', '项目受审队伍管理', '/admin/project-groups', 'projectGroupList', 'User', 0, 'admin-project-group', 4, 1, 0),
+    (11, 6, 'admin-reviewer-group', 'menu', '评审队伍管理', '/admin/reviewer-group', 'reviewerGroupList', 'UserFilled', 0, 'admin-reviewer-group', 1, 1, 0),
+    (14, 6, 'admin-scoring-stds', 'menu', '打分标准', '/admin/scoring-stds', 'scoringStdList', 'Checked', 0, 'admin-scoring-stds', 3, 1, 0),
+    (15, 6, 'admin-user', 'menu', '用户管理', '/admin/user', 'userList', 'User', 0, 'admin-user', 2, 1, 0),
+    (8, 7, 'admin-project-edit', 'menu', '编辑项目', '/admin/project/edit/:id', 'projectEdit', 'Management', 1, 'admin-project-edit', 1, 1, 0),
+    (12, 11, 'admin-reviewer-group-add', 'menu', '评审队伍添加', '/admin/reviewer-groups/add', 'reviewerGroupAdd', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 1, 1, 0),
+    (13, 11, 'admin-reviewer-group-edit', 'menu', '评审队伍编辑', '/admin/reviewer-groups/edit/:id', 'reviewerGroupEdit', 'OfficeBuilding', 1, 'admin-reviewer-group-upsert', 2, 1, 0),
+    (16, 21, 'admin-statistic', 'menu', '平台统计', '/admin/statistic/platform', 'adminStatistic', 'Histogram', 0, 'admin-statistic', 1, 1, 0),
+    (9, 21, 'admin-project-statistic', 'menu', '项目打分统计', '/admin/project/statistic', 'projectStatisticList', 'DataAnalysis', 0, 'admin-project-statistic', 2, 1, 0),
+    (10, 9, 'admin-project-statistic-detail', 'menu', '打分统计详情', '/admin/project/statistic/:projectId', 'projectStatisticDetail', 'DataAnalysis', 1, 'admin-project-statistic-detail', 1, 1, 0),
+    (18, 17, 'super-monitor-online', 'menu', '用户在线管理', '/super-admin/monitor/online', 'monitorOnline', 'UserFilled', 0, 'super-monitor-online', 3, 1, 0),
+    (19, 17, 'super-monitor-server', 'menu', '服务器面板', '/super-admin/monitor/server', 'monitorServer', 'DataLine', 0, 'super-monitor-server', 2, 1, 0),
+    (23, 17, 'super-admin-menu-management', 'menu', '菜单管理', '/super-admin/menu', 'menuManagement', 'Grid', 0, 'super-menu-management', 1, 1, 0);
 
 INSERT INTO `sys_role_menu` (`role_code`, `menu_code`) VALUES
 ('normal', 'home'),
+
 ('scorer', 'home'),
-('scorer', 'scoring'),
 ('scorer', 'scoring-list'),
 ('scorer', 'scoring-project'),
-('scorer', 'scoring-groups'),
+
 ('admin', 'home'),
 ('admin', 'admin'),
 ('admin', 'admin-project'),
@@ -95,11 +95,8 @@ INSERT INTO `sys_role_menu` (`role_code`, `menu_code`) VALUES
 ('admin', 'admin-user'),
 ('admin', 'admin-statistic'),
 ('admin', 'admin-project-group'),
-('admin', 'super-monitor'),
-('admin', 'super-monitor-online'),
-('admin', 'super-monitor-server'),
+
 ('super_admin', 'home'),
-('super_admin', 'scoring'),
 ('super_admin', 'scoring-list'),
 ('super_admin', 'scoring-project'),
 ('super_admin', 'admin'),
@@ -114,7 +111,8 @@ INSERT INTO `sys_role_menu` (`role_code`, `menu_code`) VALUES
 ('super_admin', 'admin-user'),
 ('super_admin', 'admin-statistic'),
 ('super_admin', 'admin-project-group'),
-('super_admin', 'super-monitor'),
+
+('super_admin', 'super-admin-menu-management'),
 ('super_admin', 'super-monitor-online'),
 ('super_admin', 'super-monitor-server');
 
