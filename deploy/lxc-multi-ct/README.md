@@ -36,6 +36,7 @@ This split is recommended because DB and Redis have different IO and memory prof
 1. Go to `ct-backend`.
 2. Copy env template:
    - `cp .env.example .env`
+   - ip2region 默认同时加载 `classpath:/ip2region/ip2region.xdb` 和 `classpath:/ip2region/ip2region_v6.xdb`，如需自定义路径请设置 `IP2REGION_XDB_PATHS`
 3. Edit `.env` to point `DB_HOST` and `REDIS_HOST` to CT-DB and CT-REDIS IPs.
 4. Start backend:
    - `docker compose --env-file .env up -d --build`
