@@ -35,6 +35,25 @@ public class RedisBaseUtil {
     }
 
     /**
+     * 设置永久缓存
+     */
+    public boolean setPersistent(String key, Object value) {
+        try {
+            if (key == null || value == null) {
+                System.err.println("【Redis错误】key或value为null: key=" + key + ", value=" + value);
+                return false;
+            }
+            redisTemplate.opsForValue().set(key, value);
+            System.out.println("【Redis设置成功】key=" + key + ", persistent=true");
+            return true;
+        } catch (Exception e) {
+            System.err.println("【Redis设置失败】key=" + key + ", 异常信息: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
      * 获取缓存
      */
     public Object get(String key) {
@@ -92,6 +111,25 @@ public class RedisBaseUtil {
             System.err.println("【Redis检查失败】key=" + key + ", 异常信息: " + e.getMessage());
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /**
+     * 自增缓存值
+     */
+    public Long increment(String key) {
+        try {
+            if (key == null) {
+                System.err.println("【Redis错误】自增时key为null");
+                return null;
+            }
+            Long value = redisTemplate.opsForValue().increment(key);
+            System.out.println("【Redis自增成功】key=" + key + ", value=" + value);
+            return value;
+        } catch (Exception e) {
+            System.err.println("【Redis自增失败】key=" + key + ", 异常信息: " + e.getMessage());
+            e.printStackTrace();
+            return null;
         }
     }
 }

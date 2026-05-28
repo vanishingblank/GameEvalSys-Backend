@@ -34,6 +34,11 @@ public final class RedisKeyUtil {
     public static final String GROUP_OVERVIEW_KEY = "overview:group";
     public static final String REVIEWER_GROUP_OVERVIEW_KEY = "overview:reviewer-group";
 
+    // ========== 动态路由缓存 ==========
+    public static final String MENU_ROUTES_VERSION_KEY = "auth:menu:version";
+    public static final String MENU_ROUTES_ROLE_KEY_PREFIX = "auth:routes:role:";
+    public static final long MENU_ROUTES_TTL = 3600; // 60分钟
+
     public static final long PROJECT_LIST_TTL = 300;      // 5分钟（分页数据变化频繁）
     public static final long PROJECT_DETAIL_TTL = 3600;   // 60分钟
     public static final long PROJECT_AUTHORIZED_TTL = 600; // 10分钟（用户权限可能变化）
@@ -188,5 +193,15 @@ public final class RedisKeyUtil {
      */
     public static String buildScoringOverviewKey(Long userId) {
         return SCORING_OVERVIEW_KEY_PREFIX + userId;
+    }
+
+    /**
+     * 构建角色路由树缓存键
+     * 格式: auth:routes:role:{roleCode}:v{menuVersion}
+     */
+    public static String buildMenuRoutesKey(String roleCode, Long menuVersion) {
+        String normalizedRole = roleCode != null && !roleCode.trim().isEmpty() ? roleCode.trim() : "unknown";
+        long version = menuVersion == null ? 0L : menuVersion;
+        return MENU_ROUTES_ROLE_KEY_PREFIX + normalizedRole + ":v" + version;
     }
 }

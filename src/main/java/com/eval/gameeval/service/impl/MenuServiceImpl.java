@@ -8,9 +8,12 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.Menu;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IMenuService;
+import com.eval.gameeval.util.MenuRouteCacheUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,6 +33,9 @@ public class MenuServiceImpl implements IMenuService {
 
     @Resource
     private MenuMapper menuMapper;
+
+    @Resource
+    private MenuRouteCacheUtil menuRouteCacheUtil;
 
     @Override
     public ResponseVO<List<MenuVO>> listMenus(Long currentUserId) {
@@ -68,6 +74,7 @@ public class MenuServiceImpl implements IMenuService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ResponseVO<MenuVO> createMenu(Long currentUserId, MenuUpsertDTO request) {
         try {
             User currentUser = getCurrentUser(currentUserId);
@@ -90,16 +97,19 @@ public class MenuServiceImpl implements IMenuService {
             menu.setIsDeleted(false);
             menuMapper.insertMenu(menu);
             replaceRoleBindings(menu.getMenuCode(), request.getRoleCodes());
+            invalidateMenuRoutesCache();
 
             Menu created = menuMapper.selectByMenuCode(menu.getMenuCode());
             return ResponseVO.success("创建成功", enrichMenuVO(created));
         } catch (Exception e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             log.error("创建菜单异常", e);
             return ResponseVO.error("创建失败");
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ResponseVO<Void> updateMenu(Long currentUserId, Long id, MenuUpsertDTO request) {
         try {
             User currentUser = getCurrentUser(currentUserId);
@@ -135,15 +145,18 @@ public class MenuServiceImpl implements IMenuService {
             menu.setIsDeleted(existing.getIsDeleted());
             menuMapper.updateMenu(menu);
             replaceRoleBindings(menu.getMenuCode(), request.getRoleCodes());
+            invalidateMenuRoutesCache();
 
             return ResponseVO.success("更新成功", null);
         } catch (Exception e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             log.error("更新菜单异常", e);
             return ResponseVO.error("更新失败");
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ResponseVO<Void> deleteMenu(Long currentUserId, Long id) {
         try {
             User currentUser = getCurrentUser(currentUserId);
@@ -169,9 +182,11 @@ public class MenuServiceImpl implements IMenuService {
 
             menuMapper.deleteRoleMenusByMenuCodes(menuCodesToDelete);
             menuMapper.softDeleteMenuByIds(idsToDelete, LocalDateTime.now());
+            invalidateMenuRoutesCache();
 
             return ResponseVO.success("删除成功", null);
         } catch (Exception e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             log.error("删除菜单异常", e);
             return ResponseVO.error("删除失败");
         }
@@ -240,6 +255,15 @@ public class MenuServiceImpl implements IMenuService {
                 .collect(Collectors.toList());
         if (!normalized.isEmpty()) {
             menuMapper.batchInsertRoleMenus(menuCode, normalized);
+        }
+    }
+
+    private void invalidateMenuRoutesCache() {
+        try {
+            Long version = menuRouteCacheUtil.bumpMenuRoutesVersion();
+            log.info("菜单路由缓存版本已更新: version={}", version);
+        } catch (Exception e) {
+            log.warn("菜单路由缓存版本更新失败，缓存将依赖TTL兜底", e);
         }
     }
 
