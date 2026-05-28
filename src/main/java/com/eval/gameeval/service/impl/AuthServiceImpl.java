@@ -20,6 +20,7 @@ import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.MenuRouteCacheUtil;
 import com.eval.gameeval.util.TokenUtil;
 import com.eval.gameeval.util.IpLocationService;
 import jakarta.annotation.PostConstruct;
@@ -59,6 +60,8 @@ public class AuthServiceImpl implements IAuthService{
     private JwtTokenService jwtTokenService;
     @Resource
     private AuthSessionStore authSessionStore;
+    @Resource
+    private MenuRouteCacheUtil menuRouteCacheUtil;
     @Resource
     private PasswordEncoder passwordEncoder;
     @Resource
@@ -194,8 +197,19 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.unauthorized("未登录或用户不存在");
             }
 
-            List<Menu> accessibleMenus = selectAccessibleMenus(user.getRole());
-            List<RouteNodeVO> routes = buildRoutes(accessibleMenus);
+            String roleCode = user.getRole();
+            Long menuVersion = menuRouteCacheUtil.getMenuRoutesVersion();
+            List<RouteNodeVO> routes = menuRouteCacheUtil.getCachedRoutes(roleCode, menuVersion);
+            if (routes == null) {
+                List<Menu> accessibleMenus = selectAccessibleMenus(roleCode);
+                routes = buildRoutes(accessibleMenus);
+                menuRouteCacheUtil.cacheRoutes(roleCode, menuVersion, routes);
+                log.info("【缓存回填】查询当前用户路由: userId={}, role={}, version={}, count={}",
+                        userId, roleCode, menuVersion, routes.size());
+            } else {
+                log.info("【缓存命中】查询当前用户路由: userId={}, role={}, version={}, count={}",
+                        userId, roleCode, menuVersion, routes.size());
+            }
             return ResponseVO.success("查询成功", routes);
         } catch (Exception e) {
             log.error("查询当前用户路由异常", e);
