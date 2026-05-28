@@ -1,17 +1,21 @@
 package com.eval.gameeval.service.impl;
 
 import com.eval.gameeval.mapper.UserMapper;
+import com.eval.gameeval.mapper.MenuMapper;
 import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
+import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.OnlineUserPageVO;
 import com.eval.gameeval.models.VO.OnlineUserVO;
+import com.eval.gameeval.models.VO.RouteNodeVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
 import com.eval.gameeval.models.entity.User;
+import com.eval.gameeval.models.entity.Menu;
 import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
@@ -28,6 +32,8 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.time.Instant;
@@ -42,6 +48,8 @@ public class AuthServiceImpl implements IAuthService{
 
     @Resource
     private UserMapper userMapper;
+    @Resource
+    private MenuMapper menuMapper;
     @Resource
     private RedisToken redisToken;
     @Resource
@@ -147,6 +155,48 @@ public class AuthServiceImpl implements IAuthService{
         } catch (Exception e){
             log.error("登录错误",e);
             return ResponseVO.error("登录错误");
+        }
+    }
+
+    @Override
+    public ResponseVO<AuthProfileVO> getCurrentUserProfile(Long userId) {
+        try {
+            User user = getCurrentUser(userId);
+            if (user == null) {
+                return ResponseVO.unauthorized("未登录或用户不存在");
+            }
+
+            List<Menu> accessibleMenus = selectAccessibleMenus(user.getRole());
+
+            AuthProfileVO profileVO = new AuthProfileVO()
+                    .setId(user.getId())
+                    .setUsername(user.getUsername())
+                    .setName(user.getName())
+                    .setRole(user.getRole())
+                    .setRoles(buildRoles(user.getRole()))
+                    .setPermissions(buildPermissions(accessibleMenus));
+
+            return ResponseVO.success("查询成功", profileVO);
+        } catch (Exception e) {
+            log.error("查询当前用户信息异常", e);
+            return ResponseVO.error("查询失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<List<RouteNodeVO>> getCurrentUserRoutes(Long userId) {
+        try {
+            User user = getCurrentUser(userId);
+            if (user == null) {
+                return ResponseVO.unauthorized("未登录或用户不存在");
+            }
+
+            List<Menu> accessibleMenus = selectAccessibleMenus(user.getRole());
+            List<RouteNodeVO> routes = buildRoutes(accessibleMenus);
+            return ResponseVO.success("查询成功", routes);
+        } catch (Exception e) {
+            log.error("查询当前用户路由异常", e);
+            return ResponseVO.error("查询失败");
         }
     }
 
@@ -525,6 +575,141 @@ public class AuthServiceImpl implements IAuthService{
         }
         return "super_admin".equals(user.getRole()) || "admin".equals(user.getRole());
     }
+
+        private List<String> buildRoles(String role) {
+        if (role == null || role.trim().isEmpty()) {
+            return List.of();
+        }
+        return List.of(role);
+        }
+
+        private List<String> buildPermissions(List<Menu> menus) {
+            if (menus == null || menus.isEmpty()) {
+                return List.of();
+            }
+            return menus.stream()
+                    .map(Menu::getMenuCode)
+                    .filter(code -> code != null && !code.trim().isEmpty())
+                    .map(code -> "menu:" + code + ":view")
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+
+        private List<Menu> selectAccessibleMenus(String role) {
+            if (role == null || role.trim().isEmpty()) {
+                return List.of();
+            }
+            return menuMapper.selectAccessibleMenusByRoleCode(role.trim());
+        }
+
+        private List<RouteNodeVO> buildRoutes(List<Menu> menus) {
+            if (menus == null || menus.isEmpty()) {
+                return List.of();
+            }
+
+            List<Menu> routeMenus = expandRouteMenus(menus);
+
+            Map<Long, RouteNodeVO> nodeMap = new LinkedHashMap<>();
+            Map<Long, Menu> menuMap = new LinkedHashMap<>();
+            for (Menu menu : routeMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                menuMap.put(menu.getId(), menu);
+                nodeMap.put(menu.getId(), toRouteNode(menu));
+            }
+
+            List<RouteNodeVO> roots = new ArrayList<>();
+            for (Menu menu : routeMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                RouteNodeVO current = nodeMap.get(menu.getId());
+                if (current == null) {
+                    continue;
+                }
+                Long parentId = menu.getParentId();
+                if (parentId == null || parentId == 0L || !nodeMap.containsKey(parentId)) {
+                    roots.add(current);
+                } else {
+                    RouteNodeVO parent = nodeMap.get(parentId);
+                    if (parent.getChildren() == null) {
+                        parent.setChildren(new ArrayList<>());
+                    }
+                    parent.getChildren().add(current);
+                }
+            }
+
+            return roots;
+        }
+
+        private List<Menu> expandRouteMenus(List<Menu> menus) {
+            List<Menu> allMenus = menuMapper.selectAllMenus();
+            if (allMenus == null || allMenus.isEmpty()) {
+                return menus;
+            }
+
+            Map<Long, Menu> allMenuMap = new LinkedHashMap<>();
+            for (Menu menu : allMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                allMenuMap.put(menu.getId(), menu);
+            }
+
+            Set<Long> requiredIds = new LinkedHashSet<>();
+            for (Menu menu : menus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                collectRouteMenuIds(menu.getId(), allMenuMap, requiredIds);
+            }
+
+            if (requiredIds.isEmpty()) {
+                return List.of();
+            }
+
+            List<Menu> expanded = new ArrayList<>();
+            for (Menu menu : allMenus) {
+                if (menu == null || menu.getId() == null) {
+                    continue;
+                }
+                if (requiredIds.contains(menu.getId())) {
+                    expanded.add(menu);
+                }
+            }
+            return expanded;
+        }
+
+        private void collectRouteMenuIds(Long menuId, Map<Long, Menu> allMenuMap, Set<Long> requiredIds) {
+            Long currentId = menuId;
+            Set<Long> visitedIds = new LinkedHashSet<>();
+            while (currentId != null && currentId != 0L && visitedIds.add(currentId)) {
+                requiredIds.add(currentId);
+                Menu currentMenu = allMenuMap.get(currentId);
+                if (currentMenu == null) {
+                    return;
+                }
+                Long parentId = currentMenu.getParentId();
+                if (parentId == null || parentId == 0L) {
+                    return;
+                }
+                currentId = parentId;
+            }
+        }
+
+        private RouteNodeVO toRouteNode(Menu menu) {
+            return new RouteNodeVO()
+                    .setMenuCode(menu.getMenuCode())
+                    .setPath(menu.getPath())
+                    .setRouteName(menu.getRouteName())
+                    .setTitle(menu.getTitle())
+                    .setIcon(menu.getIcon())
+                    .setHidden(Boolean.TRUE.equals(menu.getHidden()))
+                    .setComponentCode(menu.getComponentCode())
+                    .setPermissionCodes(buildPermissions(List.of(menu)))
+                    .setChildren(new ArrayList<>());
+        }
 
     private long buildAccessExpEpochSeconds() {
         return Instant.now().plusSeconds(jwtTokenService.getAccessSeconds()).getEpochSecond();

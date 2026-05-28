@@ -4,8 +4,10 @@ import com.eval.gameeval.models.DTO.User.LoginMetaDTO;
 import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
+import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
 import com.eval.gameeval.models.VO.OnlineUserPageVO;
+import com.eval.gameeval.models.VO.RouteNodeVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
@@ -15,6 +17,10 @@ import java.util.List;
 
 public interface IAuthService {
     ResponseVO<LoginResponseVO> login(@Valid LoginRequestDTO loginRequest, LoginMetaDTO meta);
+
+    ResponseVO<AuthProfileVO> getCurrentUserProfile(Long userId);
+
+    ResponseVO<List<RouteNodeVO>> getCurrentUserRoutes(Long userId);
 
     ResponseVO<Void> logout(String token);
 
