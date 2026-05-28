@@ -21,6 +21,7 @@ import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
+import com.eval.gameeval.util.IpLocationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +61,8 @@ public class AuthServiceImpl implements IAuthService{
     private AuthSessionStore authSessionStore;
     @Resource
     private PasswordEncoder passwordEncoder;
+    @Resource
+    private IpLocationService ipLocationService;
 
     @Value("${app.time-zone:Asia/Shanghai}")
     private String appTimeZone;
@@ -486,7 +489,7 @@ public class AuthServiceImpl implements IAuthService{
                 .setRole(String.valueOf(entry.getValue().get("role")))
                 .setIp(getSessionText(entry.getValue(), "ip"))
                 .setDevice(getSessionText(entry.getValue(), "device"))
-                .setLoginLocation(getSessionText(entry.getValue(), "loginLocation"))
+                .setLoginLocation(resolveLoginLocation(entry.getValue()))
                 .setLoginAt(formatInstantInAppZone(entry.getValue().get("loginAt")))
                 .setLastActiveAt(formatInstantInAppZone(entry.getValue().get("lastActiveAt")))
                 .setStatus(String.valueOf(entry.getValue().get("status"))))
@@ -529,8 +532,8 @@ public class AuthServiceImpl implements IAuthService{
                 latestLogin = login;
                 latestLoginText = formatInstantInAppZone(session.get("loginAt"));
                 latestDevice = getSessionText(session, "device");
-                latestLocation = getSessionText(session, "loginLocation");
                 latestIp = getSessionText(session, "ip");
+                latestLocation = resolveLoginLocation(session);
             }
         }
 
@@ -567,6 +570,18 @@ public class AuthServiceImpl implements IAuthService{
         }
         Object value = session.get(key);
         return value == null ? null : value.toString();
+    }
+
+    private String resolveLoginLocation(Map<Object, Object> session) {
+        String location = getSessionText(session, "loginLocation");
+        if (location != null && !location.trim().isEmpty()) {
+            return location;
+        }
+        String ip = getSessionText(session, "ip");
+        if (ip == null || ip.trim().isEmpty()) {
+            return null;
+        }
+        return ipLocationService.lookup(ip);
     }
 
     private boolean isAdmin(User user) {
