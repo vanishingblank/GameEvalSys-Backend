@@ -58,3 +58,6 @@ auth:
     secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
     same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:None}
     max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
+
+ip2region:
+  xdb-paths: ${IP2REGION_XDB_PATHS:${IP2REGION_XDB_PATH:classpath:/ip2region/ip2region.xdb},classpath:/ip2region/ip2region_v6.xdb}

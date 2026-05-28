@@ -110,4 +110,4 @@ auth:
 
 # ip2region 离线库文件位置（classpath 或 file 路径）
 ip2region:
-  xdb-path: ${IP2REGION_XDB_PATH:classpath:/ip2region/ip2region.xdb}
+  xdb-paths: ${IP2REGION_XDB_PATHS:${IP2REGION_XDB_PATH:classpath:/ip2region/ip2region.xdb},classpath:/ip2region/ip2region_v6.xdb}
