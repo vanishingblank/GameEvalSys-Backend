@@ -79,5 +79,5 @@ auth:
     max-age-seconds: ${AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS:604800}
 
 ip2region:
-  xdb-path: ${IP2REGION_XDB_PATH:classpath:/ip2region/ip2region.xdb}
+  xdb-paths: ${IP2REGION_XDB_PATHS:${IP2REGION_XDB_PATH:classpath:/ip2region/ip2region.xdb},classpath:/ip2region/ip2region_v6.xdb}
 

@@ -11,6 +11,7 @@
 1. 复制env 模板:
    - `cp .env.example .env`
 2. 设置redis、mariaDb、平台初始管理员密码等参数在： `.env`.
+   - ip2region 默认同时加载 `classpath:/ip2region/ip2region.xdb` 和 `classpath:/ip2region/ip2region_v6.xdb`，如需自定义路径请设置 `IP2REGION_XDB_PATHS`
 3. 选择一个平台初始管理员的初始密码加密模式:
    - 明文方式: 取消 `APP_ADMIN_INIT_PASSWORD` 的注释并且赋值
    - 哈希加密方式 (推荐): 取消 `APP_ADMIN_INIT_PASSWORD_HASH`的注释并且赋值
