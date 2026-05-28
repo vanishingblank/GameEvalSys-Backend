@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,8 +69,19 @@ public class IpLocationService {
         }
 
         try {
-            String region = ip2Region.search(normalizedIp);
-            return normalizeRegion(region);
+            String region = normalizeRegion(ip2Region.search(normalizedIp));
+            if (region != null) {
+                return region;
+            }
+
+            byte[] addressBytes = InetAddress.getByName(normalizedIp).getAddress();
+            region = normalizeRegion(ip2Region.search(addressBytes));
+            if (region != null) {
+                return region;
+            }
+
+            log.debug("ip2region returned empty region, ip={}", normalizedIp);
+            return null;
         } catch (Exception e) {
             log.debug("ip2region lookup failed: ip={}", normalizedIp, e);
             return null;
