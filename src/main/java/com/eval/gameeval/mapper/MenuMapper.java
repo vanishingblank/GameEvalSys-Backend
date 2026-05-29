@@ -2,6 +2,7 @@ package com.eval.gameeval.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.eval.gameeval.models.entity.Menu;
+import com.eval.gameeval.models.entity.RoleMenu;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -67,6 +68,13 @@ public interface MenuMapper extends BaseMapper<Menu> {
 
     @Select("SELECT DISTINCT role_code FROM sys_role_menu WHERE menu_code = #{menuCode} ORDER BY role_code")
     List<String> selectRoleCodesByMenuCode(@Param("menuCode") String menuCode);
+
+    @Select("""
+            SELECT id, role_code AS roleCode, menu_code AS menuCode, create_time AS createTime
+            FROM sys_role_menu
+            ORDER BY menu_code ASC, role_code ASC, id ASC
+            """)
+    List<RoleMenu> selectAllRoleMenus();
 
     @Select("""
             SELECT DISTINCT

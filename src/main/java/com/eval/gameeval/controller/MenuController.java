@@ -2,6 +2,7 @@ package com.eval.gameeval.controller;
 
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.DTO.Menu.MenuUpsertDTO;
+import com.eval.gameeval.models.VO.MenuSqlVO;
 import com.eval.gameeval.models.VO.MenuVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.security.CurrentUserContext;
@@ -41,17 +42,25 @@ public class MenuController {
 
     @PostMapping
     @LogRecord(value = "创建菜单", module = "Menu")
-    public ResponseEntity<ResponseVO<MenuVO>> createMenu(@Valid @RequestBody MenuUpsertDTO request) {
+    public ResponseEntity<ResponseVO<MenuSqlVO>> createMenu(@Valid @RequestBody MenuUpsertDTO request) {
         Long currentUserId = currentUserContext.getCurrentUserId();
-        ResponseVO<MenuVO> response = menuService.createMenu(currentUserId, request);
+        ResponseVO<MenuSqlVO> response = menuService.createMenu(currentUserId, request);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")
     @LogRecord(value = "更新菜单", module = "Menu")
-    public ResponseEntity<ResponseVO<Void>> updateMenu(@PathVariable Long id, @Valid @RequestBody MenuUpsertDTO request) {
+    public ResponseEntity<ResponseVO<MenuSqlVO>> updateMenu(@PathVariable Long id, @Valid @RequestBody MenuUpsertDTO request) {
         Long currentUserId = currentUserContext.getCurrentUserId();
-        ResponseVO<Void> response = menuService.updateMenu(currentUserId, id, request);
+        ResponseVO<MenuSqlVO> response = menuService.updateMenu(currentUserId, id, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/sql")
+    @LogRecord(value = "查询全部菜单SQL", module = "Menu")
+    public ResponseEntity<ResponseVO<MenuSqlVO>> getMenuSql() {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<MenuSqlVO> response = menuService.getMenuSql(currentUserId);
         return ResponseEntity.ok(response);
     }
 

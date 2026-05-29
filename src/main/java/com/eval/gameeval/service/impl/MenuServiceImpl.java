@@ -3,9 +3,11 @@ package com.eval.gameeval.service.impl;
 import com.eval.gameeval.mapper.MenuMapper;
 import com.eval.gameeval.mapper.UserMapper;
 import com.eval.gameeval.models.DTO.Menu.MenuUpsertDTO;
+import com.eval.gameeval.models.VO.MenuSqlVO;
 import com.eval.gameeval.models.VO.MenuVO;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.entity.Menu;
+import com.eval.gameeval.models.entity.RoleMenu;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.service.IMenuService;
 import com.eval.gameeval.util.MenuRouteCacheUtil;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -75,7 +78,7 @@ public class MenuServiceImpl implements IMenuService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<MenuVO> createMenu(Long currentUserId, MenuUpsertDTO request) {
+    public ResponseVO<MenuSqlVO> createMenu(Long currentUserId, MenuUpsertDTO request) {
         try {
             User currentUser = getCurrentUser(currentUserId);
             if (!isAdmin(currentUser)) {
@@ -100,7 +103,7 @@ public class MenuServiceImpl implements IMenuService {
             invalidateMenuRoutesCache();
 
             Menu created = menuMapper.selectByMenuCode(menu.getMenuCode());
-            return ResponseVO.success("创建成功", enrichMenuVO(created));
+            return ResponseVO.success("创建成功", buildMenuSqlVO(created, request.getRoleCodes(), true));
         } catch (Exception e) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             log.error("创建菜单异常", e);
@@ -110,7 +113,7 @@ public class MenuServiceImpl implements IMenuService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ResponseVO<Void> updateMenu(Long currentUserId, Long id, MenuUpsertDTO request) {
+    public ResponseVO<MenuSqlVO> updateMenu(Long currentUserId, Long id, MenuUpsertDTO request) {
         try {
             User currentUser = getCurrentUser(currentUserId);
             if (!isAdmin(currentUser)) {
@@ -147,11 +150,29 @@ public class MenuServiceImpl implements IMenuService {
             replaceRoleBindings(menu.getMenuCode(), request.getRoleCodes());
             invalidateMenuRoutesCache();
 
-            return ResponseVO.success("更新成功", null);
+            Menu updated = menuMapper.selectById(id);
+            return ResponseVO.success("更新成功", buildMenuSqlVO(updated, request.getRoleCodes(), false));
         } catch (Exception e) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             log.error("更新菜单异常", e);
             return ResponseVO.error("更新失败");
+        }
+    }
+
+    @Override
+    public ResponseVO<MenuSqlVO> getMenuSql(Long currentUserId) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+
+            List<Menu> menus = menuMapper.selectAllMenus();
+            List<RoleMenu> roleMenus = menuMapper.selectAllRoleMenus();
+            return ResponseVO.success("查询成功", buildAllMenuSqlVO(menus, roleMenus));
+        } catch (Exception e) {
+            log.error("查询全部菜单SQL异常", e);
+            return ResponseVO.error("查询失败");
         }
     }
 
@@ -265,6 +286,220 @@ public class MenuServiceImpl implements IMenuService {
         } catch (Exception e) {
             log.warn("菜单路由缓存版本更新失败，缓存将依赖TTL兜底", e);
         }
+    }
+
+    private MenuSqlVO buildMenuSqlVO(Menu menu, List<String> roleCodes, boolean isCreate) {
+        MenuSqlVO result = new MenuSqlVO();
+        if (menu == null) {
+            return result;
+        }
+
+        String sql = isCreate
+                ? buildCreateMenuSql(menu, roleCodes)
+                : buildUpdateMenuSql(menu, roleCodes);
+        result.setId(menu.getId())
+                .setSql(sql)
+                .setFullSql(sql);
+        return result;
+    }
+
+    private MenuSqlVO buildAllMenuSqlVO(List<Menu> menus, List<RoleMenu> roleMenus) {
+        MenuSqlVO result = new MenuSqlVO();
+        int menuCount = menus == null ? 0 : menus.size();
+        String sql = buildAllMenuBackupSql(menus, roleMenus);
+        result.setMenuCount(menuCount)
+                .setGeneratedAt(LocalDateTime.now())
+                .setSql(sql)
+                .setFullSql(sql);
+        return result;
+    }
+
+    private String buildCreateMenuSql(Menu menu, List<String> roleCodes) {
+        List<String> statements = new ArrayList<>();
+        statements.add("-- 自动生成的菜单保存 SQL");
+        statements.add("START TRANSACTION;");
+        statements.add(buildMenuInsertSql(menu));
+        String roleInsertSql = buildRoleMenuInsertSql(menu.getMenuCode(), roleCodes, true);
+        if (!roleInsertSql.isBlank()) {
+            statements.add(roleInsertSql);
+        }
+        statements.add("COMMIT;");
+        return String.join("\n\n", statements);
+    }
+
+    private String buildUpdateMenuSql(Menu menu, List<String> roleCodes) {
+        List<String> statements = new ArrayList<>();
+        statements.add("-- 自动生成的菜单保存 SQL");
+        statements.add("START TRANSACTION;");
+        statements.add(buildMenuUpdateSql(menu));
+        statements.add(buildRoleMenuDeleteSql(menu.getMenuCode()));
+        String roleInsertSql = buildRoleMenuInsertSql(menu.getMenuCode(), roleCodes, true);
+        if (!roleInsertSql.isBlank()) {
+            statements.add(roleInsertSql);
+        }
+        statements.add("COMMIT;");
+        return String.join("\n\n", statements);
+    }
+
+    private String buildAllMenuBackupSql(List<Menu> menus, List<RoleMenu> roleMenus) {
+        List<String> statements = new ArrayList<>();
+        statements.add("-- 自动生成的全部菜单备份 SQL");
+        statements.add("START TRANSACTION;");
+        String menuInsertSql = buildBulkMenuInsertSql(menus);
+        if (!menuInsertSql.isBlank()) {
+            statements.add(menuInsertSql);
+        }
+        String roleInsertSql = buildBulkRoleMenuInsertSql(roleMenus);
+        if (!roleInsertSql.isBlank()) {
+            statements.add(roleInsertSql);
+        }
+        statements.add("COMMIT;");
+        return String.join("\n\n", statements);
+    }
+
+    private String buildMenuInsertSql(Menu menu) {
+        if (menu == null) {
+            return "";
+        }
+        return "INSERT INTO sys_menu "
+                + "(id, parent_id, menu_code, menu_type, title, path, route_name, icon, hidden, component_code, sort_num, is_enabled, is_deleted, create_time, update_time) VALUES "
+                + "(" + formatSqlValue(menu.getId()) + ", "
+                + formatSqlValue(menu.getParentId()) + ", "
+                + formatSqlValue(menu.getMenuCode()) + ", "
+                + formatSqlValue(menu.getMenuType()) + ", "
+                + formatSqlValue(menu.getTitle()) + ", "
+                + formatSqlValue(menu.getPath()) + ", "
+                + formatSqlValue(menu.getRouteName()) + ", "
+                + formatSqlValue(menu.getIcon()) + ", "
+                + formatSqlValue(menu.getHidden()) + ", "
+                + formatSqlValue(menu.getComponentCode()) + ", "
+                + formatSqlValue(menu.getSortNum()) + ", "
+                + formatSqlValue(menu.getIsEnabled()) + ", "
+                + formatSqlValue(menu.getIsDeleted()) + ", "
+                + formatSqlValue(menu.getCreateTime()) + ", "
+                + formatSqlValue(menu.getUpdateTime()) + ");";
+    }
+
+    private String buildBulkMenuInsertSql(List<Menu> menus) {
+        if (menus == null || menus.isEmpty()) {
+            return "";
+        }
+
+        String values = menus.stream()
+                .filter(Objects::nonNull)
+                .map(menu -> "("
+                        + formatSqlValue(menu.getId()) + ", "
+                        + formatSqlValue(menu.getParentId()) + ", "
+                        + formatSqlValue(menu.getMenuCode()) + ", "
+                        + formatSqlValue(menu.getMenuType()) + ", "
+                        + formatSqlValue(menu.getTitle()) + ", "
+                        + formatSqlValue(menu.getPath()) + ", "
+                        + formatSqlValue(menu.getRouteName()) + ", "
+                        + formatSqlValue(menu.getIcon()) + ", "
+                        + formatSqlValue(menu.getHidden()) + ", "
+                        + formatSqlValue(menu.getComponentCode()) + ", "
+                        + formatSqlValue(menu.getSortNum()) + ", "
+                        + formatSqlValue(menu.getIsEnabled()) + ", "
+                        + formatSqlValue(menu.getIsDeleted()) + ", "
+                        + formatSqlValue(menu.getCreateTime()) + ", "
+                        + formatSqlValue(menu.getUpdateTime()) + ")")
+                .collect(Collectors.joining(",\n"));
+
+        if (values.isBlank()) {
+            return "";
+        }
+
+        return "INSERT INTO sys_menu "
+                + "(id, parent_id, menu_code, menu_type, title, path, route_name, icon, hidden, component_code, sort_num, is_enabled, is_deleted, create_time, update_time) VALUES\n"
+                + values
+                + ";";
+    }
+
+    private String buildRoleMenuDeleteSql(String menuCode) {
+        return "DELETE FROM sys_role_menu WHERE menu_code = " + formatSqlValue(menuCode) + ";";
+    }
+
+    private String buildRoleMenuInsertSql(String menuCode, List<String> roleCodes, boolean useNow) {
+        List<String> normalized = normalizeRoleCodes(roleCodes);
+        if (normalized.isEmpty()) {
+            return "";
+        }
+
+        String values = normalized.stream()
+                .map(roleCode -> useNow
+                        ? "(" + formatSqlValue(roleCode) + ", " + formatSqlValue(menuCode) + ", NOW())"
+                        : "(" + formatSqlValue(roleCode) + ", " + formatSqlValue(menuCode) + ", " + formatSqlValue(LocalDateTime.now()) + ")")
+                .collect(Collectors.joining(",\n"));
+
+        return "INSERT INTO sys_role_menu (role_code, menu_code, create_time) VALUES\n" + values + ";";
+    }
+
+    private String buildBulkRoleMenuInsertSql(List<RoleMenu> roleMenus) {
+        if (roleMenus == null || roleMenus.isEmpty()) {
+            return "";
+        }
+
+        String values = roleMenus.stream()
+                .filter(Objects::nonNull)
+                .map(roleMenu -> "("
+                        + formatSqlValue(roleMenu.getRoleCode()) + ", "
+                        + formatSqlValue(roleMenu.getMenuCode()) + ", "
+                        + formatSqlValue(roleMenu.getCreateTime()) + ")")
+                .collect(Collectors.joining(",\n"));
+
+        if (values.isBlank()) {
+            return "";
+        }
+
+        return "INSERT INTO sys_role_menu (role_code, menu_code, create_time) VALUES\n" + values + ";";
+    }
+
+    private String buildMenuUpdateSql(Menu menu) {
+        if (menu == null) {
+            return "";
+        }
+        return "UPDATE sys_menu SET "
+                + "parent_id = " + formatSqlValue(menu.getParentId()) + ", "
+                + "menu_type = " + formatSqlValue(menu.getMenuType()) + ", "
+                + "title = " + formatSqlValue(menu.getTitle()) + ", "
+                + "path = " + formatSqlValue(menu.getPath()) + ", "
+                + "route_name = " + formatSqlValue(menu.getRouteName()) + ", "
+                + "icon = " + formatSqlValue(menu.getIcon()) + ", "
+                + "hidden = " + formatSqlValue(menu.getHidden()) + ", "
+                + "component_code = " + formatSqlValue(menu.getComponentCode()) + ", "
+                + "sort_num = " + formatSqlValue(menu.getSortNum()) + ", "
+                + "is_enabled = " + formatSqlValue(menu.getIsEnabled()) + ", "
+                + "update_time = " + formatSqlValue(menu.getUpdateTime())
+                + " WHERE id = " + formatSqlValue(menu.getId()) + " AND is_deleted = 0;";
+    }
+
+    private List<String> normalizeRoleCodes(List<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return List.of();
+        }
+
+        return roleCodes.stream()
+                .filter(code -> code != null && !code.trim().isEmpty())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private String formatSqlValue(Object value) {
+        if (value == null) {
+            return "NULL";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            if (value instanceof Boolean bool) {
+                return bool ? "1" : "0";
+            }
+            return value.toString();
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return "'" + localDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "'";
+        }
+        String text = String.valueOf(value).replace("'", "''");
+        return "'" + text + "'";
     }
 
     private List<Long> collectDescendantIds(Long rootId, List<Menu> allMenus) {
