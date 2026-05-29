@@ -37,7 +37,7 @@
 | GET /projects/{projectId}/records | scoring:record:page:{projectId}:{userId}:* | 否 | 无 | 打分提交/修改 | 300 |
 | GET /projects/{projectId}/statistics | （当前无）建议新增 project:statistics:{projectId} | 否（热点可选） | 2-5 分钟（可选） | 打分提交/修改 | 60-180 |
 | GET /projects/{projectId}/statistics/groups/{groupId} | （当前无）建议新增 project:statistics:{projectId}:group:{groupId} | 否 | 2-5 分钟（可选） | 打分提交/修改 | 60-180 |
-| GET /auth/routes | auth:routes:role:{roleCode}:v{menuVersion} | 是（登录后首屏可选） | 无（按版本号失效） | 菜单新增/编辑/删除、角色菜单绑定变化 | 3600 |
+| GET /auth/routes | auth:routes:role:{roleCode}:schema:v2:v{menuVersion} | 是（登录后首屏可选） | 无（按版本号失效） | 菜单新增/编辑/删除、角色菜单绑定变化 | 3600 |
 
 ## 4. 项目状态变化链路（闭环规则）
 
@@ -58,7 +58,7 @@
 菜单管理接口变更时，采用版本号失效而不是批量删 key：
 
 1. 菜单新增、更新、删除，或 `sys_role_menu` 绑定发生变化时，递增 `auth:menu:version`。
-2. `/auth/routes` 读取时先获取当前版本号，再按 `auth:routes:role:{roleCode}:v{menuVersion}` 查缓存。
+2. `/auth/routes` 读取时先获取当前版本号，再按 `auth:routes:role:{roleCode}:schema:v2:v{menuVersion}` 查缓存。
 3. 版本号变化后，旧缓存 key 自动失去访问入口，不需要扫描 Redis。
 
 触发入口：
@@ -81,7 +81,7 @@
 用户登录后异步预热（仅当前用户）：
 1. project:authorized:{userId}:1:10（默认筛选）
 2. scoring:overview:user:{userId}
-3. auth:routes:role:{roleCode}:v{menuVersion}（可选，仅对高频后台角色预热）
+3. auth:routes:role:{roleCode}:schema:v2:v{menuVersion}（可选，仅对高频后台角色预热）
 
 ## 6. 观测指标（建议接入）
 
