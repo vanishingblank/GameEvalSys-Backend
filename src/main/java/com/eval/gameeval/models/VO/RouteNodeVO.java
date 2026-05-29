@@ -22,6 +22,7 @@ public class RouteNodeVO implements Serializable {
     private String icon;
     private Boolean hidden;
     private String componentCode;
+    private List<String> roles = new ArrayList<>();
     private List<String> permissionCodes = new ArrayList<>();
     private List<RouteNodeVO> children = new ArrayList<>();
 }

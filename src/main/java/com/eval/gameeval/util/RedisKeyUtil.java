@@ -37,6 +37,7 @@ public final class RedisKeyUtil {
     // ========== 动态路由缓存 ==========
     public static final String MENU_ROUTES_VERSION_KEY = "auth:menu:version";
     public static final String MENU_ROUTES_ROLE_KEY_PREFIX = "auth:routes:role:";
+    public static final String MENU_ROUTES_SCHEMA_KEY_SUFFIX = ":schema:v2";
     public static final long MENU_ROUTES_TTL = 3600; // 60分钟
 
     public static final long PROJECT_LIST_TTL = 300;      // 5分钟（分页数据变化频繁）
@@ -197,11 +198,11 @@ public final class RedisKeyUtil {
 
     /**
      * 构建角色路由树缓存键
-     * 格式: auth:routes:role:{roleCode}:v{menuVersion}
+     * 格式: auth:routes:role:{roleCode}:schema:v2:v{menuVersion}
      */
     public static String buildMenuRoutesKey(String roleCode, Long menuVersion) {
         String normalizedRole = roleCode != null && !roleCode.trim().isEmpty() ? roleCode.trim() : "unknown";
         long version = menuVersion == null ? 0L : menuVersion;
-        return MENU_ROUTES_ROLE_KEY_PREFIX + normalizedRole + ":v" + version;
+        return MENU_ROUTES_ROLE_KEY_PREFIX + normalizedRole + MENU_ROUTES_SCHEMA_KEY_SUFFIX + ":v" + version;
     }
 }
