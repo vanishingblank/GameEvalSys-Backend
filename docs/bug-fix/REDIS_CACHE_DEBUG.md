@@ -217,7 +217,7 @@ redis-cli GET project:groups:100
 ### 3.1 相关缓存键
 
 - `auth:menu:version`：菜单路由缓存全局版本号
-- `auth:routes:role:{roleCode}:v{menuVersion}`：某个角色当前版本的路由树缓存
+- `auth:routes:role:{roleCode}:schema:v2:v{menuVersion}`：某个角色当前版本的路由树缓存
 
 ### 3.2 正常日志示例
 
@@ -226,16 +226,16 @@ redis-cli GET project:groups:100
 ```text
 【Redis获取】key=auth:menu:version 不存在
 【Redis设置成功】key=auth:menu:version, persistent=true
-【Redis获取】key=auth:routes:role:admin:v1 不存在
+【Redis获取】key=auth:routes:role:admin:schema:v2:v1 不存在
 【缓存回填】查询当前用户路由: userId=1, role=admin, version=1, count=8
-【Redis设置成功】key=auth:routes:role:admin:v1, expireSeconds=3600
+【Redis设置成功】key=auth:routes:role:admin:schema:v2:v1, expireSeconds=3600
 ```
 
 第二次同角色访问时，通常会看到：
 
 ```text
 【Redis获取成功】key=auth:menu:version, value类型=Long
-【Redis获取成功】key=auth:routes:role:admin:v1, value类型=ArrayList
+【Redis获取成功】key=auth:routes:role:admin:schema:v2:v1, value类型=ArrayList
 【缓存命中】查询当前用户路由: userId=1, role=admin, version=1, count=8
 ```
 
@@ -258,7 +258,7 @@ redis-cli GET auth:menu:version
 4. 查看对应角色路由缓存是否已切换到新版本：
 
 ```bash
-redis-cli KEYS "auth:routes:role:admin:*"
+redis-cli KEYS "auth:routes:role:admin:schema:v2:*"
 ```
 
 5. 如果版本号没变，说明菜单写入流程没有走到失效逻辑。
@@ -270,7 +270,7 @@ redis-cli KEYS "auth:routes:role:admin:*"
 
 **优先检查**：
 - `auth:menu:version` 是否递增
-- `/auth/routes` 是否命中 `auth:routes:role:{roleCode}:v{menuVersion}`
+- `/auth/routes` 是否命中 `auth:routes:role:{roleCode}:schema:v2:v{menuVersion}`
 - 是否有前端本地缓存或网关缓存拦截了响应
 
 #### `auth:menu:version` 不存在
