@@ -16,10 +16,12 @@ import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
 import com.eval.gameeval.models.entity.User;
 import com.eval.gameeval.models.entity.Menu;
+import com.eval.gameeval.models.entity.RoleMenu;
 import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
 import com.eval.gameeval.util.RedisToken;
+import com.eval.gameeval.util.MenuRouteCacheUtil;
 import com.eval.gameeval.util.TokenUtil;
 import com.eval.gameeval.util.IpLocationService;
 import jakarta.annotation.PostConstruct;
@@ -59,6 +61,8 @@ public class AuthServiceImpl implements IAuthService{
     private JwtTokenService jwtTokenService;
     @Resource
     private AuthSessionStore authSessionStore;
+    @Resource
+    private MenuRouteCacheUtil menuRouteCacheUtil;
     @Resource
     private PasswordEncoder passwordEncoder;
     @Resource
@@ -194,8 +198,20 @@ public class AuthServiceImpl implements IAuthService{
                 return ResponseVO.unauthorized("未登录或用户不存在");
             }
 
-            List<Menu> accessibleMenus = selectAccessibleMenus(user.getRole());
-            List<RouteNodeVO> routes = buildRoutes(accessibleMenus);
+            String roleCode = user.getRole();
+            Long menuVersion = menuRouteCacheUtil.getMenuRoutesVersion();
+            List<RouteNodeVO> routes = menuRouteCacheUtil.getCachedRoutes(roleCode, menuVersion);
+            if (routes == null) {
+                List<Menu> accessibleMenus = selectAccessibleMenus(roleCode);
+                Map<String, List<String>> menuRoleIndex = buildMenuRoleIndex(menuMapper.selectAllRoleMenus());
+                routes = buildRoutes(accessibleMenus, menuRoleIndex);
+                menuRouteCacheUtil.cacheRoutes(roleCode, menuVersion, routes);
+                log.info("【缓存回填】查询当前用户路由: userId={}, role={}, version={}, count={}",
+                        userId, roleCode, menuVersion, routes.size());
+            } else {
+                log.info("【缓存命中】查询当前用户路由: userId={}, role={}, version={}, count={}",
+                        userId, roleCode, menuVersion, routes.size());
+            }
             return ResponseVO.success("查询成功", routes);
         } catch (Exception e) {
             log.error("查询当前用户路由异常", e);
@@ -617,7 +633,7 @@ public class AuthServiceImpl implements IAuthService{
             return menuMapper.selectAccessibleMenusByRoleCode(role.trim());
         }
 
-        private List<RouteNodeVO> buildRoutes(List<Menu> menus) {
+        private List<RouteNodeVO> buildRoutes(List<Menu> menus, Map<String, List<String>> menuRoleIndex) {
             if (menus == null || menus.isEmpty()) {
                 return List.of();
             }
@@ -631,7 +647,7 @@ public class AuthServiceImpl implements IAuthService{
                     continue;
                 }
                 menuMap.put(menu.getId(), menu);
-                nodeMap.put(menu.getId(), toRouteNode(menu));
+                nodeMap.put(menu.getId(), toRouteNode(menu, menuRoleIndex));
             }
 
             List<RouteNodeVO> roots = new ArrayList<>();
@@ -656,6 +672,35 @@ public class AuthServiceImpl implements IAuthService{
             }
 
             return roots;
+        }
+
+        private Map<String, List<String>> buildMenuRoleIndex(List<RoleMenu> roleMenus) {
+            if (roleMenus == null || roleMenus.isEmpty()) {
+                return Map.of();
+            }
+
+            Map<String, LinkedHashSet<String>> index = new LinkedHashMap<>();
+            for (RoleMenu roleMenu : roleMenus) {
+                if (roleMenu == null) {
+                    continue;
+                }
+                String menuCode = roleMenu.getMenuCode();
+                String roleCode = roleMenu.getRoleCode();
+                if (menuCode == null || menuCode.trim().isEmpty() || roleCode == null || roleCode.trim().isEmpty()) {
+                    continue;
+                }
+                index.computeIfAbsent(menuCode.trim(), key -> new LinkedHashSet<>()).add(roleCode.trim());
+            }
+
+            if (index.isEmpty()) {
+                return Map.of();
+            }
+
+            Map<String, List<String>> result = new LinkedHashMap<>();
+            for (Map.Entry<String, LinkedHashSet<String>> entry : index.entrySet()) {
+                result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+            }
+            return result;
         }
 
         private List<Menu> expandRouteMenus(List<Menu> menus) {
@@ -713,7 +758,8 @@ public class AuthServiceImpl implements IAuthService{
             }
         }
 
-        private RouteNodeVO toRouteNode(Menu menu) {
+        private RouteNodeVO toRouteNode(Menu menu, Map<String, List<String>> menuRoleIndex) {
+            List<String> roles = menuRoleIndex != null ? menuRoleIndex.get(menu.getMenuCode()) : null;
             return new RouteNodeVO()
                     .setMenuCode(menu.getMenuCode())
                     .setPath(menu.getPath())
@@ -722,6 +768,7 @@ public class AuthServiceImpl implements IAuthService{
                     .setIcon(menu.getIcon())
                     .setHidden(Boolean.TRUE.equals(menu.getHidden()))
                     .setComponentCode(menu.getComponentCode())
+                    .setRoles(roles == null ? List.of() : roles)
                     .setPermissionCodes(buildPermissions(List.of(menu)))
                     .setChildren(new ArrayList<>());
         }

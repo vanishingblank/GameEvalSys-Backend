@@ -283,7 +283,7 @@
 - **接口地址**：`/auth/routes`
 - **请求方式**：GET
 - **请求头**：`Authorization: Bearer {token}`
-- **说明**：用于前端动态路由注入。后端返回菜单/路由树，前端通过本地 `componentCode -> component` 白名单映射渲染页面。
+- **说明**：用于前端动态路由注入。后端返回当前用户可访问的菜单/路由树，前端通过本地 `componentCode -> component` 白名单映射渲染页面。每个节点同时返回路由级 `roles` 和操作级 `permissionCodes`，前端不再根据 `path` 或 `menuCode` 推断权限范围。
 - **响应示例**：
 
   ```json
@@ -291,42 +291,50 @@
     "code": 200,
     "message": "查询成功",
     "data": [
-      {
-        "menuCode": "home",
-        "path": "/home",
-        "routeName": "home",
-        "title": "首页",
-        "icon": "HomeFilled",
-        "hidden": false,
-        "componentCode": "normal-home",
-        "children": []
-      },
-      {
-        "menuCode": "admin",
-        "path": "/admin",
-        "routeName": "adminRoot",
-        "title": "管理面板",
-        "icon": "Setting",
-        "hidden": false,
-        "children": [
-          {
-            "menuCode": "admin-project",
-            "path": "/admin/project",
-            "routeName": "projectList",
-            "title": "项目管理",
-            "icon": "Management",
-            "hidden": false,
-            "componentCode": "admin-project-list"
-          }
-        ]
-      }
-    ]
-  }
+        {
+          "menuCode": "home",
+          "path": "/home",
+          "routeName": "home",
+          "title": "首页",
+          "icon": "HomeFilled",
+          "hidden": false,
+          "componentCode": "normal-home",
+          "roles": ["super_admin", "admin", "scorer", "normal"],
+          "permissionCodes": ["menu:home:view"],
+          "children": []
+        },
+        {
+          "menuCode": "admin",
+          "path": "/admin",
+          "routeName": "adminRoot",
+          "title": "管理面板",
+          "icon": "Setting",
+          "hidden": false,
+          "roles": ["super_admin", "admin"],
+          "permissionCodes": ["menu:admin:view"],
+          "children": [
+            {
+              "menuCode": "admin-project",
+              "path": "/admin/project",
+              "routeName": "projectList",
+              "title": "项目管理",
+              "icon": "Management",
+              "hidden": false,
+              "componentCode": "admin-project-list",
+              "roles": ["super_admin", "admin"],
+              "permissionCodes": ["menu:admin-project:view"]
+            }
+          ]
+        }
+      ]
+    }
   ```
 
 - **字段约束建议**：
   - `menuCode`、`routeName` 在同一树内应唯一。
   - `componentCode` 仅返回白名单值，不返回前端源码路径。
+  - `roles` 表示该路由允许访问的全部角色集合，应由后端直接下发，不能由前端猜测。
+  - `permissionCodes` 表示该路由对应的权限码集合，可用于后续更细粒度的守卫或按钮级控制。
   - `hidden=true` 仅影响菜单展示，不应绕过后端接口鉴权。
 
 ### 1.4.2 获取当前用户信息
@@ -382,6 +390,7 @@
 - **接口地址**：`/admin/menus`
 - **请求方式**：GET
 - **说明**：返回可管理的菜单树，包含 `roleCodes`、`hidden`、`isEnabled` 等字段。
+- **缓存说明**：该接口当前仍直读数据库，不走 Redis 缓存；用于后台管理场景，数据量较小且需要实时反映最新配置。
 
 #### 1.4.3.2 查询菜单详情
 
@@ -410,18 +419,70 @@
     "roleCodes": ["admin", "super_admin"]
   }
   ```
+- **响应说明**：
+  - 创建成功后，后端会返回本次保存对应的标准 SQL，便于前端展示和备份。
+  - 推荐返回字段：
+    - `data.sql`：单条核心 SQL
+    - `data.fullSql`：完整事务 SQL
+- **响应示例**：
+
+  ```json
+  {
+    "code": 200,
+    "message": "创建成功",
+    "data": {
+      "id": 23,
+      "sql": "INSERT INTO sys_menu ...",
+      "fullSql": "START TRANSACTION; ..."
+    }
+  }
+  ```
+- **缓存联动**：创建成功后会递增 `auth:menu:version`，使当前所有角色的 `/auth/routes` 缓存自然失效并在下次访问时自动回源重建。
 
 #### 1.4.3.4 更新菜单
 
 - **接口地址**：`/admin/menus/{id}`
 - **请求方式**：PUT
 - **说明**：`menuCode` 不允许修改，更新时需保持与原值一致；`roleCodes` 会覆盖重建。
+- **响应说明**：
+  - 更新成功后同样返回本次更新对应的标准 SQL。
+  - 推荐返回字段：
+    - `data.sql`
+    - `data.fullSql`
+- **缓存联动**：更新菜单名称、路径、图标、启用状态或角色绑定后，都会递增 `auth:menu:version`，刷新对应角色的路由树缓存。
 
-#### 1.4.3.5 删除菜单
+#### 1.4.3.5 查询全部菜单 SQL
+
+- **接口地址**：`/admin/menus/sql`
+- **请求方式**：GET
+- **说明**：用于菜单管理页展示当前全部菜单的 SQL 备份内容。
+- **响应示例**：
+
+  ```json
+  {
+    "code": 200,
+    "message": "查询成功",
+    "data": {
+      "menuCount": 18,
+      "generatedAt": "2026-05-29 16:30:00",
+      "sql": "START TRANSACTION; ...",
+      "fullSql": "START TRANSACTION; ..."
+    }
+  }
+  ```
+
+- **字段说明**：
+  - `menuCount`：当前菜单数量
+  - `generatedAt`：SQL 生成时间
+  - `sql`：核心 SQL 文本
+  - `fullSql`：完整事务 SQL 文本
+
+#### 1.4.3.6 删除菜单
 
 - **接口地址**：`/admin/menus/{id}`
 - **请求方式**：DELETE
 - **说明**：删除会级联软删除当前菜单及其子菜单，并清理相关角色绑定。
+- **缓存联动**：删除完成后会递增 `auth:menu:version`，避免旧的 `/auth/routes` 结果继续返回已删除菜单。
 
 ### 1.5 管理员会话管理
 
