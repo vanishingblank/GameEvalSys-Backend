@@ -20,6 +20,8 @@ import com.eval.gameeval.models.entity.RoleMenu;
 import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
+import com.eval.gameeval.util.RedisBaseUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.MenuRouteCacheUtil;
 import com.eval.gameeval.util.TokenUtil;
@@ -39,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.io.Serializable;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -63,6 +66,8 @@ public class AuthServiceImpl implements IAuthService{
     private AuthSessionStore authSessionStore;
     @Resource
     private MenuRouteCacheUtil menuRouteCacheUtil;
+    @Resource
+    private RedisBaseUtil redisBaseUtil;
     @Resource
     private PasswordEncoder passwordEncoder;
     @Resource
@@ -144,6 +149,8 @@ public class AuthServiceImpl implements IAuthService{
                 authSessionStore.addUserSession(user.getId(), sid);
                 authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
                 authSessionStore.enforceSessionLimit(user.getId());
+                authSessionStore.touchUserOnlineIndex(user.getId());
+                clearSessionSummaryCache(user.getId());
 
                 // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
@@ -234,6 +241,8 @@ public class AuthServiceImpl implements IAuthService{
 
             // 2. 删除Redis中的会话并拉黑当前Access Token
             redisToken.deleteToken(token);
+            authSessionStore.rebuildUserOnlineIndex(userId);
+            clearSessionSummaryCache(userId);
 
             log.info("用户退出成功: userId={}", userId);
 
@@ -291,6 +300,7 @@ public class AuthServiceImpl implements IAuthService{
             authSessionStore.saveRefresh(sid, newRefreshToken, newRefreshTokenId);
             authSessionStore.refreshSessionTtl(sid);
             authSessionStore.refreshUserSessionsTtl(userId);
+            authSessionStore.touchUserOnlineIndex(userId);
 
             RefreshResponseVO response = new RefreshResponseVO();
             response.setToken(accessToken);
@@ -369,6 +379,8 @@ public class AuthServiceImpl implements IAuthService{
             authSessionStore.deleteSession(sid);
             authSessionStore.deleteRefresh(sid);
             authSessionStore.removeUserSession(targetUserId, sid);
+            authSessionStore.rebuildUserOnlineIndex(targetUserId);
+            clearSessionSummaryCache(targetUserId);
 
             log.info("管理员踢下线: adminId={}, targetUserId={}, sid={}", currentUserId, targetUserId, sid);
             return ResponseVO.success("踢下线成功", null);
@@ -401,6 +413,8 @@ public class AuthServiceImpl implements IAuthService{
                 authSessionStore.deleteRefresh(sid);
                 authSessionStore.removeUserSession(targetUserId, sid);
             }
+            authSessionStore.rebuildUserOnlineIndex(targetUserId);
+            clearSessionSummaryCache(targetUserId);
 
             log.info("管理员踢全端: adminId={}, targetUserId={}", currentUserId, targetUserId);
             return ResponseVO.success("踢下线成功", null);
@@ -471,7 +485,7 @@ public class AuthServiceImpl implements IAuthService{
                 vo.setRole((String) userMap.get("role"));
                 vo.setIsEnabled(toBoolean(userMap.get("isEnabled")));
 
-                SessionSummary summary = buildSessionSummary(userId);
+                SessionSummary summary = loadSessionSummary(userId);
                 vo.setOnlineCount(summary.onlineCount);
                 vo.setDevice(summary.device);
                 vo.setLoginLocation(summary.loginLocation);
@@ -496,20 +510,25 @@ public class AuthServiceImpl implements IAuthService{
     }
 
     private List<SessionInfoVO> buildSessionInfos(Set<String> sids) {
+        if (sids == null || sids.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Map<Object, Object>> sessions = authSessionStore.getSessionsBySids(sids);
         return sids.stream()
-            .map(sid -> new java.util.AbstractMap.SimpleEntry<>(sid, authSessionStore.getSession(sid)))
-            .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
-            .map(entry -> new SessionInfoVO()
-                .setSid(entry.getKey())
-                .setUsername(String.valueOf(entry.getValue().get("username")))
-                .setRole(String.valueOf(entry.getValue().get("role")))
-                .setIp(getSessionText(entry.getValue(), "ip"))
-                .setDevice(getSessionText(entry.getValue(), "device"))
-                .setLoginLocation(resolveLoginLocation(entry.getValue()))
-                .setLoginAt(formatInstantInAppZone(entry.getValue().get("loginAt")))
-                .setLastActiveAt(formatInstantInAppZone(entry.getValue().get("lastActiveAt")))
-                .setStatus(String.valueOf(entry.getValue().get("status"))))
-            .collect(Collectors.toList());
+                .map(sessions::get)
+                .filter(session -> session != null && !session.isEmpty())
+                .map(session -> new SessionInfoVO()
+                        .setSid(getSessionText(session, "sid"))
+                        .setUsername(getSessionText(session, "username"))
+                        .setRole(getSessionText(session, "role"))
+                        .setIp(getSessionText(session, "ip"))
+                        .setDevice(getSessionText(session, "device"))
+                        .setLoginLocation(resolveLoginLocation(session))
+                        .setLoginAt(formatInstantInAppZone(session.get("loginAt")))
+                        .setLastActiveAt(formatInstantInAppZone(session.get("lastActiveAt")))
+                        .setStatus(getSessionText(session, "status")))
+                .collect(Collectors.toList());
     }
 
     private User getCurrentUser(Long currentUserId) {
@@ -519,8 +538,42 @@ public class AuthServiceImpl implements IAuthService{
         return userMapper.selectById(currentUserId);
     }
 
-    private SessionSummary buildSessionSummary(Long userId) {
+    private SessionSummary getCachedSessionSummary(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        Object cache = redisBaseUtil.get(RedisKeyUtil.buildOnlineUserSummaryKey(userId));
+        if (cache instanceof SessionSummary summary) {
+            return summary;
+        }
+        return null;
+    }
+
+    private void cacheSessionSummary(Long userId, SessionSummary summary) {
+        if (userId == null || summary == null) {
+            return;
+        }
+        redisBaseUtil.set(RedisKeyUtil.buildOnlineUserSummaryKey(userId), summary, RedisKeyUtil.ONLINE_USER_SUMMARY_TTL);
+    }
+
+    private void clearSessionSummaryCache(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        redisBaseUtil.delete(RedisKeyUtil.buildOnlineUserSummaryKey(userId));
+    }
+
+    private SessionSummary loadSessionSummary(Long userId) {
+        if (userId == null) {
+            return new SessionSummary(0, null, null, null, null, null);
+        }
+        SessionSummary cachedSummary = getCachedSessionSummary(userId);
+        if (cachedSummary != null) {
+            return cachedSummary;
+        }
+
         Set<String> sids = authSessionStore.getUserSessions(userId);
+        Map<String, Map<Object, Object>> sessions = authSessionStore.getSessionsBySids(sids);
         int onlineCount = 0;
         Instant latestActive = null;
         Instant latestLogin = null;
@@ -530,8 +583,7 @@ public class AuthServiceImpl implements IAuthService{
         String latestLocation = null;
         String latestIp = null;
 
-        for (String sid : sids) {
-            Map<Object, Object> session = authSessionStore.getSession(sid);
+        for (Map<Object, Object> session : sessions.values()) {
             if (session == null || session.isEmpty()) {
                 continue;
             }
@@ -553,7 +605,9 @@ public class AuthServiceImpl implements IAuthService{
             }
         }
 
-        return new SessionSummary(onlineCount, latestActiveText, latestLoginText, latestDevice, latestLocation, latestIp);
+        SessionSummary summary = new SessionSummary(onlineCount, latestActiveText, latestLoginText, latestDevice, latestLocation, latestIp);
+        cacheSessionSummary(userId, summary);
+        return summary;
     }
 
     private Instant parseInstant(Object value) {
@@ -828,7 +882,8 @@ public class AuthServiceImpl implements IAuthService{
         return null;
     }
 
-    private static final class SessionSummary {
+    private static final class SessionSummary implements Serializable {
+        private static final long serialVersionUID = 1L;
         private final int onlineCount;
         private final String lastActiveAt;
         private final String lastLoginAt;
