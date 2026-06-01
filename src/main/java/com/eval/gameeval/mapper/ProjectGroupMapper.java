@@ -27,6 +27,19 @@ public interface ProjectGroupMapper {
     List<ProjectGroup> selectByProjectId(@Param("projectId") Long projectId);
 
     /**
+     * 批量查询项目关联的小组ID
+     */
+    @Select("<script>" +
+            "SELECT project_id AS projectId, group_info_id AS groupInfoId " +
+            "FROM project_group " +
+            "WHERE project_id IN " +
+            "<foreach collection='projectIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "</script>")
+    List<Map<String, Object>> selectGroupIdsByProjectIds(@Param("projectIds") List<Long> projectIds);
+
+    /**
      * 根据小组ID查询所有关联的项目
      */
     @Select("SELECT id, project_id AS projectId, group_info_id AS groupInfoId, create_time AS createTime, update_time AS updateTime " +

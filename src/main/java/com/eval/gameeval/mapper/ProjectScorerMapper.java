@@ -4,6 +4,7 @@ import com.eval.gameeval.models.entity.ProjectScorer;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface ProjectScorerMapper {
@@ -15,6 +16,19 @@ public interface ProjectScorerMapper {
     @Select("SELECT id, project_id AS projectId, user_id AS userId, create_time AS createTime " +
             "FROM project_scorer WHERE project_id = #{projectId} ORDER BY create_time ASC")
     List<ProjectScorer> selectByProjectId(@Param("projectId") Long projectId);
+
+    /**
+     * 批量查询项目关联的打分用户ID
+     */
+    @Select("<script>" +
+            "SELECT project_id AS projectId, user_id AS userId " +
+            "FROM project_scorer " +
+            "WHERE project_id IN " +
+            "<foreach collection='projectIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "</script>")
+    List<Map<String, Object>> selectUserIdsByProjectIds(@Param("projectIds") List<Long> projectIds);
 
     // ========== 批量插入 ==========
     @Insert("<script>" +

@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -507,19 +508,18 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 6. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
+            List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+            Map<Long, List<Long>> groupIdsByProjectId = loadGroupIdsByProjectIds(projectIds);
+            Map<Long, List<Long>> scorerIdsByProjectId = loadScorerIdsByProjectIds(projectIds);
             for (Project project : projects) {
                 ProjectVO vo = new ProjectVO();
                 BeanUtils.copyProperties(project, vo);
 
                 // 查询关联的小组
-                List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
-                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
-                vo.setGroupIds(groupIds);
+                vo.setGroupIds(groupIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
                 // 查询关联的打分用户
-                List<ProjectScorer> scorers = scorerMapper.selectByProjectId(project.getId());
-                List<Long> scorerIds = scorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
-                vo.setScorerIds(scorerIds);
+                vo.setScorerIds(scorerIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
                 projectVOs.add(vo);
             }
@@ -667,19 +667,18 @@ public class ProjectServiceImpl implements IProjectService {
 
             // 5. 转换为VO
             List<ProjectVO> projectVOs = new ArrayList<>();
+            List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+            Map<Long, List<Long>> groupIdsByProjectId = loadGroupIdsByProjectIds(projectIds);
+            Map<Long, List<Long>> scorerIdsByProjectId = loadScorerIdsByProjectIds(projectIds);
             for (Project project : projects) {
                 ProjectVO vo = new ProjectVO();
                 BeanUtils.copyProperties(project, vo);
 
                 // 查询关联的小组
-                List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
-                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
-                vo.setGroupIds(groupIds);
+                vo.setGroupIds(groupIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
                 // 查询关联的打分用户
-                List<ProjectScorer> scorers = scorerMapper.selectByProjectId(project.getId());
-                List<Long> scorerIds = scorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
-                vo.setScorerIds(scorerIds);
+                vo.setScorerIds(scorerIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
                 projectVOs.add(vo);
             }
@@ -760,6 +759,40 @@ public class ProjectServiceImpl implements IProjectService {
         return new ArrayList<>(result);
     }
 
+    private Map<Long, List<Long>> loadGroupIdsByProjectIds(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Map<String, Object>> rows = groupMapper.selectGroupIdsByProjectIds(projectIds);
+        Map<Long, List<Long>> result = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long projectId = toLong(row.get("projectId"));
+            Long groupId = toLong(row.get("groupInfoId"));
+            if (projectId == null || groupId == null) {
+                continue;
+            }
+            result.computeIfAbsent(projectId, key -> new ArrayList<>()).add(groupId);
+        }
+        return result;
+    }
+
+    private Map<Long, List<Long>> loadScorerIdsByProjectIds(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Map<String, Object>> rows = scorerMapper.selectUserIdsByProjectIds(projectIds);
+        Map<Long, List<Long>> result = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long projectId = toLong(row.get("projectId"));
+            Long userId = toLong(row.get("userId"));
+            if (projectId == null || userId == null) {
+                continue;
+            }
+            result.computeIfAbsent(projectId, key -> new ArrayList<>()).add(userId);
+        }
+        return result;
+    }
+
     public void reconcileProjectStatusesByScheduler() {
         reconcileProjectStatuses("scheduler");
     }
@@ -780,17 +813,16 @@ public class ProjectServiceImpl implements IProjectService {
             Long total = projectMapper.countTotal(null, true, null);
 
             List<ProjectVO> projectVOs = new ArrayList<>();
+            List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+            Map<Long, List<Long>> groupIdsByProjectId = loadGroupIdsByProjectIds(projectIds);
+            Map<Long, List<Long>> scorerIdsByProjectId = loadScorerIdsByProjectIds(projectIds);
             for (Project project : projects) {
                 ProjectVO vo = new ProjectVO();
                 BeanUtils.copyProperties(project, vo);
 
-                List<ProjectGroup> groups = groupMapper.selectByProjectId(project.getId());
-                List<Long> groupIds = groups.stream().map(ProjectGroup::getGroupInfoId).collect(Collectors.toList());
-                vo.setGroupIds(groupIds);
+                vo.setGroupIds(groupIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
-                List<ProjectScorer> scorers = scorerMapper.selectByProjectId(project.getId());
-                List<Long> scorerIds = scorers.stream().map(ProjectScorer::getUserId).collect(Collectors.toList());
-                vo.setScorerIds(scorerIds);
+                vo.setScorerIds(scorerIdsByProjectId.getOrDefault(project.getId(), Collections.emptyList()));
 
                 projectVOs.add(vo);
             }
