@@ -1,23 +1,24 @@
 package com.eval.gameeval.security;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
+import com.eval.gameeval.util.RedisKeyUtil;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
@@ -71,6 +72,7 @@ public class AuthSessionStore {
         values.put("status", "active");
         redisTemplate.opsForHash().putAll(key, values);
         redisTemplate.expire(key, refreshSeconds, TimeUnit.SECONDS);
+        touchUserOnlineIndex(userId);
     }
 
     public void updateAccessInfo(String sid, String accessJti, long accessExpEpochSeconds) {
@@ -126,6 +128,39 @@ public class AuthSessionStore {
         return raw.stream().map(Object::toString).collect(Collectors.toSet());
     }
 
+    public Map<String, Map<Object, Object>> getSessionsBySids(Collection<String> sids) {
+        if (sids == null || sids.isEmpty()) {
+            return Map.of();
+        }
+
+        List<String> orderedSids = new ArrayList<>();
+        for (String sid : sids) {
+            if (sid != null && !sid.trim().isEmpty()) {
+                orderedSids.add(sid);
+            }
+        }
+        if (orderedSids.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Object> rawResults = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+            for (String sid : orderedSids) {
+                connection.hGetAll(STRING_SERIALIZER.serialize(SESSION_PREFIX + sid));
+            }
+            return null;
+        });
+
+        Map<String, Map<Object, Object>> result = new LinkedHashMap<>();
+        for (int i = 0; i < orderedSids.size(); i++) {
+            Object rawResult = i < rawResults.size() ? rawResults.get(i) : null;
+            Map<Object, Object> session = convertPipelinedHashResult(rawResult);
+            if (session != null && !session.isEmpty()) {
+                result.put(orderedSids.get(i), session);
+            }
+        }
+        return result;
+    }
+
     public void refreshUserSessionsTtl(Long userId) {
         redisTemplate.expire(USER_SESSIONS_PREFIX + userId, refreshSeconds, TimeUnit.SECONDS);
     }
@@ -135,85 +170,18 @@ public class AuthSessionStore {
     }
 
     public Set<Long> getActiveOnlineUserIds() {
-        return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
-            Set<Long> userIds = new HashSet<>();
-            RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
-            RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-            byte[] userIdField = serializeHashField(hashKeySerializer, "userId");
-            byte[] lastActiveAtField = serializeHashField(hashKeySerializer, "lastActiveAt");
-            Instant now = Instant.now();
-
-            Cursor<byte[]> cursor = connection.scan(
-                ScanOptions.scanOptions().match(SESSION_PREFIX + "*").count(1000).build()
-            );
-            try {
-                while (cursor.hasNext()) {
-                    byte[] rawKey = cursor.next();
-                    String key = deserializeKey(rawKey);
-                    if (key == null || !key.startsWith(SESSION_PREFIX)) {
-                        continue;
-                    }
-                    byte[] rawValue = connection.hGet(rawKey, userIdField);
-                    if (rawValue == null) {
-                        continue;
-                    }
-                    Object value = deserializeHashValue(hashValueSerializer, rawValue);
-                    if (value == null) {
-                        continue;
-                    }
-                    byte[] rawLastActiveAt = connection.hGet(rawKey, lastActiveAtField);
-                    if (!isWithinActiveWindow(rawLastActiveAt, hashValueSerializer, now)) {
-                        continue;
-                    }
-                    try {
-                        userIds.add(Long.parseLong(value.toString()));
-                    } catch (NumberFormatException e) {
-                        continue;
-                    }
-                }
-            } finally {
-                cursor.close();
-            }
-            return userIds;
-        });
+        long cutoffMillis = Instant.now().minusSeconds(Math.max(0, onlineActiveWindowSeconds)).toEpochMilli();
+        Set<Object> members = redisTemplate.opsForZSet().rangeByScore(
+                RedisKeyUtil.buildOnlineUserIndexKey(),
+                cutoffMillis,
+                Double.MAX_VALUE
+        );
+        return convertUserIdSet(members);
     }
 
     public Set<Long> getLoggedInUserIds() {
-        return redisTemplate.execute((RedisCallback<Set<Long>>) connection -> {
-            Set<Long> userIds = new HashSet<>();
-            RedisSerializer<Object> hashKeySerializer = (RedisSerializer<Object>) redisTemplate.getHashKeySerializer();
-            RedisSerializer<Object> hashValueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
-            byte[] userIdField = serializeHashField(hashKeySerializer, "userId");
-
-            Cursor<byte[]> cursor = connection.scan(
-                ScanOptions.scanOptions().match(SESSION_PREFIX + "*").count(1000).build()
-            );
-            try {
-                while (cursor.hasNext()) {
-                    byte[] rawKey = cursor.next();
-                    String key = deserializeKey(rawKey);
-                    if (key == null || !key.startsWith(SESSION_PREFIX)) {
-                        continue;
-                    }
-                    byte[] rawValue = connection.hGet(rawKey, userIdField);
-                    if (rawValue == null) {
-                        continue;
-                    }
-                    Object value = deserializeHashValue(hashValueSerializer, rawValue);
-                    if (value == null) {
-                        continue;
-                    }
-                    try {
-                        userIds.add(Long.parseLong(value.toString()));
-                    } catch (NumberFormatException e) {
-                        continue;
-                    }
-                }
-            } finally {
-                cursor.close();
-            }
-            return userIds;
-        });
+        Set<Object> members = redisTemplate.opsForZSet().range(RedisKeyUtil.buildOnlineUserIndexKey(), 0, -1);
+        return convertUserIdSet(members);
     }
 
     public boolean isSessionRecentlyActive(Map<Object, Object> session) {
@@ -230,6 +198,44 @@ public class AuthSessionStore {
     public void removeUserSession(Long userId, String sid) {
         String key = USER_SESSIONS_PREFIX + userId;
         redisTemplate.opsForSet().remove(key, sid);
+    }
+
+    public void touchUserOnlineIndex(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        markUserOnline(userId, Instant.now());
+    }
+
+    public void rebuildUserOnlineIndex(Long userId) {
+        if (userId == null) {
+            return;
+        }
+
+        Set<String> sids = getUserSessions(userId);
+        if (sids == null || sids.isEmpty()) {
+            removeUserOnlineIndex(userId);
+            return;
+        }
+
+        Map<String, Map<Object, Object>> sessions = getSessionsBySids(sids);
+        if (sessions.isEmpty()) {
+            removeUserOnlineIndex(userId);
+            return;
+        }
+        Instant latestActivity = null;
+        for (Map<Object, Object> session : sessions.values()) {
+            Instant activity = resolveSessionActivity(session);
+            if (activity != null && (latestActivity == null || activity.isAfter(latestActivity))) {
+                latestActivity = activity;
+            }
+        }
+
+        if (latestActivity == null) {
+            removeUserOnlineIndex(userId);
+            return;
+        }
+        markUserOnline(userId, latestActivity);
     }
 
     public void enforceSessionLimit(Long userId) {
@@ -255,6 +261,7 @@ public class AuthSessionStore {
             deleteRefresh(sid);
             removeUserSession(userId, sid);
         }
+        rebuildUserOnlineIndex(userId);
     }
 
     public void updateLastActiveIfStale(String sid) {
@@ -266,15 +273,18 @@ public class AuthSessionStore {
         Instant now = Instant.now();
         if (raw == null) {
             redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+            touchUserOnlineIndex(getSessionUserId(sid));
             return;
         }
         try {
             Instant last = Instant.parse(raw.toString());
             if (now.minusSeconds(lastActiveRefreshSeconds).isAfter(last)) {
                 redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+                touchUserOnlineIndex(getSessionUserId(sid));
             }
         } catch (DateTimeParseException e) {
             redisTemplate.opsForHash().put(key, "lastActiveAt", now.toString());
+            touchUserOnlineIndex(getSessionUserId(sid));
         }
     }
 
@@ -312,6 +322,7 @@ public class AuthSessionStore {
             deleteRefresh(sid);
         }
         redisTemplate.delete(USER_SESSIONS_PREFIX + userId);
+        removeUserOnlineIndex(userId);
     }
 
     public void saveRefresh(String sid, String refreshToken, String tokenId) {
@@ -391,6 +402,105 @@ public class AuthSessionStore {
         try {
             return Instant.parse(value.toString());
         } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private void markUserOnline(Long userId, Instant activityTime) {
+        if (userId == null) {
+            return;
+        }
+        Instant safeTime = activityTime == null ? Instant.now() : activityTime;
+        redisTemplate.opsForZSet().add(
+                RedisKeyUtil.buildOnlineUserIndexKey(),
+                String.valueOf(userId),
+                safeTime.toEpochMilli()
+        );
+    }
+
+    private void removeUserOnlineIndex(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        redisTemplate.opsForZSet().remove(RedisKeyUtil.buildOnlineUserIndexKey(), String.valueOf(userId));
+    }
+
+    private Set<Long> convertUserIdSet(Set<Object> members) {
+        if (members == null || members.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> result = new HashSet<>();
+        for (Object member : members) {
+            Long userId = toLong(member);
+            if (userId != null) {
+                result.add(userId);
+            }
+        }
+        return result;
+    }
+
+    private Map<Object, Object> convertPipelinedHashResult(Object rawResult) {
+        if (!(rawResult instanceof Map<?, ?> rawMap)) {
+            return Map.of();
+        }
+        Map<Object, Object> result = new HashMap<>();
+        RedisSerializer<Object> hashValueSerializer =
+                (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            Object key = convertRedisValue(entry.getKey());
+            Object value = convertRedisValue(entry.getValue(), hashValueSerializer);
+            if (key != null && value != null) {
+                result.put(key, value);
+            }
+        }
+        return result;
+    }
+
+    private Object convertRedisValue(Object value) {
+        return convertRedisValue(value, null);
+    }
+
+    private Object convertRedisValue(Object value, RedisSerializer<Object> serializer) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof byte[] rawBytes) {
+            if (serializer != null) {
+                try {
+                    Object deserialized = serializer.deserialize(rawBytes);
+                    if (deserialized != null) {
+                        return deserialized;
+                    }
+                } catch (SerializationException ignored) {
+                    // fall through
+                }
+            }
+            return STRING_SERIALIZER.deserialize(rawBytes);
+        }
+        return value;
+    }
+
+    private Instant resolveSessionActivity(Map<Object, Object> session) {
+        if (session == null || session.isEmpty()) {
+            return null;
+        }
+        Instant lastActiveAt = parseInstant(session.get("lastActiveAt"));
+        if (lastActiveAt != null) {
+            return lastActiveAt;
+        }
+        return parseInstant(session.get("loginAt"));
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (Exception e) {
             return null;
         }
     }
