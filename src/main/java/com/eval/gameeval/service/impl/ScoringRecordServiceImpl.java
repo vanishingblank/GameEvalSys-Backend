@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -71,6 +72,9 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
 
     @Autowired
     private ProjectStatisticsSummaryRebuildService projectStatisticsSummaryRebuildService;
+
+    @Autowired
+    private ProjectMaliciousRebuildTaskService projectMaliciousRebuildTaskService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -212,11 +216,20 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
             }
 
             if (MALICIOUS_RULE_AUTO.equals(maliciousRuleType)) {
-                refreshMaliciousFlagsForProjectGroup(request.getProjectId(), request.getGroupId());
-                ScoringRecord refreshedRecord = recordMapper.selectById(record.getId());
-                if (refreshedRecord != null) {
-                    record = refreshedRecord;
+                List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetailsByProjectAndGroup(
+                        request.getProjectId(),
+                        request.getGroupId()
+                );
+                boolean currentRecordMalicious = isCurrentRecordMaliciousForProjectGroup(groupScoreRows, record.getId());
+                if (!Objects.equals(record.getIsMalicious(), currentRecordMalicious ? 1 : 0)) {
+                    record.setIsMalicious(currentRecordMalicious ? 1 : 0);
+                    record.setUpdateTime(LocalDateTime.now());
+                    recordMapper.updateById(record);
+                } else {
+                    record.setIsMalicious(currentRecordMalicious ? 1 : 0);
                 }
+                triggerProjectMaliciousRebuildAfterCommit(request.getProjectId(), maliciousRuleType,
+                        project.getMaliciousScoreLower(), project.getMaliciousScoreUpper());
             }
 
             // 10. 构建响应
@@ -386,11 +399,13 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
         return totalScore.compareTo(scoreLower) < 0 || totalScore.compareTo(scoreUpper) > 0;
     }
 
-    private void refreshMaliciousFlagsForProjectGroup(Long projectId, Long groupId) {
-        List<Map<String, Object>> groupScoreRows = recordMapper.selectGroupScoreDetailsByProjectAndGroup(projectId, groupId);
-        recordMapper.clearMaliciousFlagByProjectAndGroup(projectId, groupId);
+    private boolean isCurrentRecordMaliciousForProjectGroup(List<Map<String, Object>> groupScoreRows, Long recordId) {
+        if (recordId == null) {
+            return false;
+        }
+
         if (groupScoreRows == null || groupScoreRows.isEmpty()) {
-            return;
+            return false;
         }
 
         List<BigDecimal> rawScores = groupScoreRows.stream()
@@ -398,18 +413,19 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 .collect(Collectors.toList());
         Set<Integer> abnormalIndexes = detectOutlierIndexes(rawScores);
         if (abnormalIndexes.isEmpty()) {
-            return;
+            return false;
         }
 
-        List<Long> maliciousRecordIds = abnormalIndexes.stream()
-                .filter(index -> index != null && index >= 0 && index < groupScoreRows.size())
-                .map(index -> toLong(groupScoreRows.get(index).get("recordId")))
-                .filter(recordId -> recordId != null && recordId > 0)
-                .distinct()
-                .collect(Collectors.toList());
-        if (!maliciousRecordIds.isEmpty()) {
-            recordMapper.markMaliciousByRecordIds(maliciousRecordIds);
+        for (Integer abnormalIndex : abnormalIndexes) {
+            if (abnormalIndex == null || abnormalIndex < 0 || abnormalIndex >= groupScoreRows.size()) {
+                continue;
+            }
+            Long abnormalRecordId = toLong(groupScoreRows.get(abnormalIndex).get("recordId"));
+            if (recordId.equals(abnormalRecordId)) {
+                return true;
+            }
         }
+        return false;
     }
 
     private Set<Integer> detectOutlierIndexes(List<BigDecimal> scores) {
@@ -509,6 +525,27 @@ public class ScoringRecordServiceImpl implements IScoringRecordService {
                 }
             });
             log.info("已注册项目统计汇总重建任务: projectId={}", projectId);
+        } else {
+            rebuildTask.run();
+        }
+    }
+
+    private void triggerProjectMaliciousRebuildAfterCommit(Long projectId, String ruleType,
+                                                           BigDecimal scoreLower, BigDecimal scoreUpper) {
+        if (projectId == null) {
+            return;
+        }
+
+        Runnable rebuildTask = () -> projectMaliciousRebuildTaskService.rebuildProjectMaliciousFlagsAsync(
+                projectId, ruleType, scoreLower, scoreUpper);
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rebuildTask.run();
+                }
+            });
+            log.info("已注册项目恶意标记异步重算任务: projectId={}", projectId);
         } else {
             rebuildTask.run();
         }
