@@ -7,6 +7,7 @@ import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.OnlineUserPageVO;
 import com.eval.gameeval.models.VO.RouteNodeVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
 import com.eval.gameeval.models.VO.ResponseVO;
@@ -15,6 +16,8 @@ import com.eval.gameeval.models.entity.Menu;
 import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.impl.AuthServiceImpl;
+import com.eval.gameeval.util.RedisBaseUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.TokenUtil;
 import jakarta.annotation.Resource;
@@ -29,13 +32,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
@@ -54,6 +63,9 @@ class AuthServiceImplTest {
 
     @Mock
     private AuthSessionStore authSessionStore;
+
+    @Mock
+    private RedisBaseUtil redisBaseUtil;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -100,6 +112,7 @@ class AuthServiceImplTest {
         assertThat(loginResponse.getData().getToken()).isEqualTo("access-token");
         assertThat(loginResponse.getData().getRefreshToken()).isNotBlank();
         assertThat(loginResponse.getData().getSid()).isNotBlank();
+        verify(authSessionStore).touchUserOnlineIndex(1L);
 
         RefreshRequestDTO refreshRequest = new RefreshRequestDTO();
         refreshRequest.setSid(loginResponse.getData().getSid());
@@ -124,6 +137,7 @@ class AuthServiceImplTest {
         assertThat(refreshResponse.getData()).isNotNull();
         assertThat(refreshResponse.getData().getToken()).isEqualTo("new-access-token");
         assertThat(refreshResponse.getData().getRefreshToken()).isNotBlank();
+        verify(authSessionStore, times(2)).touchUserOnlineIndex(1L);
 
         when(redisToken.getUserIdByToken("new-access-token")).thenReturn(1L);
         doNothing().when(redisToken).deleteToken("new-access-token");
@@ -131,6 +145,8 @@ class AuthServiceImplTest {
         ResponseVO<Void> logoutResponse = authService.logout("new-access-token");
         assertThat(logoutResponse.getCode()).isEqualTo(200);
         verify(redisToken).deleteToken("new-access-token");
+        verify(authSessionStore).rebuildUserOnlineIndex(1L);
+        verify(redisBaseUtil, times(2)).delete(RedisKeyUtil.buildOnlineUserSummaryKey(1L));
     }
 
     @Test
@@ -215,6 +231,100 @@ class AuthServiceImplTest {
         assertThat(superAdminRoute.getChildren())
                 .extracting(RouteNodeVO::getMenuCode)
                 .contains("super-monitor-online", "super-monitor-server", "super-admin-menu-management");
+    }
+
+    @Test
+    void getOnlineUsersShouldUseBatchSessionLookupAndSummaryCache() {
+        User currentUser = new User();
+        currentUser.setId(99L);
+        currentUser.setRole("admin");
+        when(userMapper.selectById(99L)).thenReturn(currentUser);
+
+        when(authSessionStore.getActiveOnlineUserIds()).thenReturn(Set.of(1L));
+        Map<String, Object> userRow = new LinkedHashMap<>();
+        userRow.put("id", 1L);
+        userRow.put("username", "tester");
+        userRow.put("name", "测试用户");
+        userRow.put("role", "admin");
+        userRow.put("isEnabled", true);
+
+        when(userMapper.selectPageWithGroupsByIds(
+                ArgumentMatchers.anyList(),
+                ArgumentMatchers.nullable(String.class),
+                ArgumentMatchers.nullable(String.class),
+                ArgumentMatchers.nullable(Boolean.class),
+                ArgumentMatchers.anyInt(),
+                ArgumentMatchers.anyInt()))
+                .thenReturn(List.of(userRow));
+        when(userMapper.countTotalByIds(
+                ArgumentMatchers.anyList(),
+                ArgumentMatchers.nullable(String.class),
+                ArgumentMatchers.nullable(String.class),
+                ArgumentMatchers.nullable(Boolean.class)))
+                .thenReturn(1L);
+        when(redisBaseUtil.get(ArgumentMatchers.anyString())).thenReturn(null);
+
+        Map<Object, Object> session = new HashMap<>();
+        session.put("sid", "sid-1");
+        session.put("userId", 1L);
+        session.put("username", "tester");
+        session.put("role", "admin");
+        session.put("ip", "127.0.0.1");
+        session.put("device", "Windows");
+        session.put("loginLocation", "localhost");
+        session.put("loginAt", Instant.now().minusSeconds(10).toString());
+        session.put("lastActiveAt", Instant.now().toString());
+        session.put("status", "active");
+
+        when(authSessionStore.getUserSessions(1L)).thenReturn(Set.of("sid-1"));
+        when(authSessionStore.getSessionsBySids(ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of("sid-1", session));
+
+        ResponseVO<OnlineUserPageVO> response = authService.getOnlineUsers(99L, null);
+
+        assertThat(response.getCode()).isEqualTo(200);
+        assertThat(response.getData()).isNotNull();
+        assertThat(response.getData().getList()).hasSize(1);
+        assertThat(response.getData().getList().get(0).getOnlineCount()).isEqualTo(1);
+        assertThat(response.getData().getList().get(0).getLoginLocation()).isEqualTo("localhost");
+        verify(authSessionStore).getSessionsBySids(ArgumentMatchers.anyCollection());
+        verify(authSessionStore, never()).getSession(ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void getUserSessionsShouldUseBatchLookupAndFilterMissingSession() {
+        User currentUser = new User();
+        currentUser.setId(88L);
+        currentUser.setRole("admin");
+        when(userMapper.selectById(88L)).thenReturn(currentUser);
+
+        User targetUser = new User();
+        targetUser.setId(2L);
+        targetUser.setUsername("target");
+        when(userMapper.selectById(2L)).thenReturn(targetUser);
+
+        Map<Object, Object> session = new HashMap<>();
+        session.put("sid", "sid-1");
+        session.put("username", "target");
+        session.put("role", "admin");
+        session.put("ip", "127.0.0.1");
+        session.put("device", "Windows");
+        session.put("loginLocation", "localhost");
+        session.put("loginAt", Instant.now().minusSeconds(10).toString());
+        session.put("lastActiveAt", Instant.now().toString());
+        session.put("status", "active");
+
+        when(authSessionStore.getUserSessions(2L)).thenReturn(Set.of("sid-1", "sid-missing"));
+        when(authSessionStore.getSessionsBySids(ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of("sid-1", session));
+
+        ResponseVO<java.util.List<SessionInfoVO>> response = authService.getUserSessions(88L, 2L);
+
+        assertThat(response.getCode()).isEqualTo(200);
+        assertThat(response.getData()).hasSize(1);
+        assertThat(response.getData().get(0).getSid()).isEqualTo("sid-1");
+        verify(authSessionStore).getSessionsBySids(ArgumentMatchers.anyCollection());
+        verify(authSessionStore, never()).getSession(ArgumentMatchers.anyString());
     }
 
         private java.util.List<Menu> buildAdminMenus() {

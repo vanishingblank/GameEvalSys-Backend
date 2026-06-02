@@ -400,7 +400,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             header.add("总分");
             rows.add(header);
 
-            Map<Long, String> groupNameCache = new HashMap<>();
+            Map<Long, String> groupNameCache = loadGroupNameMap(records.stream()
+                    .map(ScoringRecord::getGroupInfoId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(LinkedHashSet::new)));
             Map<Long, String> userNameCache = new HashMap<>();
 
             List<List<Object>> incompleteScorerRows = buildIncompleteScorerRows(projectGroups, records, userNameCache, groupNameCache);
@@ -413,10 +416,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 row.add(project.getName());
 
                 // 小组名称（从project_group_info获取）
-                String groupName = groupNameCache.computeIfAbsent(record.getGroupInfoId(), groupId -> {
-                    ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupId);
-                    return groupInfo != null ? groupInfo.getName() : "未知";
-                });
+                String groupName = groupNameCache.getOrDefault(record.getGroupInfoId(), "未知");
                 row.add(groupName);
 
                 // 打分用户
@@ -540,7 +540,10 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
                 categoryIndicatorIds.put(category.getId(), indicatorIds);
             }
 
-            Map<Long, String> groupNameCache = new HashMap<>();
+            Map<Long, String> groupNameCache = loadGroupNameMap(projectGroups.stream()
+                    .map(ProjectGroup::getGroupInfoId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(LinkedHashSet::new)));
             List<List<Object>> rows = new ArrayList<>();
 
             List<Object> header = new ArrayList<>();
@@ -555,10 +558,7 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             rows.add(header);
 
             for (ProjectGroup group : projectGroups) {
-                String groupName = groupNameCache.computeIfAbsent(group.getGroupInfoId(), groupId -> {
-                    ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupId);
-                    return groupInfo != null ? groupInfo.getName() : "未知";
-                });
+                String groupName = groupNameCache.getOrDefault(group.getGroupInfoId(), "未知");
 
                 List<Object> row = new ArrayList<>();
                 row.add(group.getGroupInfoId());
@@ -1417,6 +1417,8 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
             return rows;
         }
 
+        groupNameCache.putAll(loadGroupNameMap(allGroupIds));
+
         Map<Long, Set<Long>> userScoredGroupIds = new LinkedHashMap<>();
         Set<Long> userIds = new LinkedHashSet<>();
         for (ScoringRecord record : records) {
@@ -1460,11 +1462,35 @@ public class ProjectStatisticsServiceImpl implements IProjectStatisticsService {
     }
 
     private String buildGroupDisplayText(Long groupId, Map<Long, String> groupNameCache) {
-        String groupName = groupNameCache.computeIfAbsent(groupId, id -> {
-            ProjectGroupInfo groupInfo = groupInfoMapper.selectById(id);
-            return groupInfo != null ? groupInfo.getName() : "未知";
-        });
+        String groupName = groupNameCache.getOrDefault(groupId, "未知");
         return groupName + "(ID:" + groupId + ")";
+    }
+
+    private Map<Long, String> loadGroupNameMap(Collection<Long> groupIds) {
+        if (groupIds == null || groupIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Long> distinctGroupIds = groupIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (distinctGroupIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<ProjectGroupInfo> groupInfos = groupInfoMapper.selectByIds(distinctGroupIds);
+        if (groupInfos == null || groupInfos.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, String> result = new HashMap<>();
+        for (ProjectGroupInfo groupInfo : groupInfos) {
+            if (groupInfo != null && groupInfo.getId() != null) {
+                result.put(groupInfo.getId(), groupInfo.getName());
+            }
+        }
+        return result;
     }
 
     private Long toLong(Object value) {

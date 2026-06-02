@@ -20,6 +20,19 @@ public interface ProjectGroupInfoMapper {
     ProjectGroupInfo selectById(@Param("id") Long id);
 
     /**
+     * 根据ID批量查询小组信息
+     */
+    @Select("<script>" +
+            "SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +
+            "FROM project_group_info " +
+            "WHERE is_deleted = 0 AND id IN " +
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>" +
+            "  #{id}" +
+            "</foreach>" +
+            "</script>")
+    List<ProjectGroupInfo> selectByIds(@Param("ids") List<Long> ids);
+
+    /**
      * 查询所有启用的小组信息
      */
     @Select("SELECT id, name, description, is_enabled AS isEnabled, create_time AS createTime, update_time AS updateTime " +

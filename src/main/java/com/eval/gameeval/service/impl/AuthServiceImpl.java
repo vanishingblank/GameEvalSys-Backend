@@ -8,6 +8,7 @@ import com.eval.gameeval.models.DTO.User.LoginRequestDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.OnlineUserOverviewVO;
 import com.eval.gameeval.models.VO.OnlineUserPageVO;
 import com.eval.gameeval.models.VO.OnlineUserVO;
 import com.eval.gameeval.models.VO.RouteNodeVO;
@@ -20,6 +21,9 @@ import com.eval.gameeval.models.entity.RoleMenu;
 import com.eval.gameeval.security.AuthSessionStore;
 import com.eval.gameeval.security.JwtTokenService;
 import com.eval.gameeval.service.IAuthService;
+import com.eval.gameeval.util.RedisBaseUtil;
+import com.eval.gameeval.util.RedisKeyUtil;
+import com.eval.gameeval.util.OverviewCacheUtil;
 import com.eval.gameeval.util.RedisToken;
 import com.eval.gameeval.util.MenuRouteCacheUtil;
 import com.eval.gameeval.util.TokenUtil;
@@ -33,12 +37,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.io.Serializable;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -64,9 +70,13 @@ public class AuthServiceImpl implements IAuthService{
     @Resource
     private MenuRouteCacheUtil menuRouteCacheUtil;
     @Resource
+    private RedisBaseUtil redisBaseUtil;
+    @Resource
     private PasswordEncoder passwordEncoder;
     @Resource
     private IpLocationService ipLocationService;
+    @Resource
+    private OverviewCacheUtil overviewCacheUtil;
 
     @Value("${app.time-zone:Asia/Shanghai}")
     private String appTimeZone;
@@ -144,6 +154,8 @@ public class AuthServiceImpl implements IAuthService{
                 authSessionStore.addUserSession(user.getId(), sid);
                 authSessionStore.saveRefresh(sid, refreshToken, refreshTokenId);
                 authSessionStore.enforceSessionLimit(user.getId());
+                authSessionStore.touchUserOnlineIndex(user.getId());
+                clearSessionSummaryCache(user.getId());
 
                 // 5. 构建响应
             LoginResponseVO responseVO = new LoginResponseVO();
@@ -234,6 +246,8 @@ public class AuthServiceImpl implements IAuthService{
 
             // 2. 删除Redis中的会话并拉黑当前Access Token
             redisToken.deleteToken(token);
+            authSessionStore.rebuildUserOnlineIndex(userId);
+            clearSessionSummaryCache(userId);
 
             log.info("用户退出成功: userId={}", userId);
 
@@ -291,6 +305,7 @@ public class AuthServiceImpl implements IAuthService{
             authSessionStore.saveRefresh(sid, newRefreshToken, newRefreshTokenId);
             authSessionStore.refreshSessionTtl(sid);
             authSessionStore.refreshUserSessionsTtl(userId);
+            authSessionStore.touchUserOnlineIndex(userId);
 
             RefreshResponseVO response = new RefreshResponseVO();
             response.setToken(accessToken);
@@ -369,6 +384,8 @@ public class AuthServiceImpl implements IAuthService{
             authSessionStore.deleteSession(sid);
             authSessionStore.deleteRefresh(sid);
             authSessionStore.removeUserSession(targetUserId, sid);
+            authSessionStore.rebuildUserOnlineIndex(targetUserId);
+            clearSessionSummaryCache(targetUserId);
 
             log.info("管理员踢下线: adminId={}, targetUserId={}, sid={}", currentUserId, targetUserId, sid);
             return ResponseVO.success("踢下线成功", null);
@@ -401,6 +418,8 @@ public class AuthServiceImpl implements IAuthService{
                 authSessionStore.deleteRefresh(sid);
                 authSessionStore.removeUserSession(targetUserId, sid);
             }
+            authSessionStore.rebuildUserOnlineIndex(targetUserId);
+            clearSessionSummaryCache(targetUserId);
 
             log.info("管理员踢全端: adminId={}, targetUserId={}", currentUserId, targetUserId);
             return ResponseVO.success("踢下线成功", null);
@@ -471,7 +490,7 @@ public class AuthServiceImpl implements IAuthService{
                 vo.setRole((String) userMap.get("role"));
                 vo.setIsEnabled(toBoolean(userMap.get("isEnabled")));
 
-                SessionSummary summary = buildSessionSummary(userId);
+                SessionSummary summary = loadSessionSummary(userId);
                 vo.setOnlineCount(summary.onlineCount);
                 vo.setDevice(summary.device);
                 vo.setLoginLocation(summary.loginLocation);
@@ -495,21 +514,152 @@ public class AuthServiceImpl implements IAuthService{
         }
     }
 
+    @Override
+    public ResponseVO<OnlineUserOverviewVO> getOnlineUsersOverview(Long currentUserId, String role, Boolean isEnabled, Boolean onlineOnly) {
+        try {
+            User currentUser = getCurrentUser(currentUserId);
+            if (currentUser == null) {
+                return ResponseVO.unauthorized("用户不存在");
+            }
+            if (!isAdmin(currentUser)) {
+                return ResponseVO.forbidden("权限不足");
+            }
+
+            // 无筛选参数时走 Redis 缓存（与其它概览 API 一致）
+            boolean hasFilters = role != null || isEnabled != null || onlineOnly != null;
+            if (!hasFilters) {
+                Object cache = overviewCacheUtil.getOnlineUserOverviewCache();
+                if (cache != null) {
+                    OnlineUserOverviewVO cachedOverview = (OnlineUserOverviewVO) cache;
+                    log.info("【缓存命中】查询在线用户概览: totalUsers={}, onlineUserCount={}",
+                            cachedOverview.getTotalUsers(), cachedOverview.getOnlineUserCount());
+                    return ResponseVO.success("查询成功", cachedOverview);
+                }
+            }
+
+            OnlineUserOverviewVO overview = loadOnlineUserOverview(role, isEnabled, onlineOnly);
+
+            // 仅无筛选时写入缓存
+            if (!hasFilters) {
+                overviewCacheUtil.cacheOnlineUserOverview(overview);
+            }
+
+            return ResponseVO.success("查询成功", overview);
+        } catch (Exception e) {
+            log.error("查询在线用户概览异常", e);
+            return ResponseVO.error("查询失败");
+        }
+    }
+
+    public void warmupOnlineUserOverviewCache() {
+        try {
+            if (overviewCacheUtil.getOnlineUserOverviewCache() != null) {
+                return;
+            }
+
+            OnlineUserOverviewVO overview = loadOnlineUserOverview(null, null, null);
+            overviewCacheUtil.cacheOnlineUserOverview(overview);
+
+            log.info("全局概览预热完成: key={}, totalUsers={}, onlineUserCount={}",
+                    RedisKeyUtil.ONLINE_USER_OVERVIEW_KEY, overview.getTotalUsers(), overview.getOnlineUserCount());
+        } catch (Exception e) {
+            log.error("全局概览预热异常: key={}", RedisKeyUtil.ONLINE_USER_OVERVIEW_KEY, e);
+        }
+    }
+
+    private void clearOnlineUserOverviewCache() {
+        overviewCacheUtil.clearOnlineUserOverviewCache();
+    }
+
+    /**
+     * 加载在线用户概览统计（DB + Redis 组合计算）
+     */
+    private OnlineUserOverviewVO loadOnlineUserOverview(String role, Boolean isEnabled, Boolean onlineOnly) {
+        // 1. 确定用户 ID 范围（根据 onlineOnly 参数）
+        Set<Long> universeIds = null;
+        if (Boolean.TRUE.equals(onlineOnly)) {
+            universeIds = authSessionStore.getActiveOnlineUserIds();
+        } else if (Boolean.FALSE.equals(onlineOnly)) {
+            universeIds = authSessionStore.getLoggedInUserIds();
+        }
+
+        List<Long> idList = (universeIds != null && !universeIds.isEmpty())
+                ? new ArrayList<>(universeIds)
+                : null;
+
+        // 2. 统计 totalUsers（受 role/isEnabled/onlineOnly 影响）
+        Long totalUsers;
+        if (idList != null) {
+            totalUsers = userMapper.countFilteredByIds(idList, role, isEnabled);
+        } else {
+            totalUsers = userMapper.countFiltered(role, isEnabled);
+        }
+
+        // 3. 统计 disabledUserCount（被禁用账号数，按 role 筛选，全量非分页）
+        Long disabledUserCount;
+        if (idList != null) {
+            disabledUserCount = userMapper.countFilteredByIds(idList, role, false);
+        } else {
+            disabledUserCount = userMapper.countFiltered(role, false);
+        }
+
+        // 4. 统计 onlineUserCount 和 activeSessionCount
+        Set<Long> activeOnlineIds = authSessionStore.getActiveOnlineUserIds();
+        long onlineUserCount = 0L;
+        long activeSessionCount = 0L;
+
+        if (!activeOnlineIds.isEmpty()) {
+            // 获取 DB 中符合 role + isEnabled 条件的用户 ID 集合
+            List<Long> filteredDbIds = userMapper.selectFilteredUserIds(role, isEnabled);
+            Set<Long> filteredDbIdSet = new HashSet<>(filteredDbIds);
+
+            // 如果指定了 onlineOnly，再与 universe 做交集
+            if (universeIds != null) {
+                filteredDbIdSet.retainAll(universeIds);
+            }
+
+            // 与活跃在线用户取交集
+            Set<Long> onlineIntersection = new HashSet<>(activeOnlineIds);
+            onlineIntersection.retainAll(filteredDbIdSet);
+
+            onlineUserCount = (long) onlineIntersection.size();
+
+            // 累加活跃会话数
+            for (Long uid : onlineIntersection) {
+                SessionSummary summary = loadSessionSummary(uid);
+                if (summary != null) {
+                    activeSessionCount += Math.max(0, summary.onlineCount);
+                }
+            }
+        }
+
+        return new OnlineUserOverviewVO()
+                .setTotalUsers(totalUsers)
+                .setOnlineUserCount(onlineUserCount)
+                .setActiveSessionCount(activeSessionCount)
+                .setDisabledUserCount(disabledUserCount);
+    }
+
     private List<SessionInfoVO> buildSessionInfos(Set<String> sids) {
+        if (sids == null || sids.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Map<Object, Object>> sessions = authSessionStore.getSessionsBySids(sids);
         return sids.stream()
-            .map(sid -> new java.util.AbstractMap.SimpleEntry<>(sid, authSessionStore.getSession(sid)))
-            .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
-            .map(entry -> new SessionInfoVO()
-                .setSid(entry.getKey())
-                .setUsername(String.valueOf(entry.getValue().get("username")))
-                .setRole(String.valueOf(entry.getValue().get("role")))
-                .setIp(getSessionText(entry.getValue(), "ip"))
-                .setDevice(getSessionText(entry.getValue(), "device"))
-                .setLoginLocation(resolveLoginLocation(entry.getValue()))
-                .setLoginAt(formatInstantInAppZone(entry.getValue().get("loginAt")))
-                .setLastActiveAt(formatInstantInAppZone(entry.getValue().get("lastActiveAt")))
-                .setStatus(String.valueOf(entry.getValue().get("status"))))
-            .collect(Collectors.toList());
+                .map(sessions::get)
+                .filter(session -> session != null && !session.isEmpty())
+                .map(session -> new SessionInfoVO()
+                        .setSid(getSessionText(session, "sid"))
+                        .setUsername(getSessionText(session, "username"))
+                        .setRole(getSessionText(session, "role"))
+                        .setIp(getSessionText(session, "ip"))
+                        .setDevice(getSessionText(session, "device"))
+                        .setLoginLocation(resolveLoginLocation(session))
+                        .setLoginAt(formatInstantInAppZone(session.get("loginAt")))
+                        .setLastActiveAt(formatInstantInAppZone(session.get("lastActiveAt")))
+                        .setStatus(getSessionText(session, "status")))
+                .collect(Collectors.toList());
     }
 
     private User getCurrentUser(Long currentUserId) {
@@ -519,8 +669,42 @@ public class AuthServiceImpl implements IAuthService{
         return userMapper.selectById(currentUserId);
     }
 
-    private SessionSummary buildSessionSummary(Long userId) {
+    private SessionSummary getCachedSessionSummary(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        Object cache = redisBaseUtil.get(RedisKeyUtil.buildOnlineUserSummaryKey(userId));
+        if (cache instanceof SessionSummary summary) {
+            return summary;
+        }
+        return null;
+    }
+
+    private void cacheSessionSummary(Long userId, SessionSummary summary) {
+        if (userId == null || summary == null) {
+            return;
+        }
+        redisBaseUtil.set(RedisKeyUtil.buildOnlineUserSummaryKey(userId), summary, RedisKeyUtil.ONLINE_USER_SUMMARY_TTL);
+    }
+
+    private void clearSessionSummaryCache(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        redisBaseUtil.delete(RedisKeyUtil.buildOnlineUserSummaryKey(userId));
+    }
+
+    private SessionSummary loadSessionSummary(Long userId) {
+        if (userId == null) {
+            return new SessionSummary(0, null, null, null, null, null);
+        }
+        SessionSummary cachedSummary = getCachedSessionSummary(userId);
+        if (cachedSummary != null) {
+            return cachedSummary;
+        }
+
         Set<String> sids = authSessionStore.getUserSessions(userId);
+        Map<String, Map<Object, Object>> sessions = authSessionStore.getSessionsBySids(sids);
         int onlineCount = 0;
         Instant latestActive = null;
         Instant latestLogin = null;
@@ -530,8 +714,7 @@ public class AuthServiceImpl implements IAuthService{
         String latestLocation = null;
         String latestIp = null;
 
-        for (String sid : sids) {
-            Map<Object, Object> session = authSessionStore.getSession(sid);
+        for (Map<Object, Object> session : sessions.values()) {
             if (session == null || session.isEmpty()) {
                 continue;
             }
@@ -553,7 +736,9 @@ public class AuthServiceImpl implements IAuthService{
             }
         }
 
-        return new SessionSummary(onlineCount, latestActiveText, latestLoginText, latestDevice, latestLocation, latestIp);
+        SessionSummary summary = new SessionSummary(onlineCount, latestActiveText, latestLoginText, latestDevice, latestLocation, latestIp);
+        cacheSessionSummary(userId, summary);
+        return summary;
     }
 
     private Instant parseInstant(Object value) {
@@ -828,13 +1013,17 @@ public class AuthServiceImpl implements IAuthService{
         return null;
     }
 
-    private static final class SessionSummary {
-        private final int onlineCount;
-        private final String lastActiveAt;
-        private final String lastLoginAt;
-        private final String device;
-        private final String loginLocation;
-        private final String ip;
+    private static class SessionSummary implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private int onlineCount;
+        private String lastActiveAt;
+        private String lastLoginAt;
+        private String device;
+        private String loginLocation;
+        private String ip;
+
+        private SessionSummary() {
+        }
 
         private SessionSummary(int onlineCount, String lastActiveAt, String lastLoginAt, String device, String loginLocation, String ip) {
             this.onlineCount = onlineCount;
@@ -844,5 +1033,29 @@ public class AuthServiceImpl implements IAuthService{
             this.loginLocation = loginLocation;
             this.ip = ip;
         }
+
+         public int getOnlineCount() {
+             return onlineCount;
+         }
+
+         public void setOnlineCount(int onlineCount) {
+             this.onlineCount = onlineCount;
+         }
+
+         public String getLastActiveAt() {
+             return lastActiveAt;
+         }
+
+         public void setLastActiveAt(String lastActiveAt) {
+             this.lastActiveAt = lastActiveAt;
+         }
+
+         public String getLastLoginAt() {
+             return lastLoginAt;
+         }
+
+         public void setLastLoginAt(String lastLoginAt) {
+             this.lastLoginAt = lastLoginAt;
+         }
     }
 }

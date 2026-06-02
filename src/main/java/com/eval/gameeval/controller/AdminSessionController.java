@@ -3,6 +3,7 @@ package com.eval.gameeval.controller;
 import com.eval.gameeval.aspect.LogRecord;
 import com.eval.gameeval.models.VO.ResponseVO;
 import com.eval.gameeval.models.VO.SessionInfoVO;
+import com.eval.gameeval.models.VO.OnlineUserOverviewVO;
 import com.eval.gameeval.models.VO.OnlineUserPageVO;
 import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.security.CurrentUserContext;
@@ -35,6 +36,17 @@ public class AdminSessionController {
     public ResponseEntity<ResponseVO<OnlineUserPageVO>> getOnlineUsers(AdminOnlineUserQueryDTO query) {
         Long currentUserId = currentUserContext.getCurrentUserId();
         ResponseVO<OnlineUserPageVO> response = authService.getOnlineUsers(currentUserId, query);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/online-users/overview")
+    @LogRecord(value = "查询在线用户概览统计", module = "AdminSession")
+    public ResponseEntity<ResponseVO<OnlineUserOverviewVO>> getOnlineUsersOverview(
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) Boolean isEnabled,
+            @RequestParam(required = false) Boolean onlineOnly) {
+        Long currentUserId = currentUserContext.getCurrentUserId();
+        ResponseVO<OnlineUserOverviewVO> response = authService.getOnlineUsersOverview(currentUserId, role, isEnabled, onlineOnly);
         return ResponseEntity.ok(response);
     }
 

@@ -226,6 +226,65 @@ public interface UserMapper extends BaseMapper<User> {
             "FROM sys_user WHERE is_deleted = 0")
     Map<String, Object> selectUserOverview();
 
+    /**
+     * 查询符合筛选条件的用户ID列表（不分页）
+     */
+    @Select("<script>" +
+            "SELECT u.id FROM sys_user u " +
+            "WHERE u.is_deleted = 0 " +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND u.role = #{role} " +
+            "</if>" +
+            "<if test='isEnabled != null'>" +
+            "  AND u.is_enabled = #{isEnabled} " +
+            "</if>" +
+            "</script>")
+    List<Long> selectFilteredUserIds(
+            @Param("role") String role,
+            @Param("isEnabled") Boolean isEnabled
+    );
+
+    /**
+     * 统计符合筛选条件且在指定ID集合中的用户数
+     */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM sys_user u " +
+            "WHERE u.is_deleted = 0 " +
+            "AND u.id IN " +
+            "<foreach collection='userIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND u.role = #{role} " +
+            "</if>" +
+            "<if test='isEnabled != null'>" +
+            "  AND u.is_enabled = #{isEnabled} " +
+            "</if>" +
+            "</script>")
+    Long countFilteredByIds(
+            @Param("userIds") List<Long> userIds,
+            @Param("role") String role,
+            @Param("isEnabled") Boolean isEnabled
+    );
+
+    /**
+     * 统计符合筛选条件的用户总数
+     */
+    @Select("<script>" +
+            "SELECT COUNT(*) FROM sys_user " +
+            "WHERE is_deleted = 0 " +
+            "<if test='role != null and role != \"\"'>" +
+            "  AND role = #{role} " +
+            "</if>" +
+            "<if test='isEnabled != null'>" +
+            "  AND is_enabled = #{isEnabled} " +
+            "</if>" +
+            "</script>")
+    Long countFiltered(
+            @Param("role") String role,
+            @Param("isEnabled") Boolean isEnabled
+    );
+
     @Select("SELECT " +
             "id, username, password, name, role, " +
             "is_enabled AS isEnabled, " +

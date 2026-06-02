@@ -27,12 +27,15 @@ public final class RedisKeyUtil {
     public static final String PROJECT_MALICIOUS_REBUILD_TASK_KEY_PREFIX = "project:malicious:rebuild:task:";
     public static final String SCORING_RECORD_PAGE_KEY_PREFIX = "scoring:record:page:";
     public static final String SCORING_OVERVIEW_KEY_PREFIX = "scoring:overview:user:";
+    public static final String ONLINE_USER_INDEX_KEY = "auth:online:userIds";
+    public static final String ONLINE_USER_SUMMARY_KEY_PREFIX = "auth:online:summary:user:";
     public static final String PLATFORM_STATISTICS_KEY = "statistics:platform:overview";
     public static final String USER_OVERVIEW_KEY = "overview:user";
     public static final String STANDARD_OVERVIEW_KEY = "overview:scoring-standard";
     public static final String PROJECT_OVERVIEW_KEY = "overview:project";
     public static final String GROUP_OVERVIEW_KEY = "overview:group";
     public static final String REVIEWER_GROUP_OVERVIEW_KEY = "overview:reviewer-group";
+    public static final String ONLINE_USER_OVERVIEW_KEY = "overview:online-user";
 
     // ========== 动态路由缓存 ==========
     public static final String MENU_ROUTES_VERSION_KEY = "auth:menu:version";
@@ -48,6 +51,7 @@ public final class RedisKeyUtil {
     public static final long PROJECT_MALICIOUS_REBUILD_TASK_TTL = 600; // 10分钟
     public static final long SCORING_RECORD_PAGE_TTL = 300; // 5分钟
     public static final long SCORING_OVERVIEW_TTL = 120; // 2分钟
+    public static final long ONLINE_USER_SUMMARY_TTL = 30; // 30秒
     public static final long PLATFORM_STATISTICS_TTL = 300; // 5分钟
     public static final long OVERVIEW_TTL = 300; // 5分钟
 
@@ -194,6 +198,20 @@ public final class RedisKeyUtil {
      */
     public static String buildScoringOverviewKey(Long userId) {
         return SCORING_OVERVIEW_KEY_PREFIX + userId;
+    }
+
+    /**
+     * 构建在线用户索引键
+     */
+    public static String buildOnlineUserIndexKey() {
+        return ONLINE_USER_INDEX_KEY;
+    }
+
+    /**
+     * 构建在线用户摘要缓存键
+     */
+    public static String buildOnlineUserSummaryKey(Long userId) {
+        return ONLINE_USER_SUMMARY_KEY_PREFIX + userId;
     }
 
     /**
