@@ -6,6 +6,7 @@ import com.eval.gameeval.models.DTO.User.AdminOnlineUserQueryDTO;
 import com.eval.gameeval.models.DTO.User.RefreshRequestDTO;
 import com.eval.gameeval.models.VO.AuthProfileVO;
 import com.eval.gameeval.models.VO.LoginResponseVO;
+import com.eval.gameeval.models.VO.OnlineUserOverviewVO;
 import com.eval.gameeval.models.VO.OnlineUserPageVO;
 import com.eval.gameeval.models.VO.RouteNodeVO;
 import com.eval.gameeval.models.VO.RefreshResponseVO;
@@ -35,4 +36,6 @@ public interface IAuthService {
     ResponseVO<Void> kickAllSessions(Long currentUserId, Long targetUserId);
 
     ResponseVO<OnlineUserPageVO> getOnlineUsers(Long currentUserId, AdminOnlineUserQueryDTO query);
+
+    ResponseVO<OnlineUserOverviewVO> getOnlineUsersOverview(Long currentUserId, String role, Boolean isEnabled, Boolean onlineOnly);
 }

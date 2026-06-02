@@ -70,4 +70,16 @@ public class OverviewCacheUtil {
     public void clearReviewerGroupOverviewCache() {
         redisBaseUtil.delete(RedisKeyUtil.REVIEWER_GROUP_OVERVIEW_KEY);
     }
+
+    public void cacheOnlineUserOverview(Object value) {
+        redisBaseUtil.set(RedisKeyUtil.ONLINE_USER_OVERVIEW_KEY, value, RedisKeyUtil.OVERVIEW_TTL);
+    }
+
+    public Object getOnlineUserOverviewCache() {
+        return redisBaseUtil.get(RedisKeyUtil.ONLINE_USER_OVERVIEW_KEY);
+    }
+
+    public void clearOnlineUserOverviewCache() {
+        redisBaseUtil.delete(RedisKeyUtil.ONLINE_USER_OVERVIEW_KEY);
+    }
 }

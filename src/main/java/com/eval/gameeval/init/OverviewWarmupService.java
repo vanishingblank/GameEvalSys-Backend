@@ -1,5 +1,6 @@
 package com.eval.gameeval.init;
 
+import com.eval.gameeval.service.impl.AuthServiceImpl;
 import com.eval.gameeval.service.impl.GroupServiceImpl;
 import com.eval.gameeval.service.impl.ProjectServiceImpl;
 import com.eval.gameeval.service.impl.ReviewerGroupServiceImpl;
@@ -17,17 +18,20 @@ public class OverviewWarmupService {
     private final UserServiceImpl userService;
     private final GroupServiceImpl groupService;
     private final ReviewerGroupServiceImpl reviewerGroupService;
+    private final AuthServiceImpl authService;
 
     public OverviewWarmupService(ProjectServiceImpl projectService,
                                  ScoringStandardServiceImpl scoringStandardService,
                                  UserServiceImpl userService,
                                  GroupServiceImpl groupService,
-                                 ReviewerGroupServiceImpl reviewerGroupService) {
+                                 ReviewerGroupServiceImpl reviewerGroupService,
+                                 AuthServiceImpl authService) {
         this.projectService = projectService;
         this.scoringStandardService = scoringStandardService;
         this.userService = userService;
         this.groupService = groupService;
         this.reviewerGroupService = reviewerGroupService;
+        this.authService = authService;
     }
 
     public void warmupOverviewCaches() {
@@ -59,6 +63,12 @@ public class OverviewWarmupService {
             reviewerGroupService.warmupReviewerGroupOverviewCache();
         } catch (Exception e) {
             log.error("概览预热异常: 评审组概览", e);
+        }
+
+        try {
+            authService.warmupOnlineUserOverviewCache();
+        } catch (Exception e) {
+            log.error("概览预热异常: 在线用户概览", e);
         }
     }
 }

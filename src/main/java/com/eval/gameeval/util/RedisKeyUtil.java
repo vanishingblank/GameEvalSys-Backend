@@ -35,6 +35,7 @@ public final class RedisKeyUtil {
     public static final String PROJECT_OVERVIEW_KEY = "overview:project";
     public static final String GROUP_OVERVIEW_KEY = "overview:group";
     public static final String REVIEWER_GROUP_OVERVIEW_KEY = "overview:reviewer-group";
+    public static final String ONLINE_USER_OVERVIEW_KEY = "overview:online-user";
 
     // ========== 动态路由缓存 ==========
     public static final String MENU_ROUTES_VERSION_KEY = "auth:menu:version";
