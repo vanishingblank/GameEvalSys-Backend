@@ -129,12 +129,12 @@ public class ProjectServiceImpl implements IProjectService {
             // 4. 解析小组来源（仅支持 groupIds）
             List<Long> resolvedGroupInfoIds = new ArrayList<>();
             List<Long> distinctGroupIds = request.getGroupIds().stream().distinct().collect(Collectors.toList());
+            Map<Long, ProjectGroupInfo> groupInfoMap = loadGroupInfoMapByIds(distinctGroupIds);
             for (Long groupInfoId : distinctGroupIds) {
                 if (groupInfoId == null || groupInfoId <= 0) {
                     return ResponseVO.badRequest("小组ID必须大于0");
                 }
-                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
-                if (groupInfo == null) {
+                if (!groupInfoMap.containsKey(groupInfoId)) {
                     return ResponseVO.badRequest("小组ID " + groupInfoId + " 不存在");
                 }
                 resolvedGroupInfoIds.add(groupInfoId);
@@ -349,10 +349,10 @@ public class ProjectServiceImpl implements IProjectService {
             if (request.getGroupIds() != null ) {
                 groupMapper.deleteByProjectId(projectId);
                 List<ProjectGroup> groups = new ArrayList<>();
+                Map<Long, ProjectGroupInfo> groupInfoMap = loadGroupInfoMapByIds(request.getGroupIds());
                 for (Long groupInfoId : request.getGroupIds()) {
                     // 验证小组信息是否存在
-                    ProjectGroupInfo groupInfo = groupInfoMapper.selectById(groupInfoId);
-                    if (groupInfo == null) {
+                    if (!groupInfoMap.containsKey(groupInfoId)) {
                         return ResponseVO.badRequest("小组ID " + groupInfoId + " 不存在");
                     }
                     
@@ -757,6 +757,33 @@ public class ProjectServiceImpl implements IProjectService {
             result.addAll(userIds2);
         }
         return new ArrayList<>(result);
+    }
+
+    private Map<Long, ProjectGroupInfo> loadGroupInfoMapByIds(List<Long> groupInfoIds) {
+        if (groupInfoIds == null || groupInfoIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Long> distinctGroupIds = groupInfoIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (distinctGroupIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<ProjectGroupInfo> groupInfos = groupInfoMapper.selectByIds(distinctGroupIds);
+        if (groupInfos == null || groupInfos.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, ProjectGroupInfo> result = new HashMap<>();
+        for (ProjectGroupInfo info : groupInfos) {
+            if (info != null && info.getId() != null) {
+                result.put(info.getId(), info);
+            }
+        }
+        return result;
     }
 
     private Map<Long, List<Long>> loadGroupIdsByProjectIds(List<Long> projectIds) {

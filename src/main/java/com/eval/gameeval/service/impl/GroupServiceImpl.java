@@ -239,9 +239,13 @@ public class GroupServiceImpl implements IGroupService {
 
             // 8. 重新加载并更新项目级别的缓存（getProjectGroups使用）
             List<ProjectGroup> updatedRelations = groupMapper.selectByProjectId(request.getProjectId());
+            Map<Long, ProjectGroupInfo> updatedGroupInfoMap = loadGroupInfoMapByIds(updatedRelations.stream()
+                    .map(ProjectGroup::getGroupInfoId)
+                    .distinct()
+                    .toList());
             List<GroupVO> updatedGroupVOs = new ArrayList<>();
             for (ProjectGroup rel : updatedRelations) {
-                ProjectGroupInfo info = groupInfoMapper.selectById(rel.getGroupInfoId());
+                ProjectGroupInfo info = updatedGroupInfoMap.get(rel.getGroupInfoId());
                 if (info != null) {
                     GroupVO vo = new GroupVO();
                     vo.setId(info.getId());
@@ -330,9 +334,13 @@ public class GroupServiceImpl implements IGroupService {
             for (ProjectGroup rel : relations) {
                 // 重新查询该项目的所有小组
                 List<ProjectGroup> projectRelations = groupMapper.selectByProjectId(rel.getProjectId());
+                Map<Long, ProjectGroupInfo> projectGroupInfoMap = loadGroupInfoMapByIds(projectRelations.stream()
+                        .map(ProjectGroup::getGroupInfoId)
+                        .distinct()
+                        .toList());
                 List<GroupVO> projectGroupVOs = new ArrayList<>();
                 for (ProjectGroup projectRel : projectRelations) {
-                    ProjectGroupInfo info = groupInfoMapper.selectById(projectRel.getGroupInfoId());
+                    ProjectGroupInfo info = projectGroupInfoMap.get(projectRel.getGroupInfoId());
                     if (info != null) {
                         GroupVO vo = new GroupVO();
                         vo.setId(info.getId());
@@ -424,8 +432,12 @@ public class GroupServiceImpl implements IGroupService {
 
             // 6. 获取小组信息并转换为VO列表
             List<GroupVO> groupVOs = new ArrayList<>();
+            Map<Long, ProjectGroupInfo> groupInfoMap = loadGroupInfoMapByIds(relations.stream()
+                    .map(ProjectGroup::getGroupInfoId)
+                    .distinct()
+                    .toList());
             for (ProjectGroup relation : relations) {
-                ProjectGroupInfo groupInfo = groupInfoMapper.selectById(relation.getGroupInfoId());
+                ProjectGroupInfo groupInfo = groupInfoMap.get(relation.getGroupInfoId());
                 if (groupInfo != null) {
                     GroupVO vo = new GroupVO();
                     vo.setId(groupInfo.getId());
@@ -590,6 +602,25 @@ public class GroupServiceImpl implements IGroupService {
                 .setActiveGroups(toLong(overviewMap.get("activeGroups")))
                 .setTotalMembers(totalMembers)
                 .setAvgGroupSize(avgGroupSize);
+    }
+
+    private Map<Long, ProjectGroupInfo> loadGroupInfoMapByIds(List<Long> groupInfoIds) {
+        if (groupInfoIds == null || groupInfoIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<ProjectGroupInfo> groupInfos = groupInfoMapper.selectByIds(groupInfoIds);
+        if (groupInfos == null || groupInfos.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, ProjectGroupInfo> result = new java.util.HashMap<>();
+        for (ProjectGroupInfo info : groupInfos) {
+            if (info != null && info.getId() != null) {
+                result.put(info.getId(), info);
+            }
+        }
+        return result;
     }
 
     private Long toLong(Object value) {

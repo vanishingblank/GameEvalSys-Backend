@@ -28,8 +28,10 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -138,6 +140,21 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
 
             // 5. 转换为VO
             List<ReviewerGroupPageVO.ReviewerGroupVO> groupVOs = new ArrayList<>();
+            List<Long> groupIds = groups.stream().map(ReviewerGroup::getId).collect(Collectors.toList());
+            Map<Long, List<Long>> memberIdsByGroupId = new HashMap<>();
+            if (!groupIds.isEmpty()) {
+                List<Map<String, Object>> memberRows = memberMapper.selectUserIdsByGroupIds(groupIds);
+                for (Map<String, Object> row : memberRows) {
+                    Object groupIdValue = row.get("groupId");
+                    Object userIdValue = row.get("userId");
+                    if (groupIdValue == null || userIdValue == null) {
+                        continue;
+                    }
+                    Long gid = ((Number) groupIdValue).longValue();
+                    Long uid = ((Number) userIdValue).longValue();
+                    memberIdsByGroupId.computeIfAbsent(gid, key -> new ArrayList<>()).add(uid);
+                }
+            }
             for (ReviewerGroup group : groups) {
                 ReviewerGroupPageVO.ReviewerGroupVO vo = new ReviewerGroupPageVO.ReviewerGroupVO();
                 vo.setId(group.getId());
@@ -149,8 +166,7 @@ public class ReviewerGroupServiceImpl implements IReviewerGroupService {
                 vo.setUpdateTime(group.getUpdateTime());
 
                 // 查询成员列表
-                List<Long> memberIds = memberMapper.selectUserIdsByGroupId(group.getId());
-                vo.setMemberIds(memberIds);
+                vo.setMemberIds(memberIdsByGroupId.getOrDefault(group.getId(), Collections.emptyList()));
 
                 groupVOs.add(vo);
             }

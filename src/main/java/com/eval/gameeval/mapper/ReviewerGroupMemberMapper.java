@@ -21,6 +21,19 @@ public interface ReviewerGroupMemberMapper {
     @Select("SELECT user_id AS userId FROM reviewer_group_member WHERE group_id = #{groupId}")
     List<Long> selectUserIdsByGroupId(@Param("groupId") Long groupId);
 
+    /**
+     * 批量查询评审组成员
+     */
+    @Select("<script>" +
+            "SELECT group_id AS groupId, user_id AS userId " +
+            "FROM reviewer_group_member " +
+            "WHERE group_id IN " +
+            "<foreach collection='groupIds' item='id' open='(' separator=',' close=')'>" +
+            "  #{id} " +
+            "</foreach>" +
+            "</script>")
+    List<java.util.Map<String, Object>> selectUserIdsByGroupIds(@Param("groupIds") List<Long> groupIds);
+
     // ========== 插入 ==========
     @Insert("INSERT INTO reviewer_group_member(group_id, user_id, create_time) " +
             "VALUES(#{groupId}, #{userId}, #{createTime})")
