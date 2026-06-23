@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Deploy local data ###
+deploy/docker-single/data/

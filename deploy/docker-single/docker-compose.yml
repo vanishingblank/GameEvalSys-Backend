@@ -16,7 +16,7 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --event-scheduler=ON #开启事件调度器 以满足project表自动更新status状态
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - ${MARIADB_DATA_DIR:-./data/mariadb}:/var/lib/mysql
       - ../shared/mariadb/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p$$MARIADB_ROOT_PASSWORD --silent"]
@@ -35,7 +35,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: ["sh", "-c", "redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
-      - redis_data:/data
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
       - ../shared/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
@@ -124,10 +124,6 @@ services:
       - "${BACKEND_PORT}:8080"
     networks:
       - gameeval-net
-
-volumes:
-  mariadb_data:
-  redis_data:
 
 networks:
   gameeval-net:

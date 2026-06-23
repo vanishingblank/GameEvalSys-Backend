@@ -11,6 +11,7 @@
 1. 复制env 模板:
    - `cp .env.example .env`
 2. 设置redis、mariaDb、平台初始管理员密码等参数在： `.env`.
+   - MariaDB 和 Redis 默认持久化到本地 `./data/mariadb`、`./data/redis`，可通过 `MARIADB_DATA_DIR`、`REDIS_DATA_DIR` 修改宿主机挂载目录。
    - ip2region 默认同时加载 `classpath:/ip2region/ip2region.xdb` 和 `classpath:/ip2region/ip2region_v6.xdb`，如需自定义路径请设置 `IP2REGION_XDB_PATHS`
 3. 选择一个平台初始管理员的初始密码加密模式:
    - 明文方式: 取消 `APP_ADMIN_INIT_PASSWORD` 的注释并且赋值
@@ -48,4 +49,5 @@ docker compose -f docker-compose.yml restart backend
 
 - MariaDB schema runs automatically from `../shared/mariadb/01-schema.sql` on first database initialization.
 - Redis bootstrap runs once via `../shared/redis/redis-init.sh`.
+- MariaDB and Redis data are bind-mounted to local host directories configured by `MARIADB_DATA_DIR` and `REDIS_DATA_DIR`.
 - Backend loads external config from `./backend/application-docker.yml`, so your `src/main/resources/application.yml` remains unchanged.
